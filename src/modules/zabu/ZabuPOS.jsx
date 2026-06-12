@@ -487,7 +487,6 @@ export default function ZabuPOS() {
   const [ventas,          setVentas]          = useState([])
   const [ordenNum,    setOrdenNum]    = useState(1)
   const [ordenCodigo, setOrdenCodigo] = useState('ZB-C01-001')
-  const CARRITO_ID = 'C01'
   const [ordenActual,     setOrdenActual]     = useState(null)
   const [confirmado,      setConfirmado]      = useState(false)
   const [ordenConfirmada, setOrdenConfirmada] = useState(null)
