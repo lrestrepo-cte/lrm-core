@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useOrdenes } from '../../context/OrdenesContext'
+import { supabase } from '../../lib/supabase'
 
 const PRODUCTOS = [
   { id:'zabu',     nombre:'ZABÚ',     desc:'El original',       precioSolo:17000, precioCombo:20000, emoji:'🌭' },
@@ -7,24 +7,24 @@ const PRODUCTOS = [
 ]
 
 const SALCHICHAS = [
-  { id:'pavo',       nombre:'Pavo',       desc:'TurkeyLink™',    emoji:'🦃' },
-  { id:'hotdog',     nombre:'Hot Dog',    desc:'Sabor clásico',  emoji:'🌭' },
-  { id:'alemana',    nombre:'Alemana',    desc:'Ahumada',        emoji:'🥩' },
-  { id:'parisienne', nombre:'Parisienne', desc:'Suiza suave',    emoji:'⭐' },
+  { id:'pavo',       nombre:'Pavo',       desc:'TurkeyLink™',  emoji:'🦃' },
+  { id:'hotdog',     nombre:'Hot Dog',    desc:'Sabor clásico', emoji:'🌭' },
+  { id:'alemana',    nombre:'Alemana',    desc:'Ahumada',       emoji:'🥩' },
+  { id:'parisienne', nombre:'Parisienne', desc:'Suiza suave',   emoji:'⭐' },
 ]
 
 const BEBIDAS = [
-  { id:'coca',        nombre:'Coca Cola',         precio:3000, emoji:'🥤', color:'#e05252' },
-  { id:'colaroman',   nombre:'Cola Román',         precio:3000, emoji:'🥤', color:'#9C27B0' },
-  { id:'quatro',      nombre:'Quatro Toronja',     precio:3000, emoji:'🥤', color:'#FF9800' },
-  { id:'cokazero',    nombre:'Coca Cola Zero',     precio:3000, emoji:'🥤', color:'#333'    },
-  { id:'aquaman',     nombre:'Aqua Manzana',       precio:3000, emoji:'💧', color:'#4caf50' },
-  { id:'postonaranja',nombre:'Postobón Naranja',   precio:3000, emoji:'🍊', color:'#FF9800' },
-  { id:'postomanz',   nombre:'Postobón Manzana',   precio:3000, emoji:'🍏', color:'#4caf50' },
-  { id:'postouva',    nombre:'Postobón Uva',       precio:3000, emoji:'🍇', color:'#9C27B0' },
-  { id:'postcol',     nombre:'Colombiana',         precio:3000, emoji:'🥤', color:'#C9A84C' },
-  { id:'hatsu',       nombre:'Té Hatsu',           precio:5000, emoji:'🍵', color:'#4caf50' },
-  { id:'agua',        nombre:'Agua 500ml',         precio:2000, emoji:'💧', color:'#378ADD' },
+  { id:'coca',        nombre:'Coca Cola',       precio:3000, emoji:'🥤', color:'#e05252' },
+  { id:'colaroman',   nombre:'Cola Román',       precio:3000, emoji:'🥤', color:'#9C27B0' },
+  { id:'quatro',      nombre:'Quatro Toronja',   precio:3000, emoji:'🥤', color:'#FF9800' },
+  { id:'cokazero',    nombre:'Coca Cola Zero',   precio:3000, emoji:'🥤', color:'#333'    },
+  { id:'aquaman',     nombre:'Aqua Manzana',     precio:3000, emoji:'💧', color:'#4caf50' },
+  { id:'postonaranja',nombre:'Postobón Naranja', precio:3000, emoji:'🍊', color:'#FF9800' },
+  { id:'postomanz',   nombre:'Postobón Manzana', precio:3000, emoji:'🍏', color:'#4caf50' },
+  { id:'postouva',    nombre:'Postobón Uva',     precio:3000, emoji:'🍇', color:'#9C27B0' },
+  { id:'postcol',     nombre:'Colombiana',       precio:3000, emoji:'🥤', color:'#C9A84C' },
+  { id:'hatsu',       nombre:'Té Hatsu',         precio:5000, emoji:'🍵', color:'#4caf50' },
+  { id:'agua',        nombre:'Agua 500ml',       precio:2000, emoji:'💧', color:'#378ADD' },
 ]
 
 const EXTRAS = [
@@ -62,8 +62,6 @@ function precioItem(item) {
 
 function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMobile }) {
   const PASOS_LABEL = ['Producto','Salchicha','Tipo','Extras']
-
-  // pasoNum para comparaciones numéricas
   const pasoNum = item.paso === 'bebida' ? 3 : (typeof item.paso === 'number' ? item.paso : 1)
 
   const card = (sel, color) => ({
@@ -81,7 +79,6 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
 
   return (
     <div style={{ background:'var(--bg3)', borderRadius:14, border:'1px solid var(--border)', overflow:'hidden', marginBottom:12 }}>
-
       {/* Header */}
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderBottom:'1px solid var(--border)', background:'rgba(255,255,255,0.02)' }}>
         <div style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -123,8 +120,7 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
       </div>
 
       <div style={{ padding:'12px 14px' }}>
-
-        {/* PASO 1 — PRODUCTO */}
+        {/* PASO 1 */}
         {item.paso === 1 && (
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
             {PRODUCTOS.map(p => (
@@ -138,7 +134,7 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
           </div>
         )}
 
-        {/* PASO 2 — SALCHICHA */}
+        {/* PASO 2 */}
         {item.paso === 2 && (
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
             {SALCHICHAS.map(s => (
@@ -151,7 +147,7 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
           </div>
         )}
 
-        {/* PASO 3 — TIPO */}
+        {/* PASO 3 */}
         {item.paso === 3 && (
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
             <div onClick={() => onChange({...item, tipo:'solo', bebida:null, paso:4})} style={card(item.tipo==='solo')}>
@@ -169,7 +165,7 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
           </div>
         )}
 
-        {/* PASO BEBIDA — selección bebida combo */}
+        {/* PASO BEBIDA */}
         {item.paso === 'bebida' && (
           <div>
             <div style={{ fontSize:11, color:'var(--gold)', letterSpacing:1, fontWeight:700, marginBottom:10 }}>SELECCIONA LA BEBIDA DEL COMBO</div>
@@ -186,7 +182,7 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
           </div>
         )}
 
-        {/* PASO 4 — EXTRAS + BEBIDAS SUELTAS */}
+        {/* PASO 4 */}
         {item.paso === 4 && (
           <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
             <div>
@@ -205,13 +201,11 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
                 })}
               </div>
             </div>
-
             <div>
               <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>BEBIDA SUELTA (opcional)</div>
               <div style={{ display:'grid', gridTemplateColumns:`repeat(${isMobile?3:4},1fr)`, gap:8 }}>
                 {BEBIDAS.map(b => (
-                  <div key={b.id} onClick={() => onChange({...item, bebidaSuelta: item.bebidaSuelta?.id===b.id ? null : b})}
-                    style={card(item.bebidaSuelta?.id===b.id, b.color)}>
+                  <div key={b.id} onClick={() => onChange({...item, bebidaSuelta: item.bebidaSuelta?.id===b.id ? null : b})} style={card(item.bebidaSuelta?.id===b.id, b.color)}>
                     <div style={{ fontSize:isMobile?18:22 }}>{b.emoji}</div>
                     <div style={{ fontSize:10, fontWeight:600, color:'var(--text)', lineHeight:1.3 }}>{b.nombre}</div>
                     <div style={{ fontSize:10, color:b.color, fontWeight:700 }}>{cop(b.precio)}</div>
@@ -219,7 +213,6 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
                 ))}
               </div>
             </div>
-
             <button className="btn-gold" style={{ width:'100%', padding:'12px', fontSize:14, fontWeight:700 }}
               onClick={() => onChange({...item, paso:5})}>
               ✓ Listo · {cop(precioItem(item))}
@@ -227,7 +220,7 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
           </div>
         )}
 
-        {/* PASO 5 — COMPLETO */}
+        {/* PASO 5 */}
         {item.paso === 5 && (
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
             <div style={{ fontSize:13, color:'var(--green)', fontWeight:700 }}>✓ Item completo</div>
@@ -306,14 +299,16 @@ function PantallaCliente({ items, totalPrecio, confirmado, orden }) {
   )
 }
 
-// ─── TICKET ──────────────────────────────────────────────────────────────────
+// ─── TICKET + CIERRE AUTOMÁTICO ───────────────────────────────────────────────
 
 function Ticket({ orden, onCerrar }) {
-  const texto = `🌭 *ZABÚ* — Orden ${getOrdenNum(orden.num)}
-${orden.nombreCliente ? `Cliente: ${orden.nombreCliente}\n` : ''}
-${orden.items.map(item =>
-  `▸ ${item.producto.nombre} · ${item.salchicha.nombre} · ${item.tipo==='solo'?'Solo':'Combo'}${item.bebida?` (${item.bebida.nombre})`:''}${item.extras.length>0?'\n  + '+item.extras.map(e=>e.nombre).join(', '):''}${item.bebidaSuelta?`\n  🥤 ${item.bebidaSuelta.nombre}`:''} — ${cop(precioItem(item))}`
-).join('\n')}
+  const [telInput, setTelInput] = useState('')
+  const [enviado,  setEnviado]  = useState(false)
+
+  const textoWsp = `🌭 *ZABÚ* — Orden ${getOrdenNum(orden.num)}
+${orden.nombreCliente ? `Cliente: ${orden.nombreCliente}\n` : ''}${orden.items.map(item =>
+    `▸ ${item.producto.nombre} · ${item.salchicha.nombre} · ${item.tipo==='solo'?'Solo':'Combo'}${item.bebida?` (${item.bebida.nombre})`:''}${item.extras.length>0?'\n  + '+item.extras.map(e=>e.nombre).join(', '):''}${item.bebidaSuelta?`\n  🥤 ${item.bebidaSuelta.nombre}`:''} — ${cop(precioItem(item))}`
+  ).join('\n')}
 
 💰 *Total: ${cop(orden.total)}*
 ${orden.pagos.map(p=>`${p.metodo==='efectivo'?'💵 Efectivo':p.metodo==='qr'?'📲 QR':'💳 Tarjeta'}: ${cop(p.monto)}`).join('\n')}${orden.cambio>0?`\nCambio: ${cop(orden.cambio)}`:''}
@@ -321,15 +316,21 @@ ${orden.pagos.map(p=>`${p.metodo==='efectivo'?'💵 Efectivo':p.metodo==='qr'?'�
 ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para llevar':'🛵 Domicilio'}${orden.direccion?`\n📍 ${orden.direccion}`:''}
 ¡Gracias por tu visita! 🌭`
 
-  const abrirWhatsApp = (tel) => {
-    const num = tel ? `57${tel.replace(/\D/g,'')}` : ''
-    window.open(`https://wa.me/${num}?text=${encodeURIComponent(texto)}`, '_blank')
+  const enviarWhatsApp = (tel) => {
+    const num = `57${(tel||'').replace(/\D/g,'')}`
+    window.open(`https://wa.me/${num}?text=${encodeURIComponent(textoWsp)}`, '_blank')
+    setEnviado(true)
+    setTimeout(() => onCerrar(), 1500)
   }
 
-  const imprimirPDF = () => window.print()
+  const descargarPDF = () => {
+    window.print()
+    setEnviado(true)
+    setTimeout(() => onCerrar(), 2000)
+  }
 
   return (
-    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.92)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, gap:16, flexWrap:'wrap', padding:16 }}>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.95)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, gap:16, flexWrap:'wrap', padding:16 }}>
 
       {/* TICKET */}
       <div id="ticket-print" style={{ background:'#fff', borderRadius:12, padding:'18px 16px', width:260, color:'#111', fontFamily:'monospace', fontSize:11 }}>
@@ -342,8 +343,15 @@ ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para 
           <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
             <span style={{ color:'#888' }}>Orden</span><span style={{ fontWeight:800 }}>{getOrdenNum(orden.num)}</span>
           </div>
-          {orden.nombreCliente && <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}><span style={{ color:'#888' }}>Cliente</span><span style={{ fontWeight:700 }}>{orden.nombreCliente}</span></div>}
-          <div style={{ display:'flex', justifyContent:'space-between' }}><span style={{ color:'#888' }}>Entrega</span><span style={{ fontWeight:600 }}>{orden.entrega==='aqui'?'Aquí':orden.entrega==='llevar'?'Llevar':'Domicilio'}</span></div>
+          {orden.nombreCliente && (
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
+              <span style={{ color:'#888' }}>Cliente</span><span style={{ fontWeight:700 }}>{orden.nombreCliente}</span>
+            </div>
+          )}
+          <div style={{ display:'flex', justifyContent:'space-between' }}>
+            <span style={{ color:'#888' }}>Entrega</span>
+            <span style={{ fontWeight:600 }}>{orden.entrega==='aqui'?'Aquí':orden.entrega==='llevar'?'Llevar':'Domicilio'}</span>
+          </div>
           {orden.direccion && <div style={{ fontSize:10, color:'#888', marginTop:2 }}>📍 {orden.direccion}</div>}
         </div>
         <div style={{ borderTop:'1px dashed #ccc', paddingTop:8, marginBottom:8 }}>
@@ -399,41 +407,65 @@ ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para 
             {item.bebidaSuelta && <div style={{ fontSize:11, color:'#888' }}>🥤 {item.bebidaSuelta.nombre}</div>}
           </div>
         ))}
-        <div style={{ fontSize:12, fontWeight:700, color: orden.entrega==='aqui'?'#4caf50':orden.entrega==='llevar'?'#C9A84C':'#378ADD', marginTop:6 }}>
+        <div style={{ fontSize:12, fontWeight:700, marginTop:6, color: orden.entrega==='aqui'?'#4caf50':orden.entrega==='llevar'?'#C9A84C':'#378ADD' }}>
           {orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para llevar':'🛵 Domicilio'}
         </div>
         {orden.direccion && <div style={{ fontSize:10, color:'#888', marginTop:3 }}>📍 {orden.direccion}</div>}
       </div>
 
-      {/* Acciones */}
-      <div style={{ display:'flex', flexDirection:'column', gap:10, width:200 }}>
-        <div style={{ fontSize:13, fontWeight:700, color:'var(--text)', marginBottom:4 }}>Enviar al cliente</div>
+      {/* ACCIONES — cierre automático al usar cualquiera */}
+      <div style={{ display:'flex', flexDirection:'column', gap:12, width:220 }}>
 
-        {orden.telefono ? (
-          <button onClick={() => abrirWhatsApp(orden.telefono)} style={{ padding:'12px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'rgba(37,211,102,0.15)', border:'1px solid rgba(37,211,102,0.4)', color:'#25D366', fontFamily:'inherit' }}>
-            📱 WhatsApp · {orden.telefono}
-          </button>
-        ) : (
-          <div>
-            <div style={{ fontSize:11, color:'var(--text3)', marginBottom:6 }}>Número del cliente</div>
-            <div style={{ display:'flex', gap:6 }}>
-              <input type="tel" id="tel-wsp" placeholder="300 000 0000"
-                style={{ flex:1, padding:'8px 10px', borderRadius:8, background:'rgba(255,255,255,0.06)', border:'1px solid var(--border)', color:'var(--text)', fontSize:13, fontFamily:'inherit', outline:'none' }} />
-              <button onClick={() => {
-                const tel = document.getElementById('tel-wsp').value
-                abrirWhatsApp(tel)
-              }} style={{ padding:'8px 12px', borderRadius:8, cursor:'pointer', fontSize:18, background:'rgba(37,211,102,0.15)', border:'1px solid rgba(37,211,102,0.4)', color:'#25D366' }}>→</button>
-            </div>
+        {enviado ? (
+          <div style={{ textAlign:'center', padding:'20px', background:'var(--green-dim)', borderRadius:12, border:'1px solid var(--green-border)' }}>
+            <div style={{ fontSize:28, marginBottom:8 }}>✅</div>
+            <div style={{ fontSize:14, fontWeight:700, color:'var(--green)' }}>Listo</div>
+            <div style={{ fontSize:11, color:'var(--text3)', marginTop:4 }}>Volviendo al inicio...</div>
           </div>
+        ) : (
+          <>
+            <div style={{ fontSize:12, fontWeight:700, color:'var(--text)', marginBottom:4, textAlign:'center' }}>
+              Enviar al cliente
+            </div>
+
+            {/* WhatsApp con tel del cliente si existe */}
+            {orden.telefono ? (
+              <button onClick={() => enviarWhatsApp(orden.telefono)} style={{ padding:'14px', borderRadius:10, cursor:'pointer', fontSize:14, fontWeight:800, background:'rgba(37,211,102,0.15)', border:'1px solid rgba(37,211,102,0.4)', color:'#25D366', fontFamily:'inherit' }}>
+                📱 Enviar WhatsApp
+              </button>
+            ) : (
+              <div>
+                <div style={{ fontSize:11, color:'var(--text3)', marginBottom:6, textAlign:'center' }}>Número del cliente</div>
+                <div style={{ display:'flex', gap:6 }}>
+                  <input
+                    type="tel"
+                    value={telInput}
+                    onChange={e => setTelInput(e.target.value)}
+                    placeholder="300 000 0000"
+                    onKeyDown={e => e.key==='Enter' && telInput && enviarWhatsApp(telInput)}
+                    style={{ flex:1, padding:'10px 10px', borderRadius:8, background:'rgba(255,255,255,0.06)', border:'1px solid var(--border)', color:'var(--text)', fontSize:13, fontFamily:'inherit', outline:'none' }}
+                  />
+                  <button
+                    onClick={() => telInput && enviarWhatsApp(telInput)}
+                    style={{ padding:'10px 14px', borderRadius:8, cursor:'pointer', fontSize:18, background:'rgba(37,211,102,0.15)', border:'1px solid rgba(37,211,102,0.4)', color:'#25D366' }}>
+                    →
+                  </button>
+                </div>
+              </div>
+            )}
+
+            <button onClick={descargarPDF} style={{ padding:'12px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'rgba(55,138,221,0.1)', border:'1px solid rgba(55,138,221,0.3)', color:'var(--blue)', fontFamily:'inherit' }}>
+              📄 Descargar PDF
+            </button>
+
+            {/* Solo para comer aquí — sin envío digital */}
+            {orden.entrega === 'aqui' && (
+              <button onClick={() => onCerrar()} style={{ padding:'10px', borderRadius:10, cursor:'pointer', fontSize:12, fontWeight:600, background:'rgba(255,255,255,0.04)', border:'1px solid var(--border)', color:'var(--text3)', fontFamily:'inherit' }}>
+                ✓ Listo, sin envío
+              </button>
+            )}
+          </>
         )}
-
-        <button onClick={imprimirPDF} style={{ padding:'10px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'rgba(55,138,221,0.1)', border:'1px solid rgba(55,138,221,0.3)', color:'var(--blue)', fontFamily:'inherit' }}>
-          📄 Descargar PDF
-        </button>
-
-        <button onClick={onCerrar} style={{ padding:'10px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'rgba(255,255,255,0.06)', border:'1px solid var(--border)', color:'var(--text2)', fontFamily:'inherit' }}>
-          ✕ Nueva orden
-        </button>
       </div>
     </div>
   )
@@ -442,41 +474,55 @@ ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para 
 // ─── POS PRINCIPAL ───────────────────────────────────────────────────────────
 
 export default function ZabuPOS() {
-  const [items, setItems]               = useState([nuevoItem()])
-  const [fasePago, setFasePago]         = useState(false)
-  const [entrega, setEntrega]           = useState(null)
-  const [nombreCliente, setNombreCliente] = useState('')
-  const [direccion, setDireccion]       = useState('')
-  const [telefono, setTelefono]         = useState('')
-  const [pagos, setPagos]               = useState([{metodo:'efectivo', monto:''}])
-  const [ventas, setVentas]             = useState([])
-  const [ordenNum, setOrdenNum]         = useState(1)
-  const [ordenActual, setOrdenActual]   = useState(null)
-  const [confirmado, setConfirmado]     = useState(false)
+  const [items,           setItems]           = useState([nuevoItem()])
+  const [fasePago,        setFasePago]        = useState(false)
+  const [entrega,         setEntrega]         = useState(null)
+  const [nombreCliente,   setNombreCliente]   = useState('')
+  const [direccion,       setDireccion]       = useState('')
+  const [telefono,        setTelefono]        = useState('')
+  const [pagos,           setPagos]           = useState([{metodo:'efectivo', monto:''}])
+  const [ventas,          setVentas]          = useState([])
+  const [ordenNum,        setOrdenNum]        = useState(1)
+  const [ordenActual,     setOrdenActual]     = useState(null)
+  const [confirmado,      setConfirmado]      = useState(false)
   const [ordenConfirmada, setOrdenConfirmada] = useState(null)
 
-  // Detectar móvil
-  const isMobile = window.innerWidth < 768
+  const isMobile       = window.innerWidth < 768
+  const totalPrecio    = items.reduce((s,i) => s+precioItem(i), 0)
+  const itemsCompletos = items.filter(i => i.paso === 5)
+  const todosCompletos = items.length > 0 && items.every(i => i.paso === 5)
+  const totalPagado    = pagos.reduce((s,p) => s+(parseFloat(p.monto)||0), 0)
+  const cambio         = Math.max(0, totalPagado - totalPrecio)
+  const pagoCompleto   = totalPagado >= totalPrecio
+  const totalSesion    = ventas.reduce((s,v)=>s+v.total,0)
 
-  const totalPrecio     = items.reduce((s,i) => s+precioItem(i), 0)
-  const itemsCompletos  = items.filter(i => i.paso === 5)
-  const todosCompletos  = items.length > 0 && items.every(i => i.paso === 5)
-  const totalPagado     = pagos.reduce((s,p) => s+(parseFloat(p.monto)||0), 0)
-  const cambio          = Math.max(0, totalPagado - totalPrecio)
-  const pagoCompleto    = totalPagado >= totalPrecio
-
-  const updateItem  = (id, newItem) => setItems(prev => prev.map(i => i.id===id ? newItem : i))
-  const agregarItem = () => setItems(prev => [...prev, nuevoItem()])
+  const updateItem   = (id, newItem) => setItems(prev => prev.map(i => i.id===id ? newItem : i))
+  const agregarItem  = () => setItems(prev => [...prev, nuevoItem()])
   const eliminarItem = (id) => setItems(prev => prev.length > 1 ? prev.filter(i=>i.id!==id) : prev)
-  const updatePago  = (i, field, val) => setPagos(prev => prev.map((p,j) => j===i ? {...p,[field]:val} : p))
+  const updatePago   = (i, f, v) => setPagos(prev => prev.map((p,j) => j===i ? {...p,[f]:v} : p))
 
-  const confirmar = () => {
+  const confirmar = async () => {
     const orden = {
-      num:ordenNum, items:itemsCompletos, total:totalPrecio,
+      num: ordenNum, items: itemsCompletos, total: totalPrecio,
       entrega, nombreCliente, direccion, telefono, pagos, cambio,
       utensilios: UTENSILIOS[entrega]||[],
       hora: new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}),
     }
+
+    await supabase.from('ordenes').insert({
+      num: ordenNum, carrito_id:'C01', items: itemsCompletos,
+      entrega, nombre_cliente: nombreCliente, direccion, telefono,
+      pagos, total: totalPrecio, cambio, estado:'pendiente',
+      hora: orden.hora, fecha: new Date().toISOString().split('T')[0],
+    })
+
+    await supabase.from('movimientos').insert({
+      fecha: new Date().toISOString().split('T')[0],
+      descripcion: `Venta ${getOrdenNum(ordenNum)} — ${itemsCompletos.length} item(s)`,
+      tipo:'ingreso', categoria:'Ventas', monto: totalPrecio,
+      carrito:'C01', carrito_id:'C01',
+    })
+
     setVentas(prev => [orden, ...prev])
     setOrdenConfirmada(orden)
     setOrdenActual(orden)
@@ -503,8 +549,6 @@ export default function ZabuPOS() {
     color:'var(--text)', fontSize:13, fontFamily:'inherit', outline:'none', marginTop:6,
   }
 
-  const totalSesion = ventas.reduce((s,v)=>s+v.total,0)
-
   return (
     <>
       {ordenActual && confirmado && (
@@ -514,10 +558,10 @@ export default function ZabuPOS() {
       {/* KPIs */}
       <div className="grid-4" style={{ marginBottom:14 }}>
         {[
-          { label:'Ventas sesión',  val:cop(totalSesion),           color:'var(--gold)',  sub:`${ventas.length} órdenes`    },
-          { label:'Items orden',    val:String(itemsCompletos.length), color:'var(--text)', sub:`de ${items.length} totales` },
-          { label:'Total orden',    val:cop(totalPrecio),            color: totalPrecio>0?'var(--gold)':'var(--text4)', sub:'acumulado' },
-          { label:'Meta',           val:`${ventas.length}/36`,       color: ventas.length>=36?'var(--green)':'var(--text)', sub:'equilibrio' },
+          { label:'Ventas sesión', val:cop(totalSesion),              color:'var(--gold)',  sub:`${ventas.length} órdenes`    },
+          { label:'Items orden',   val:String(itemsCompletos.length),  color:'var(--text)',  sub:`de ${items.length} totales`  },
+          { label:'Total orden',   val:cop(totalPrecio),               color:totalPrecio>0?'var(--gold)':'var(--text4)', sub:'acumulado' },
+          { label:'Meta',          val:`${ventas.length}/36`,          color:ventas.length>=36?'var(--green)':'var(--text)', sub:'equilibrio' },
         ].map(k => (
           <div key={k.label} className="kpi-card">
             <div className="kpi-label">{k.label}</div>
@@ -527,25 +571,20 @@ export default function ZabuPOS() {
         ))}
       </div>
 
-      {/* Layout — móvil: columna, desktop: doble pantalla */}
+      {/* Layout */}
       <div style={{
-        display:'grid',
-        gridTemplateColumns: isMobile ? '1fr' : '1fr 280px',
-        gap:0,
-        height: isMobile ? 'auto' : 'calc(100vh - 180px)',
-        borderRadius:14, overflow: isMobile ? 'visible' : 'hidden',
-        border:'1px solid var(--border)',
+        display:'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 280px',
+        gap:0, height: isMobile ? 'auto' : 'calc(100vh - 180px)',
+        borderRadius:14, overflow: isMobile ? 'visible' : 'hidden', border:'1px solid var(--border)',
       }}>
 
         {/* OPERADOR */}
-        <div style={{ overflowY:'auto', padding:isMobile?'12px':'16px 20px', borderRight: isMobile?'none':'1px solid var(--border)', background:'var(--bg)', borderBottom: isMobile?'1px solid var(--border)':'none' }}>
+        <div style={{ overflowY:'auto', padding:isMobile?'12px':'16px 20px', borderRight:isMobile?'none':'1px solid var(--border)', background:'var(--bg)', borderBottom:isMobile?'1px solid var(--border)':'none' }}>
 
           {!fasePago ? (
             <>
               {items.map((item, i) => (
-                <ItemConstructor
-                  key={item.id}
-                  item={item}
+                <ItemConstructor key={item.id} item={item}
                   onChange={(newItem) => updateItem(item.id, newItem)}
                   onAgregar={agregarItem}
                   onEliminar={() => eliminarItem(item.id)}
@@ -553,7 +592,6 @@ export default function ZabuPOS() {
                   isMobile={isMobile}
                 />
               ))}
-
               {todosCompletos && (
                 <div style={{ display:'flex', gap:10, marginTop:4 }}>
                   <button onClick={agregarItem} style={{ flex:1, padding:'11px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'rgba(55,138,221,0.1)', border:'0.5px solid rgba(55,138,221,0.3)', color:'var(--blue)', fontFamily:'inherit' }}>
@@ -594,9 +632,9 @@ export default function ZabuPOS() {
                 <div className="panel-title">¿Cómo se entrega?</div>
                 <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:12 }}>
                   {[
-                    {id:'aqui',      label:'Aquí',    emoji:'🪑', color:'var(--green)'},
-                    {id:'llevar',    label:'Llevar',  emoji:'🛍', color:'var(--gold)' },
-                    {id:'domicilio', label:'Domicilio',emoji:'🛵', color:'var(--blue)' },
+                    {id:'aqui',      label:'Aquí',     emoji:'🪑', color:'var(--green)'},
+                    {id:'llevar',    label:'Llevar',   emoji:'🛍', color:'var(--gold)' },
+                    {id:'domicilio', label:'Domicilio', emoji:'🛵', color:'var(--blue)' },
                   ].map(t => (
                     <div key={t.id} onClick={() => setEntrega(t.id)} style={{ ...cardBase,
                       border:`1px solid ${entrega===t.id?t.color+'66':'var(--border)'}`,
@@ -607,7 +645,6 @@ export default function ZabuPOS() {
                     </div>
                   ))}
                 </div>
-
                 {entrega && (
                   <div>
                     <div style={{ fontSize:11, color:'var(--text3)' }}>Nombre (opcional)</div>
@@ -643,14 +680,13 @@ export default function ZabuPOS() {
                       + Mixto
                     </button>
                   </div>
-
                   {pagos.map((p,i) => (
                     <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
                       <div style={{ display:'flex', gap:6 }}>
                         {[{id:'efectivo',emoji:'💵'},{id:'qr',emoji:'📲'},{id:'tarjeta',emoji:'💳'}].map(m => (
                           <div key={m.id} onClick={() => updatePago(i,'metodo',m.id)} style={{
                             flex:1, padding:'8px 4px', borderRadius:8, cursor:'pointer', textAlign:'center',
-                            background: p.metodo===m.id?'var(--gold-dim)':'rgba(255,255,255,0.04)',
+                            background:p.metodo===m.id?'var(--gold-dim)':'rgba(255,255,255,0.04)',
                             border:`0.5px solid ${p.metodo===m.id?'var(--gold-border)':'var(--border)'}`,
                             fontSize:18,
                           }}>{m.emoji}</div>
@@ -661,17 +697,12 @@ export default function ZabuPOS() {
                         style={{ padding:'8px 10px', borderRadius:8, background:'rgba(255,255,255,0.05)', border:'1px solid var(--border)', color:'var(--text)', fontSize:14, fontFamily:'inherit', outline:'none' }} />
                     </div>
                   ))}
-
-                  {/* Botones rápidos efectivo */}
                   <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:10 }}>
                     {[5000,10000,20000,50000,100000].map(v => (
-                      <div key={v} onClick={() => {
-                        const idx = pagos.findIndex(p=>p.metodo==='efectivo')
-                        if(idx>=0) updatePago(idx,'monto',String(v))
-                      }} style={{ padding:'5px 10px', borderRadius:8, cursor:'pointer', fontSize:11, fontWeight:600, background:'rgba(255,255,255,0.05)', border:'0.5px solid var(--border)', color:'var(--text3)' }}>{cop(v)}</div>
+                      <div key={v} onClick={() => { const idx=pagos.findIndex(p=>p.metodo==='efectivo'); if(idx>=0) updatePago(idx,'monto',String(v)) }}
+                        style={{ padding:'5px 10px', borderRadius:8, cursor:'pointer', fontSize:11, fontWeight:600, background:'rgba(255,255,255,0.05)', border:'0.5px solid var(--border)', color:'var(--text3)' }}>{cop(v)}</div>
                     ))}
                   </div>
-
                   <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', borderTop:'1px solid var(--border)' }}>
                     <span style={{ fontSize:12, color:'var(--text3)' }}>Pagado</span>
                     <span style={{ fontSize:14, fontWeight:700, color:pagoCompleto?'var(--green)':'var(--red)' }}>{cop(totalPagado)}</span>
@@ -695,18 +726,13 @@ export default function ZabuPOS() {
           )}
         </div>
 
-        {/* PANTALLA CLIENTE — oculta en móvil */}
+        {/* PANTALLA CLIENTE */}
         {!isMobile && (
-          <PantallaCliente
-            items={items}
-            totalPrecio={totalPrecio}
-            confirmado={confirmado}
-            orden={ordenConfirmada}
-          />
+          <PantallaCliente items={items} totalPrecio={totalPrecio} confirmado={confirmado} orden={ordenConfirmada} />
         )}
       </div>
 
-      {/* Historial */}
+      {/* Historial sesión */}
       {ventas.length > 0 && (
         <div className="panel" style={{ marginTop:12 }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
