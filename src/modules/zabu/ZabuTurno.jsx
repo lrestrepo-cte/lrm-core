@@ -37,7 +37,16 @@ export default function ZabuTurno({ usuario, onTurnoActivo, turnoExistente, onVo
   const carrito = usuario?.carrito || 'C01'
   const hoy = new Date().toISOString().split('T')[0]
 
-  useEffect(() => { verificarTurno() }, [])
+  useEffect(() => {
+  if (turnoExistente) {
+    setTurnoActivo(turnoExistente)
+    setFase('abierto')
+    cargarOrdenesTurno(turnoExistente.id)
+    setLoading(false)
+  } else {
+    verificarTurno()
+  }
+}, [])
 
   const verificarTurno = async () => {
     setLoading(true)
