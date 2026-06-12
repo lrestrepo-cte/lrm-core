@@ -476,7 +476,7 @@ ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para 
 
 // ─── POS PRINCIPAL ───────────────────────────────────────────────────────────
 
-export default function ZabuPOS() {
+export default function ZabuPOS({ usuario }) {
   const [items,           setItems]           = useState([nuevoItem()])
   const [fasePago,        setFasePago]        = useState(false)
   const [entrega,         setEntrega]         = useState(null)
@@ -505,7 +505,7 @@ export default function ZabuPOS() {
   const eliminarItem = (id) => setItems(prev => prev.length > 1 ? prev.filter(i=>i.id!==id) : prev)
   const updatePago   = (i, f, v) => setPagos(prev => prev.map((p,j) => j===i ? {...p,[f]:v} : p))
 
-  const CARRITO_ID = 'C01'
+  const CARRITO_ID = usuario?.carrito || 'C01'
 
 const getNextConsecutivo = async () => {
   const hoy = new Date().toISOString().split('T')[0]

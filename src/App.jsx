@@ -7,6 +7,7 @@ import LRMFinanzas from './pages/LRMFinanzas'
 import LRMBiEjecutivo from './pages/LRMBiEjecutivo'
 import ZabuApp from './modules/zabu/ZabuApp'
 import { useBreakpoint } from './hooks/useBreakpoint'
+import ZabuTurno from './modules/zabu/ZabuTurno'
 
 const TITULOS = {
   dashboard:    'Dashboard LRM Trade',
@@ -21,6 +22,49 @@ const TITULOS = {
   agenda:       'Agenda',
   contabilidad: 'Contabilidad',
   configuracion:'Configuración',
+}
+
+function VendedorApp({ usuario, onCerrarSesion }) {
+  const [turnoActivo, setTurnoActivo] = useState(null)
+  const [nav, setNav] = useState('turno')
+
+  if (!turnoActivo || nav === 'turno') {
+    return (
+      <ZabuTurno
+        usuario={usuario}
+        onTurnoActivo={(turno) => {
+          setTurnoActivo(turno)
+          setNav('pos')
+        }}
+      />
+    )
+  }
+
+  return (
+    <div className="app-root">
+      <div className="main-area">
+        <div className="topbar">
+          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+            <div>
+              <div className="topbar-title">POS — {usuario.carrito}</div>
+              <div className="topbar-sub">{usuario.nombre} · Turno activo</div>
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={() => setNav('turno')} className="btn" style={{ fontSize:11 }}>
+              🔒 Ver turno
+            </button>
+            <button onClick={onCerrarSesion} className="btn" style={{ fontSize:11 }}>
+              Salir
+            </button>
+          </div>
+        </div>
+        <div className="page-content">
+          <ZabuApp rolForzado="pos" usuario={usuario} />
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function App() {
@@ -56,21 +100,8 @@ export default function App() {
   if (!usuario) return <Login onLogin={(u) => { localStorage.setItem('lrm_usuario', JSON.stringify(u)); setUsuario(u) }} />
 
   if (usuario.rol === 'vendedor') {
-    return (
-      <div className="app-root">
-        <div className="main-area">
-          <div className="topbar">
-            <div>
-              <div className="topbar-title">Ventas POS — {usuario.carrito}</div>
-              <div className="topbar-sub">{usuario.nombre}</div>
-            </div>
-            <button onClick={cerrarSesion} className="btn">Salir</button>
-          </div>
-          <div className="page-content"><ZabuApp rolForzado="pos" /></div>
-        </div>
-      </div>
-    )
-  }
+  return <VendedorApp usuario={usuario} onCerrarSesion={cerrarSesion} />
+}
 
   if (usuario.rol === 'cocina') {
     return (

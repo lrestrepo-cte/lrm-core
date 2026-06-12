@@ -29,7 +29,7 @@ const NAV = [
   { id:'configuracion', label:'⚙ Configuración' },
 ]
 
-export default function ZabuApp({ rolForzado, navExterno, onNavChange }) {
+export default function ZabuApp({ rolForzado, navExterno, onNavChange, usuario }) {
   const [nav, setNav] = useState(rolForzado || navExterno || 'dashboard')
 
   const cambiarNav = (id) => {
