@@ -7,7 +7,7 @@ import LRMFinanzas from './pages/LRMFinanzas'
 import LRMBiEjecutivo from './pages/LRMBiEjecutivo'
 import ZabuApp from './modules/zabu/ZabuApp'
 import { useBreakpoint } from './hooks/useBreakpoint'
-import ZabuTurno from './modules/zabu/ZabuTurno'
+import { AperturaTurno, PanelTurno } from './modules/zabu/ZabuTurno'
 
 const TITULOS = {
   dashboard:    'Dashboard LRM Trade',
@@ -25,44 +25,38 @@ const TITULOS = {
 }
 
 function VendedorApp({ usuario, onCerrarSesion }) {
-  const [turnoActivo, setTurnoActivo] = useState(null)
-  const [verTurno,    setVerTurno]    = useState(false)
+  const [turno,    setTurno]    = useState(null)
+  const [verTurno, setVerTurno] = useState(false)
 
-  if (!turnoActivo) {
-    return (
-      <ZabuTurno
-        usuario={usuario}
-        onTurnoActivo={(turno) => setTurnoActivo(turno)}
-      />
-    )
-  }
-
-  if (verTurno) {
-    return (
-      <ZabuTurno
-        usuario={usuario}
-        turnoExistente={turnoActivo}
-        onTurnoActivo={(turno) => setTurnoActivo(turno)}
-        onVolver={() => setVerTurno(false)}
-      />
-    )
+  if (!turno) {
+    return <AperturaTurno usuario={usuario} onTurnoAbierto={setTurno} />
   }
 
   return (
     <div className="app-root">
+      {verTurno && (
+        <PanelTurno
+          turno={turno}
+          usuario={usuario}
+          onCerrar={() => setVerTurno(false)}
+          onTurnoCerrado={() => { setVerTurno(false) }}
+        />
+      )}
       <div className="main-area">
         <div className="topbar">
           <div>
             <div className="topbar-title">POS — {usuario.carrito}</div>
-            <div className="topbar-sub">{usuario.nombre} · Turno activo</div>
+            <div className="topbar-sub">{usuario.nombre} · Turno activo desde {new Date(turno.hora_apertura).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})}</div>
           </div>
           <div style={{ display:'flex', gap:8 }}>
-            <button onClick={() => setVerTurno(true)} className="btn" style={{ fontSize:11 }}>
-              🔒 Ver turno
+            <button onClick={() => setVerTurno(true)} style={{
+              padding:'7px 14px', borderRadius:8, cursor:'pointer', fontSize:12, fontWeight:600,
+              background:'rgba(201,168,76,0.1)', border:'0.5px solid var(--gold-border)',
+              color:'var(--gold)', fontFamily:'inherit',
+            }}>
+              📊 Turno
             </button>
-            <button onClick={onCerrarSesion} className="btn" style={{ fontSize:11 }}>
-              Salir
-            </button>
+            <button onClick={onCerrarSesion} className="btn" style={{ fontSize:11 }}>Salir</button>
           </div>
         </div>
         <div className="page-content">
@@ -72,7 +66,6 @@ function VendedorApp({ usuario, onCerrarSesion }) {
     </div>
   )
 }
-
 export default function App() {
   const [usuario, setUsuario]   = useState(() => {
     try { const s = localStorage.getItem('lrm_usuario'); return s ? JSON.parse(s) : null } catch { return null }
