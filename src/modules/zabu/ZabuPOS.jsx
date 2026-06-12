@@ -44,7 +44,10 @@ function cop(n) {
   return '$' + Math.round(n).toLocaleString('es-CO')
 }
 
-function getOrdenNum(num) {
+function getOrdenNum(orden) {
+  if (!orden) return '#000'
+  if (typeof orden === 'object' && orden.codigo) return orden.codigo
+  const num = typeof orden === 'number' ? orden : orden.num || 0
   return '#' + String(num).padStart(3, '0')
 }
 
@@ -482,7 +485,9 @@ export default function ZabuPOS() {
   const [telefono,        setTelefono]        = useState('')
   const [pagos,           setPagos]           = useState([{metodo:'efectivo', monto:''}])
   const [ventas,          setVentas]          = useState([])
-  const [ordenNum,        setOrdenNum]        = useState(1)
+  const [ordenNum,    setOrdenNum]    = useState(1)
+  const [ordenCodigo, setOrdenCodigo] = useState('ZB-C01-001')
+  const CARRITO_ID = 'C01'
   const [ordenActual,     setOrdenActual]     = useState(null)
   const [confirmado,      setConfirmado]      = useState(false)
   const [ordenConfirmada, setOrdenConfirmada] = useState(null)
@@ -501,34 +506,50 @@ export default function ZabuPOS() {
   const eliminarItem = (id) => setItems(prev => prev.length > 1 ? prev.filter(i=>i.id!==id) : prev)
   const updatePago   = (i, f, v) => setPagos(prev => prev.map((p,j) => j===i ? {...p,[f]:v} : p))
 
-  const confirmar = async () => {
-    const orden = {
-      num: ordenNum, items: itemsCompletos, total: totalPrecio,
-      entrega, nombreCliente, direccion, telefono, pagos, cambio,
-      utensilios: UTENSILIOS[entrega]||[],
-      hora: new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}),
-    }
+  const CARRITO_ID = 'C01'
 
-    await supabase.from('ordenes').insert({
-      num: ordenNum, carrito_id:'C01', items: itemsCompletos,
-      entrega, nombre_cliente: nombreCliente, direccion, telefono,
-      pagos, total: totalPrecio, cambio, estado:'pendiente',
-      hora: orden.hora, fecha: new Date().toISOString().split('T')[0],
-    })
-
-    await supabase.from('movimientos').insert({
-      fecha: new Date().toISOString().split('T')[0],
-      descripcion: `Venta ${getOrdenNum(ordenNum)} — ${itemsCompletos.length} item(s)`,
-      tipo:'ingreso', categoria:'Ventas', monto: totalPrecio,
-      carrito:'C01', carrito_id:'C01',
-    })
-
-    setVentas(prev => [orden, ...prev])
-    setOrdenConfirmada(orden)
-    setOrdenActual(orden)
-    setConfirmado(true)
-    setOrdenNum(n => n+1)
+const getNextConsecutivo = async () => {
+  const hoy = new Date().toISOString().split('T')[0]
+  const { data, error } = await supabase.rpc('incrementar_consecutivo', {
+    p_carrito: CARRITO_ID,
+    p_fecha: hoy,
+  })
+  if (error || !data) {
+    return { num: ordenNum, codigo: `ZB-${CARRITO_ID}-${String(ordenNum).padStart(3,'0')}` }
   }
+  return { num: data, codigo: `ZB-${CARRITO_ID}-${String(data).padStart(3,'0')}` }
+}
+
+const confirmar = async () => {
+  const { num, codigo } = await getNextConsecutivo()
+
+  const orden = {
+    num, codigo, items: itemsCompletos, total: totalPrecio,
+    entrega, nombreCliente, direccion, telefono, pagos, cambio,
+    utensilios: UTENSILIOS[entrega]||[],
+    hora: new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}),
+  }
+
+  await supabase.from('ordenes').insert({
+    num, carrito_id: CARRITO_ID, items: itemsCompletos,
+    entrega, nombre_cliente: nombreCliente, direccion, telefono,
+    pagos, total: totalPrecio, cambio, estado:'pendiente',
+    hora: orden.hora, fecha: new Date().toISOString().split('T')[0],
+  })
+
+  await supabase.from('movimientos').insert({
+    fecha: new Date().toISOString().split('T')[0],
+    descripcion: `Venta ${codigo} — ${itemsCompletos.length} item(s)`,
+    tipo:'ingreso', categoria:'Ventas', monto: totalPrecio,
+    carrito: CARRITO_ID, carrito_id: CARRITO_ID,
+  })
+
+  setVentas(prev => [orden, ...prev])
+  setOrdenConfirmada(orden)
+  setOrdenActual(orden)
+  setConfirmado(true)
+  setOrdenNum(num + 1)
+}
 
   const reset = () => {
     setItems([nuevoItem()]); setFasePago(false); setEntrega(null)
