@@ -344,7 +344,7 @@ ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para 
         </div>
         <div style={{ marginBottom:8 }}>
           <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
-            <span style={{ color:'#888' }}>Orden</span><span style={{ fontWeight:800 }}>{getOrdenNum(orden.num)}</span>
+            <span style={{ fontWeight:800 }}>{orden.codigo || getOrdenNum(orden.num)}</span>
           </div>
           {orden.nombreCliente && (
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
@@ -397,7 +397,7 @@ ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para 
       <div style={{ background:'#1a1a1a', borderRadius:12, padding:'18px 16px', width:220, border:'2px solid #C9A84C' }}>
         <div style={{ textAlign:'center', borderBottom:'1px dashed #444', paddingBottom:10, marginBottom:12 }}>
           <div style={{ fontSize:10, color:'#C9A84C', letterSpacing:2, fontWeight:600 }}>COMANDA</div>
-          <div style={{ fontSize:32, fontWeight:900, color:'#fff', letterSpacing:-1 }}>{getOrdenNum(orden.num)}</div>
+          <div style={{ fontSize:32, fontWeight:900, color:'#fff', letterSpacing:-1 }}>{orden.codigo || getOrdenNum(orden.num)}</div>
           {orden.nombreCliente && <div style={{ fontSize:12, color:'#C9A84C', fontWeight:700, marginTop:2 }}>{orden.nombreCliente}</div>}
           <div style={{ fontSize:10, color:'#888', marginTop:2 }}>{new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})}</div>
         </div>
