@@ -47,7 +47,7 @@ export default function ZabuTurno({ usuario, onTurnoActivo }) {
       .eq('carrito_id', carrito)
       .eq('fecha', hoy)
       .eq('estado', 'abierto')
-      .single()
+      .maybeSingle()
 
     if (data) {
       setTurnoActivo(data)
