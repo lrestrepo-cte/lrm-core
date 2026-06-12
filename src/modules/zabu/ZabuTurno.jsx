@@ -22,7 +22,7 @@ const INVENTARIO_ITEMS = [
   { id:'empaque_domicilio', nombre:'Empaque domicilio', unidad:'uds' },
 ]
 
-export default function ZabuTurno({ usuario, onTurnoActivo }) {
+export default function ZabuTurno({ usuario, onTurnoActivo, turnoExistente, onVolver }) {
   const [turnoActivo, setTurnoActivo]   = useState(null)
   const [loading,     setLoading]       = useState(true)
   const [fase,        setFase]          = useState('check') // check | abrir | abierto | cerrar
@@ -41,6 +41,13 @@ export default function ZabuTurno({ usuario, onTurnoActivo }) {
 
   const verificarTurno = async () => {
     setLoading(true)
+    if (turnoExistente) {
+  setTurnoActivo(turnoExistente)
+  setFase('abierto')
+  await cargarOrdenesTurno(turnoExistente.id)
+  setLoading(false)
+  return
+}
     const { data } = await supabase
       .from('turnos')
       .select('*')
@@ -227,7 +234,12 @@ export default function ZabuTurno({ usuario, onTurnoActivo }) {
     const { totalVentas, totalEfectivo, totalQR, totalTarjeta, efectivoEsperado } = calcularResumen()
     return (
       <div style={{ minHeight:'100vh', background:'#0a0a0a', display:'flex', alignItems:'center', justifyContent:'center', padding:20 }}>
-        <div style={{ width:'100%', maxWidth:420 }}>
+        <div style={{ width:'100%', maxWidth:420 }}> 
+        {onVolver && (
+  <div onClick={onVolver} style={{ fontSize:12, color:'rgba(255,255,255,0.3)', cursor:'pointer', marginBottom:20 }}>
+    ← Volver al POS
+  </div>
+)}    
           <div style={{ textAlign:'center', marginBottom:24 }}>
             <div style={{ fontSize:11, color:'var(--green)', letterSpacing:2, fontWeight:600, marginBottom:6 }}>● TURNO ACTIVO</div>
             <div style={{ fontSize:22, fontWeight:800, color:'var(--text)', marginBottom:4 }}>{carrito} · {usuario?.nombre}</div>
