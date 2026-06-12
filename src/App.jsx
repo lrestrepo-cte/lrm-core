@@ -26,16 +26,24 @@ const TITULOS = {
 
 function VendedorApp({ usuario, onCerrarSesion }) {
   const [turnoActivo, setTurnoActivo] = useState(null)
-  const [nav, setNav] = useState('turno')
+  const [verTurno,    setVerTurno]    = useState(false)
 
-  if (!turnoActivo || nav === 'turno') {
+  if (!turnoActivo) {
     return (
       <ZabuTurno
         usuario={usuario}
-        onTurnoActivo={(turno) => {
-          setTurnoActivo(turno)
-          setNav('pos')
-        }}
+        onTurnoActivo={(turno) => setTurnoActivo(turno)}
+      />
+    )
+  }
+
+  if (verTurno) {
+    return (
+      <ZabuTurno
+        usuario={usuario}
+        turnoExistente={turnoActivo}
+        onTurnoActivo={(turno) => setTurnoActivo(turno)}
+        onVolver={() => setVerTurno(false)}
       />
     )
   }
@@ -44,14 +52,12 @@ function VendedorApp({ usuario, onCerrarSesion }) {
     <div className="app-root">
       <div className="main-area">
         <div className="topbar">
-          <div style={{ display:'flex', alignItems:'center', gap:12 }}>
-            <div>
-              <div className="topbar-title">POS — {usuario.carrito}</div>
-              <div className="topbar-sub">{usuario.nombre} · Turno activo</div>
-            </div>
+          <div>
+            <div className="topbar-title">POS — {usuario.carrito}</div>
+            <div className="topbar-sub">{usuario.nombre} · Turno activo</div>
           </div>
           <div style={{ display:'flex', gap:8 }}>
-            <button onClick={() => setNav('turno')} className="btn" style={{ fontSize:11 }}>
+            <button onClick={() => setVerTurno(true)} className="btn" style={{ fontSize:11 }}>
               🔒 Ver turno
             </button>
             <button onClick={onCerrarSesion} className="btn" style={{ fontSize:11 }}>
@@ -99,27 +105,58 @@ export default function App() {
 
   if (!usuario) return <Login onLogin={(u) => { localStorage.setItem('lrm_usuario', JSON.stringify(u)); setUsuario(u) }} />
 
-  if (usuario.rol === 'vendedor') {
-  return <VendedorApp usuario={usuario} onCerrarSesion={cerrarSesion} />
-}
+ function VendedorApp({ usuario, onCerrarSesion }) {
+  const [turnoActivo, setTurnoActivo] = useState(null)
+  const [verTurno,    setVerTurno]    = useState(false)
 
-  if (usuario.rol === 'cocina') {
+  // Sin turno → apertura
+  if (!turnoActivo) {
     return (
-      <div className="app-root">
-        <div className="main-area">
-          <div className="topbar">
-            <div>
-              <div className="topbar-title">🍳 Cocina — Comandas</div>
-              <div className="topbar-sub">{usuario.nombre}</div>
-            </div>
-            <button onClick={cerrarSesion} className="btn">Salir</button>
-          </div>
-          <div className="page-content"><ZabuApp rolForzado="comandero" /></div>
-        </div>
-      </div>
+      <ZabuTurno
+        usuario={usuario}
+        modo="apertura"
+        onTurnoListo={(t) => setTurnoActivo(t)}
+      />
     )
   }
 
+  // Ver/cerrar turno
+  if (verTurno) {
+    return (
+      <ZabuTurno
+        usuario={usuario}
+        modo="cierre"
+        onTurnoListo={(t) => setTurnoActivo(t)}
+        onVolver={() => setVerTurno(false)}
+      />
+    )
+  }
+
+  // POS
+  return (
+    <div className="app-root">
+      <div className="main-area">
+        <div className="topbar">
+          <div>
+            <div className="topbar-title">POS — {usuario.carrito}</div>
+            <div className="topbar-sub">{usuario.nombre} · Turno activo</div>
+          </div>
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={() => setVerTurno(true)} className="btn" style={{ fontSize:11 }}>
+              🔒 Ver turno
+            </button>
+            <button onClick={onCerrarSesion} className="btn" style={{ fontSize:11 }}>
+              Salir
+            </button>
+          </div>
+        </div>
+        <div className="page-content">
+          <ZabuApp rolForzado="pos" usuario={usuario} />
+        </div>
+      </div>
+    </div>
+  )
+}
   const isZabu = vista === 'zabu'
   const tituloTopbar = isZabu ? 'ZABÚ — Hot Dogs de Verdad' : (TITULOS[navActivo] || 'LRM Trade')
 
