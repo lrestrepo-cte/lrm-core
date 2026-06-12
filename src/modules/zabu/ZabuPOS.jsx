@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useOrdenes } from '../../context/OrdenesContext'
 
 const PRODUCTOS = [
   { id:'zabu',     nombre:'ZABÚ',     desc:'El original',       precioSolo:17000, precioCombo:20000, emoji:'🌭' },
