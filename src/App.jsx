@@ -9,6 +9,16 @@ import ZabuApp from './modules/zabu/ZabuApp'
 import { useBreakpoint } from './hooks/useBreakpoint'
 import { AperturaTurno, PanelTurno } from './modules/zabu/ZabuTurno'
 
+// Forzar logout temporal para testing
+if (typeof window !== 'undefined') {
+  const u = localStorage.getItem('lrm_usuario')
+  if (u) {
+    const parsed = JSON.parse(u)
+    // Solo mantener CEO, limpiar otros roles viejos
+    if (!parsed?.email) localStorage.removeItem('lrm_usuario')
+  }
+}
+
 const TITULOS = {
   dashboard:    'Dashboard LRM Trade',
   finanzas:     'Plan Financiero',
@@ -67,9 +77,8 @@ function VendedorApp({ usuario, onCerrarSesion }) {
   )
 }
 export default function App() {
-  const [usuario, setUsuario]   = useState(() => {
-    try { const s = localStorage.getItem('lrm_usuario'); return s ? JSON.parse(s) : null } catch { return null }
-  })
+  const [usuario, setUsuario] = useState(null)
+
   const [vista,      setVista]      = useState('lrm')
   const [navActivo,  setNavActivo]  = useState('dashboard')
   const [zabuNav,    setZabuNav]    = useState('dashboard')
