@@ -7,7 +7,7 @@ import LRMFinanzas from './pages/LRMFinanzas'
 import LRMBiEjecutivo from './pages/LRMBiEjecutivo'
 import ZabuApp from './modules/zabu/ZabuApp'
 import ZabuComandero from './modules/zabu/ZabuComandero'
-import MySpace from './modules/myspace/MySpace'
+import MySpace from './pages/MySpace'
 import { AperturaTurno, PanelTurno } from './modules/zabu/ZabuTurno'
 import { useBreakpoint } from './hooks/useBreakpoint'
 
