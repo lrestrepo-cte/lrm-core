@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import ZabuDashboard    from './ZabuDashboard'
-import ZabuVentasDia    from './ZabuVentasDia'
+import ZabuPOS          from './ZabuPOS'
 import ZabuRecetario    from './ZabuRecetario'
 import ZabuInventario   from './ZabuInventario'
 import ZabuCostos       from './ZabuCostos'
@@ -15,7 +15,7 @@ import ZabuConfiguracion from './ZabuConfiguracion'
 
 const NAV = [
   { id:'dashboard',    label:'Dashboard'       },
-  { id:'pos',          label:'Ventas del día'  },
+  { id:'pos',          label:'Ventas POS'      },
   { id:'recetario',    label:'Recetario'       },
   { id:'peps',         label:'PEPs'            },
   { id:'inventario',   label:'Inventario'      },
@@ -40,7 +40,7 @@ export default function ZabuApp({ rolForzado, navExterno, onNavChange, usuario }
   const renderModulo = () => {
     switch (nav) {
       case 'dashboard':    return <ZabuDashboard />
-      case 'pos':          return <ZabuVentasDia />
+      case 'pos':          return <ZabuPOS usuario={usuario} />
       case 'recetario':    return <ZabuRecetario />
       case 'inventario':   return <ZabuInventario />
       case 'costos':       return <ZabuCostos />
