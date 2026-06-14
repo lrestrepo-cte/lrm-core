@@ -7,6 +7,7 @@ import LRMFinanzas from './pages/LRMFinanzas'
 import LRMBiEjecutivo from './pages/LRMBiEjecutivo'
 import ZabuApp from './modules/zabu/ZabuApp'
 import ZabuComandero from './modules/zabu/ZabuComandero'
+import RVApp from './modules/rv/RVApp'
 import MySpace from './pages/MySpace'
 import { AperturaTurno, PanelTurno } from './modules/zabu/ZabuTurno'
 import { useBreakpoint } from './hooks/useBreakpoint'
@@ -102,29 +103,42 @@ export default function App() {
   const [usuario,     setUsuario]     = useState(null)
   const [vista,       setVista]       = useState('lrm')
   const [navActivo,   setNavActivo]   = useState('dashboard')
-  const [zabuNav,     setZabuNav]     = useState('dashboard')
+  const [negNav,      setNegNav]      = useState('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const { isMobile, isTablet } = useBreakpoint()
   const esMovilOTablet = isMobile || isTablet
 
-  const handleLogin    = (u) => { localStorage.setItem('lrm_usuario', JSON.stringify(u)); setUsuario(u) }
-  const cerrarSesion   = () => { localStorage.removeItem('lrm_usuario'); setUsuario(null); setVista('lrm'); setNavActivo('dashboard'); setSidebarOpen(false) }
-  const entrarNegocio  = (id) => { setVista(id); setZabuNav('dashboard'); setNavActivo('dashboard'); setSidebarOpen(false) }
-  const volverLRM      = () => { setVista('lrm'); setNavActivo('dashboard'); setSidebarOpen(false) }
-  const handleNav      = (id) => { if (vista==='zabu') { setZabuNav(id); setNavActivo(id) } else { setNavActivo(id) }; setSidebarOpen(false) }
+  const handleLogin   = (u) => { localStorage.setItem('lrm_usuario', JSON.stringify(u)); setUsuario(u) }
+  const cerrarSesion  = () => { localStorage.removeItem('lrm_usuario'); setUsuario(null); setVista('lrm'); setNavActivo('dashboard'); setSidebarOpen(false) }
+  const entrarNegocio = (id) => { setVista(id); setNegNav('dashboard'); setNavActivo('dashboard'); setSidebarOpen(false) }
+  const volverLRM     = () => { setVista('lrm'); setNavActivo('dashboard'); setSidebarOpen(false) }
+  const handleNav     = (id) => {
+    if (vista === 'zabu' || vista === 'rv') { setNegNav(id); setNavActivo(id) }
+    else { setNavActivo(id) }
+    setSidebarOpen(false)
+  }
 
-  if (!usuario)                return <Login onLogin={handleLogin} />
+  if (!usuario)                 return <Login onLogin={handleLogin} />
   if (usuario.rol==='vendedor') return <VendedorApp usuario={usuario} onCerrarSesion={cerrarSesion} />
   if (usuario.rol==='cocina')   return <CocinaApp   usuario={usuario} onCerrarSesion={cerrarSesion} />
 
   const isZabu = vista === 'zabu'
-  const tituloTopbar = isZabu ? 'ZABÚ — Hot Dogs de Verdad' : (TITULOS[navActivo] || 'LRM Trade')
+  const isRV   = vista === 'rv'
+
+  const tituloTopbar = isZabu
+    ? 'ZABÚ — Hot Dogs de Verdad'
+    : isRV
+    ? 'RV Sports — Calcetines'
+    : (TITULOS[navActivo] || 'LRM Trade')
 
   const renderContenido = () => {
     if (navActivo === 'myspace') return <MySpace />
     if (isZabu) return (
-      <ZabuApp navExterno={zabuNav} onNavChange={(id) => { setZabuNav(id); setNavActivo(id) }} usuario={usuario} />
+      <ZabuApp navExterno={negNav} onNavChange={(id) => { setNegNav(id); setNavActivo(id) }} usuario={usuario} />
+    )
+    if (isRV) return (
+      <RVApp navExterno={negNav} onNavChange={(id) => { setNegNav(id); setNavActivo(id) }} usuario={usuario} />
     )
     switch (navActivo) {
       case 'dashboard': return <LRMDashboard onEntrarNegocio={entrarNegocio} />
