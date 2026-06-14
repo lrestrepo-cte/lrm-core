@@ -11,38 +11,38 @@ const NAV_LRM = [
   {
     seccion:'General',
     items:[
-      { id:'dashboard',  label:'Dashboard',    activo:true  },
-      { id:'bi', label:'BI Ejecutivo', activo:true },
-      { id:'consolidado',label:'Consolidado',   activo:false },
-      { id:'informes',   label:'Informes',      activo:false },
+      { id:'dashboard',  label:'Dashboard',       activo:true  },
+      { id:'bi',         label:'BI Ejecutivo',     activo:true  },
+      { id:'consolidado',label:'Consolidado',      activo:false },
+      { id:'informes',   label:'Informes',         activo:false },
     ]
   },
   {
     seccion:'Comercial',
     items:[
-      { id:'crm',        label:'CRM',           activo:false },
-      { id:'marketing',  label:'Marketing',     activo:false },
+      { id:'crm',        label:'CRM',              activo:false },
+      { id:'marketing',  label:'Marketing',        activo:false },
     ]
   },
   {
     seccion:'Operación',
     items:[
-      { id:'personal',   label:'Personal',      activo:false },
-      { id:'calidad',    label:'Calidad',       activo:false },
-      { id:'agenda',     label:'Agenda',        activo:false },
+      { id:'personal',   label:'Personal',         activo:false },
+      { id:'calidad',    label:'Calidad',          activo:false },
+      { id:'agenda',     label:'Agenda',           activo:false },
     ]
   },
   {
     seccion:'Finanzas',
     items:[
-      { id:'finanzas',      label:'Plan financiero', activo:true  },
-      { id:'contabilidad',  label:'Contabilidad',    activo:false },
+      { id:'finanzas',     label:'Plan financiero', activo:true  },
+      { id:'contabilidad', label:'Contabilidad',    activo:false },
     ]
   },
   {
     seccion:'Sistema',
     items:[
-      { id:'configuracion', label:'Configuración',   activo:false },
+      { id:'configuracion', label:'Configuración',  activo:false },
     ]
   },
 ]
@@ -51,33 +51,33 @@ const NAV_ZABU = [
   {
     seccion:'Operación',
     items:[
-      { id:'dashboard',     label:'Dashboard'     },
-      { id:'pos',           label:'Ventas POS'    },
-      { id:'comandero',     label:'Comandero'     },
+      { id:'dashboard',    label:'Dashboard'    },
+      { id:'pos',          label:'Ventas POS'   },
+      { id:'comandero',    label:'Comandero'    },
     ]
   },
   {
     seccion:'Producto',
     items:[
-      { id:'recetario',     label:'Recetario'     },
-      { id:'peps',          label:'PEPs'          },
+      { id:'recetario',    label:'Recetario'    },
+      { id:'peps',         label:'PEPs'         },
     ]
   },
   {
     seccion:'Inventario',
     items:[
-      { id:'inventario',    label:'Inventario'    },
-      { id:'vencimientos',  label:'Vencimientos'  },
-      { id:'fifo',          label:'FIFO'          },
+      { id:'inventario',   label:'Inventario'   },
+      { id:'vencimientos', label:'Vencimientos' },
+      { id:'fifo',         label:'FIFO'         },
     ]
   },
   {
     seccion:'Finanzas',
     items:[
-      { id:'costos',        label:'Costos'        },
-      { id:'proyeccion',    label:'Proyecciones'  },
-      { id:'personal',      label:'Personal'      },
-      { id:'contabilidad',  label:'Contabilidad'  },
+      { id:'costos',       label:'Costos'       },
+      { id:'proyeccion',   label:'Proyecciones' },
+      { id:'personal',     label:'Personal'     },
+      { id:'contabilidad', label:'Contabilidad' },
     ]
   },
   {
@@ -89,7 +89,8 @@ const NAV_ZABU = [
 ]
 
 export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onEntrarNegocio, usuario, onCerrarSesion }) {
-  const isZabu = vista === 'zabu'
+  const isZabu  = vista === 'zabu'
+  const isLuis  = usuario?.email === 'luis@zabu.co'
 
   return (
     <div className="sidebar">
@@ -98,7 +99,7 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onEnt
         <div className="sb-name">Core</div>
       </div>
 
-      <nav style={{ flex:1, overflowY:'auto' }}>
+      <nav style={{ flex:1, overflowY:'auto', paddingBottom:8 }}>
         {!isZabu ? (
           <>
             {NAV_LRM.map(grupo => (
@@ -120,6 +121,20 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onEnt
                 ))}
               </div>
             ))}
+
+            {/* My Space — solo visible para Luis */}
+            {isLuis && (
+              <>
+                <div className="sb-section-label">Personal</div>
+                <div
+                  className={`sb-item${navActivo==='myspace' ? ' active' : ''}`}
+                  onClick={() => onNavLRM && onNavLRM('myspace')}
+                  style={{ cursor:'pointer' }}
+                >
+                  <span className="sb-item-txt">🔐 My Space</span>
+                </div>
+              </>
+            )}
           </>
         ) : (
           <>
@@ -146,7 +161,10 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onEnt
 
         <div className="sb-section-label">Negocios</div>
         {NEGOCIOS.map(n => (
-          <div key={n.id} className="sb-item" onClick={() => n.id==='zabu' && onEntrarNegocio && onEntrarNegocio(n.id)}>
+          <div key={n.id} className="sb-item"
+            onClick={() => n.id==='zabu' && onEntrarNegocio && onEntrarNegocio(n.id)}
+            style={{ cursor: n.id==='zabu' ? 'pointer' : 'default', opacity: n.id==='zabu' ? 1 : 0.5 }}
+          >
             <div style={{ width:7, height:7, borderRadius:'50%', background:n.color, flexShrink:0 }} />
             <span className="sb-item-txt">{n.nombre}</span>
             <span className={`badge badge-${n.estado}`}>
@@ -168,7 +186,8 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onEnt
             </div>
           </div>
         </div>
-        <div onClick={onCerrarSesion} style={{ width:'100%', padding:'7px 10px', borderRadius:8, background:'rgba(224,82,82,0.08)', border:'0.5px solid rgba(224,82,82,0.2)', color:'#e05252', fontSize:11, cursor:'pointer', textAlign:'center', fontWeight:600, transition:'all .15s' }}
+        <div onClick={onCerrarSesion}
+          style={{ width:'100%', padding:'7px 10px', borderRadius:8, background:'rgba(224,82,82,0.08)', border:'0.5px solid rgba(224,82,82,0.2)', color:'#e05252', fontSize:11, cursor:'pointer', textAlign:'center', fontWeight:600, transition:'all .15s' }}
           onMouseOver={e => e.currentTarget.style.background='rgba(224,82,82,0.15)'}
           onMouseOut={e => e.currentTarget.style.background='rgba(224,82,82,0.08)'}
         >
