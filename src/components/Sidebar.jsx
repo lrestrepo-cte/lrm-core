@@ -56,6 +56,7 @@ const NAV_ZABU = [
       { id:'dashboard',  label:'Dashboard'  },
       { id:'pos',        label:'Ventas POS' },
       { id:'comandero',  label:'Comandero'  },
+      { id:'plan', label:'📋 Plan de Negocio' },
     ]
   },
   {

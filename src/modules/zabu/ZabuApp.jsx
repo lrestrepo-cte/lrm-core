@@ -12,6 +12,7 @@ import ZabuVencimientos from './ZabuVencimientos'
 import ZabuPEPS         from './ZabuPEPS'
 import ZabuFIFO         from './ZabuFIFO'
 import ZabuConfiguracion from './ZabuConfiguracion'
+import ZabuPlanNegocio from './ZabuPlanNegocio'
 
 const NAV = [
   { id:'dashboard',    label:'Dashboard'       },
@@ -27,6 +28,7 @@ const NAV = [
   { id:'contabilidad', label:'Contabilidad'    },
   { id:'vencimientos', label:'Vencimientos'    },
   { id:'configuracion',label:'⚙ Configuración' },
+  { id:'plan', label:'📋 Plan Negocio' },
 ]
 
 export default function ZabuApp({ rolForzado, navExterno, onNavChange, usuario }) {
@@ -52,6 +54,7 @@ export default function ZabuApp({ rolForzado, navExterno, onNavChange, usuario }
       case 'peps':         return <ZabuPEPS />
       case 'fifo':         return <ZabuFIFO />
       case 'configuracion':return <ZabuConfiguracion />
+      case 'plan': return <ZabuPlanNegocio />
       default: return (
         <div className="panel" style={{ maxWidth: 500 }}>
           <div className="panel-title">{NAV.find(n => n.id === nav)?.label?.toUpperCase()}</div>
