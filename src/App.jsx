@@ -5,6 +5,7 @@ import Topbar from './components/Topbar'
 import LRMDashboard from './pages/LRMDashboard'
 import LRMFinanzas from './pages/LRMFinanzas'
 import LRMBiEjecutivo from './pages/LRMBiEjecutivo'
+import LRMConfiguracion from './pages/LRMConfiguracion'
 import ZabuApp from './modules/zabu/ZabuApp'
 import ZabuComandero from './modules/zabu/ZabuComandero'
 import RVApp from './modules/rv/RVApp'
@@ -24,7 +25,7 @@ const TITULOS = {
   calidad:       'Calidad',
   agenda:        'Agenda',
   contabilidad:  'Contabilidad',
-  configuracion: 'Configuración',
+  configuracion: 'Configuración LRM Core',
   myspace:       'My Space',
 }
 
@@ -57,8 +58,8 @@ function VendedorApp({ usuario, onCerrarSesion }) {
           </div>
           <div style={{ display:'flex', gap:8 }}>
             <button onClick={() => setVerTurno(true)} style={{
-              padding: isMobile?'6px 10px':'7px 14px', borderRadius:8, cursor:'pointer',
-              fontSize: isMobile?11:12, fontWeight:600,
+              padding:isMobile?'6px 10px':'7px 14px', borderRadius:8, cursor:'pointer',
+              fontSize:isMobile?11:12, fontWeight:600,
               background:'rgba(201,168,76,0.1)', border:'0.5px solid var(--gold-border)',
               color:'var(--gold)', fontFamily:'inherit',
             }}>
@@ -114,7 +115,7 @@ export default function App() {
   const entrarNegocio = (id) => { setVista(id); setNegNav('dashboard'); setNavActivo('dashboard'); setSidebarOpen(false) }
   const volverLRM     = () => { setVista('lrm'); setNavActivo('dashboard'); setSidebarOpen(false) }
   const handleNav     = (id) => {
-    if (vista === 'zabu' || vista === 'rv') { setNegNav(id); setNavActivo(id) }
+    if (vista==='zabu'||vista==='rv') { setNegNav(id); setNavActivo(id) }
     else { setNavActivo(id) }
     setSidebarOpen(false)
   }
@@ -126,20 +127,15 @@ export default function App() {
   const isZabu = vista === 'zabu'
   const isRV   = vista === 'rv'
 
-  const tituloTopbar = isZabu
-    ? 'ZABÚ — Hot Dogs de Verdad'
-    : isRV
-    ? 'RV Sports — Calcetines'
+  const tituloTopbar = isZabu ? 'ZABÚ — Hot Dogs de Verdad'
+    : isRV   ? 'RV Sports — Calcetines'
     : (TITULOS[navActivo] || 'LRM Trade')
 
   const renderContenido = () => {
-    if (navActivo === 'myspace') return <MySpace />
-    if (isZabu) return (
-      <ZabuApp navExterno={negNav} onNavChange={(id) => { setNegNav(id); setNavActivo(id) }} usuario={usuario} />
-    )
-    if (isRV) return (
-      <RVApp navExterno={negNav} onNavChange={(id) => { setNegNav(id); setNavActivo(id) }} usuario={usuario} />
-    )
+    if (navActivo === 'myspace')       return <MySpace />
+    if (navActivo === 'configuracion') return <LRMConfiguracion />
+    if (isZabu) return <ZabuApp navExterno={negNav} onNavChange={(id)=>{setNegNav(id);setNavActivo(id)}} usuario={usuario} />
+    if (isRV)   return <RVApp   navExterno={negNav} onNavChange={(id)=>{setNegNav(id);setNavActivo(id)}} usuario={usuario} />
     switch (navActivo) {
       case 'dashboard': return <LRMDashboard onEntrarNegocio={entrarNegocio} />
       case 'finanzas':  return <LRMFinanzas />

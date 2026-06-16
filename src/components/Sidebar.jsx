@@ -22,16 +22,16 @@ const NAV_LRM = [
   {
     seccion:'Comercial',
     items:[
-      { id:'crm',        label:'CRM',              activo:false },
-      { id:'marketing',  label:'Marketing',        activo:false },
+      { id:'crm',       label:'CRM',       activo:false },
+      { id:'marketing', label:'Marketing', activo:false },
     ]
   },
   {
     seccion:'Operación',
     items:[
-      { id:'personal',   label:'Personal',         activo:false },
-      { id:'calidad',    label:'Calidad',          activo:false },
-      { id:'agenda',     label:'Agenda',           activo:false },
+      { id:'personal', label:'Personal', activo:false },
+      { id:'calidad',  label:'Calidad',  activo:false },
+      { id:'agenda',   label:'Agenda',   activo:false },
     ]
   },
   {
@@ -44,7 +44,7 @@ const NAV_LRM = [
   {
     seccion:'Sistema',
     items:[
-      { id:'configuracion', label:'Configuración',  activo:false },
+      { id:'configuracion', label:'Configuración', activo:true },
     ]
   },
 ]
@@ -53,24 +53,24 @@ const NAV_ZABU = [
   {
     seccion:'Operación',
     items:[
-      { id:'dashboard',    label:'Dashboard'    },
-      { id:'pos',          label:'Ventas POS'   },
-      { id:'comandero',    label:'Comandero'    },
+      { id:'dashboard',  label:'Dashboard'  },
+      { id:'pos',        label:'Ventas POS' },
+      { id:'comandero',  label:'Comandero'  },
     ]
   },
   {
     seccion:'Producto',
     items:[
-      { id:'recetario',    label:'Recetario'    },
-      { id:'peps',         label:'PEPs'         },
+      { id:'recetario', label:'Recetario' },
+      { id:'peps',      label:'PEPs'      },
     ]
   },
   {
     seccion:'Inventario',
     items:[
-      { id:'inventario',   label:'Inventario'   },
-      { id:'vencimientos', label:'Vencimientos' },
-      { id:'fifo',         label:'FIFO'         },
+      { id:'inventario',  label:'Inventario'   },
+      { id:'vencimientos',label:'Vencimientos' },
+      { id:'fifo',        label:'FIFO'         },
     ]
   },
   {
@@ -94,9 +94,9 @@ const NAV_RV = [
   {
     seccion:'Operación',
     items:[
-      { id:'dashboard',  label:'Dashboard'  },
-      { id:'pos',        label:'POS'        },
-      { id:'pedidos',    label:'Pedidos'    },
+      { id:'dashboard', label:'Dashboard' },
+      { id:'pos',       label:'POS'       },
+      { id:'pedidos',   label:'Pedidos'   },
     ]
   },
   {
@@ -109,7 +109,7 @@ const NAV_RV = [
   {
     seccion:'Clientes',
     items:[
-      { id:'clientes',   label:'Clientes'   },
+      { id:'clientes', label:'Clientes' },
     ]
   },
 ]
@@ -141,11 +141,18 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onEnt
                 <div className="sb-section-label">{grupo.seccion}</div>
                 {grupo.items.map(item => (
                   <div key={item.id}
-                    className={`sb-item${navActivo===item.id ? ' active' : ''}`}
+                    className={`sb-item${navActivo===item.id?' active':''}`}
                     onClick={() => item.activo && onNavLRM && onNavLRM(item.id)}
-                    style={{ opacity: item.activo ? 1 : 0.45, cursor: item.activo ? 'pointer' : 'default' }}
+                    style={{
+                      opacity: item.activo ? 1 : 0.45,
+                      cursor:  item.activo ? 'pointer' : 'default',
+                      ...(item.id==='configuracion' ? { color:'var(--red)' } : {}),
+                    }}
                   >
-                    <span className="sb-item-txt">{item.label}</span>
+                    <span className="sb-item-txt"
+                      style={item.id==='configuracion' ? { color: navActivo==='configuracion'?'var(--gold)':'rgba(224,82,82,0.7)' } : {}}>
+                      {item.label}
+                    </span>
                     {!item.activo && (
                       <span style={{ fontSize:9, padding:'1px 6px', borderRadius:6, background:'rgba(255,255,255,0.06)', color:'rgba(255,255,255,0.2)', border:'0.5px solid rgba(255,255,255,0.08)' }}>
                         Pronto
@@ -160,7 +167,7 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onEnt
               <>
                 <div className="sb-section-label">Personal</div>
                 <div
-                  className={`sb-item${navActivo==='myspace' ? ' active' : ''}`}
+                  className={`sb-item${navActivo==='myspace'?' active':''}`}
                   onClick={() => onNavLRM && onNavLRM('myspace')}
                   style={{ cursor:'pointer' }}
                 >
@@ -175,7 +182,7 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onEnt
               <div onClick={onVolverLRM}
                 style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, color:'rgba(255,255,255,0.3)', cursor:'pointer', padding:'6px 10px', borderRadius:8, transition:'color .15s' }}
                 onMouseOver={e => e.currentTarget.style.color='rgba(255,255,255,0.7)'}
-                onMouseOut={e => e.currentTarget.style.color='rgba(255,255,255,0.3)'}
+                onMouseOut={e  => e.currentTarget.style.color='rgba(255,255,255,0.3)'}
               >← LRM Trade</div>
             </div>
             {navNegocio.map(grupo => (
@@ -183,7 +190,7 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onEnt
                 <div className="sb-section-label">{grupo.seccion}</div>
                 {grupo.items.map(item => (
                   <div key={item.id}
-                    className={`sb-item${navActivo===item.id ? ' active' : ''}`}
+                    className={`sb-item${navActivo===item.id?' active':''}`}
                     onClick={() => onNavLRM && onNavLRM(item.id)}
                   >
                     <span className="sb-item-txt">{item.label}</span>
@@ -204,7 +211,7 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onEnt
             <div style={{ width:7, height:7, borderRadius:'50%', background:n.color, flexShrink:0 }} />
             <span className="sb-item-txt">{n.nombre}</span>
             <span className={`badge badge-${n.estado}`}>
-              {n.estado==='activo' ? 'Activo' : n.estado==='dev' ? 'Dev' : 'Pronto'}
+              {n.estado==='activo'?'Activo':n.estado==='dev'?'Dev':'Pronto'}
             </span>
           </div>
         ))}
@@ -212,20 +219,20 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onEnt
 
       <div className="sb-user" style={{ flexDirection:'column', alignItems:'flex-start', gap:8 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10, width:'100%' }}>
-          <div className="sb-avatar">{usuario?.nombre?.charAt(0) || 'U'}</div>
+          <div className="sb-avatar">{usuario?.nombre?.charAt(0)||'U'}</div>
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ fontSize:12, color:'rgba(255,255,255,0.7)', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-              {usuario?.nombre || 'Usuario'}
+              {usuario?.nombre||'Usuario'}
             </div>
             <div style={{ fontSize:10, color:'var(--gold)', textTransform:'capitalize' }}>
-              {usuario?.rol || 'CEO'} · LRM Trade
+              {usuario?.rol||'CEO'} · LRM Trade
             </div>
           </div>
         </div>
         <div onClick={onCerrarSesion}
           style={{ width:'100%', padding:'7px 10px', borderRadius:8, background:'rgba(224,82,82,0.08)', border:'0.5px solid rgba(224,82,82,0.2)', color:'#e05252', fontSize:11, cursor:'pointer', textAlign:'center', fontWeight:600, transition:'all .15s' }}
           onMouseOver={e => e.currentTarget.style.background='rgba(224,82,82,0.15)'}
-          onMouseOut={e => e.currentTarget.style.background='rgba(224,82,82,0.08)'}
+          onMouseOut={e  => e.currentTarget.style.background='rgba(224,82,82,0.08)'}
         >
           Cerrar sesión
         </div>
