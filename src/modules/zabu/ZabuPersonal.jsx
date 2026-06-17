@@ -1,288 +1,406 @@
-import { useState } from 'react'
+// @ts-nocheck
+import { useState, useEffect } from 'react'
+import { supabase } from '../../lib/supabase'
 
-function cop(n) {
-  return '$' + Math.round(n).toLocaleString('es-CO')
+function cop(n) { return '$' + Math.round(Math.abs(n||0)).toLocaleString('es-CO') }
+
+const iStyle = {
+  width:'100%', padding:'8px 12px', borderRadius:8,
+  background:'rgba(255,255,255,0.06)', border:'1px solid var(--border)',
+  color:'var(--text)', fontSize:12, fontFamily:'inherit', outline:'none', marginTop:4,
 }
 
-const CARRITOS_INIT = [
-  { id:'c01', nombre:'Carrito 01', ubicacion:'Por definir', activo:true  },
-  { id:'c02', nombre:'Carrito 02', ubicacion:'Próximo',     activo:false },
-  { id:'c03', nombre:'Carrito 03', ubicacion:'Próximo',     activo:false },
-]
+const TIPO_MOVIMIENTO_LABEL = {
+  ingreso:'Ingreso', cambio_cargo:'Cambio de cargo', cambio_carrito:'Cambio de punto',
+  cambio_salario:'Ajuste de salario', salida:'Salida', reingreso:'Reingreso',
+}
 
-const PERSONAL_INIT = [
-  { id:1, nombre:'Por asignar',   rol:'Cocinero',  carrito:'c01', salarioDia:80000, activo:true,  diasTrabajados:0 },
-  { id:2, nombre:'Por asignar',   rol:'Ayudante',  carrito:'c01', salarioDia:60000, activo:true,  diasTrabajados:0 },
-]
+// ════════════════════════════════════════════════════════════════════════════
+// MODAL: Nuevo empleado
+// ════════════════════════════════════════════════════════════════════════════
+function ModalNuevoEmpleado({ onClose, onSaved }) {
+  const [form, setForm] = useState({
+    nombre:'', cedula:'', telefono:'', fecha_ingreso: new Date().toISOString().split('T')[0],
+    tipo_contrato:'informal', eps:'', arl:'', pension:'',
+    cargo_actual:'Vendedor', carrito_actual:'C01', salario_actual:'', tipo_salario:'por_dia', notas:'',
+  })
 
-const DIAS_SEMANA = ['Mar','Mié','Jue','Vie','Sáb','Dom']
-const ROLES = ['Cocinero','Ayudante','Administrador']
+  const guardar = async () => {
+    if (!form.nombre) return
+    const { data, error } = await supabase.from('zabu_empleados').insert({
+      ...form, salario_actual: parseInt(form.salario_actual) || 0,
+    }).select().single()
+    if (error) { alert('Error: ' + error.message); return }
+    await supabase.from('zabu_empleado_movimientos').insert({
+      empleado_id: data.id, tipo:'ingreso', valor_nuevo: form.cargo_actual, fecha: form.fecha_ingreso,
+      notas: `Ingresa como ${form.cargo_actual} en ${form.carrito_actual} con salario ${cop(form.salario_actual)}`,
+    })
+    onSaved()
+  }
 
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'flex-start', justifyContent:'center', zIndex:100, padding:20, overflowY:'auto' }}>
+      <div style={{ background:'var(--bg2)', borderRadius:16, padding:28, width:'100%', maxWidth:520, border:'1px solid var(--border)', margin:'auto' }}>
+        <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:20 }}>Nuevo empleado</div>
+
+        <div style={{ fontSize:11, color:'var(--gold)', fontWeight:700, marginBottom:8, letterSpacing:0.5 }}>DATOS BÁSICOS</div>
+        <div className="grid-2" style={{ gap:10, marginBottom:16 }}>
+          <div style={{ gridColumn:'1 / -1' }}>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Nombre completo *</div>
+            <input type="text" value={form.nombre} onChange={e=>setForm(p=>({...p,nombre:e.target.value}))} style={iStyle} />
+          </div>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Cargo</div>
+            <input type="text" value={form.cargo_actual} onChange={e=>setForm(p=>({...p,cargo_actual:e.target.value}))} placeholder="Vendedor, Cocinero..." style={iStyle} />
+          </div>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Punto / Carrito</div>
+            <select value={form.carrito_actual} onChange={e=>setForm(p=>({...p,carrito_actual:e.target.value}))} style={iStyle}>
+              <option value="C01">Carrito 01</option><option value="C02">Carrito 02</option><option value="C03">Carrito 03</option><option value="CEDIS">CEDIS</option>
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Salario</div>
+            <input type="number" value={form.salario_actual} onChange={e=>setForm(p=>({...p,salario_actual:e.target.value}))} style={iStyle} />
+          </div>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Tipo de salario</div>
+            <select value={form.tipo_salario} onChange={e=>setForm(p=>({...p,tipo_salario:e.target.value}))} style={iStyle}>
+              <option value="por_dia">Por día trabajado</option><option value="quincenal">Quincenal fijo</option><option value="mensual">Mensual fijo</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={{ fontSize:11, color:'var(--text3)', fontWeight:700, marginBottom:8, letterSpacing:0.5 }}>CONTACTO Y CONTRATO (opcional)</div>
+        <div className="grid-2" style={{ gap:10, marginBottom:16 }}>
+          <div><div style={{ fontSize:11, color:'var(--text3)' }}>Cédula</div><input type="text" value={form.cedula} onChange={e=>setForm(p=>({...p,cedula:e.target.value}))} style={iStyle} /></div>
+          <div><div style={{ fontSize:11, color:'var(--text3)' }}>Teléfono</div><input type="text" value={form.telefono} onChange={e=>setForm(p=>({...p,telefono:e.target.value}))} style={iStyle} /></div>
+          <div><div style={{ fontSize:11, color:'var(--text3)' }}>Fecha de ingreso</div><input type="date" value={form.fecha_ingreso} onChange={e=>setForm(p=>({...p,fecha_ingreso:e.target.value}))} style={iStyle} /></div>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Tipo de contrato</div>
+            <select value={form.tipo_contrato} onChange={e=>setForm(p=>({...p,tipo_contrato:e.target.value}))} style={iStyle}>
+              <option value="informal">Informal</option><option value="prestacion_servicios">Prestación de servicios</option><option value="termino_fijo">Término fijo</option><option value="termino_indefinido">Término indefinido</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={{ fontSize:11, color:'var(--text3)', fontWeight:700, marginBottom:8, letterSpacing:0.5 }}>SEGURIDAD SOCIAL (opcional — agrega lo que ya tengas)</div>
+        <div className="grid-3" style={{ gap:10, marginBottom:20 }}>
+          <div><div style={{ fontSize:11, color:'var(--text3)' }}>ARL</div><input type="text" value={form.arl} onChange={e=>setForm(p=>({...p,arl:e.target.value}))} placeholder="Ej: Sura" style={iStyle} /></div>
+          <div><div style={{ fontSize:11, color:'var(--text3)' }}>EPS</div><input type="text" value={form.eps} onChange={e=>setForm(p=>({...p,eps:e.target.value}))} placeholder="Pendiente" style={iStyle} /></div>
+          <div><div style={{ fontSize:11, color:'var(--text3)' }}>Pensión</div><input type="text" value={form.pension} onChange={e=>setForm(p=>({...p,pension:e.target.value}))} placeholder="Pendiente" style={iStyle} /></div>
+        </div>
+
+        <div style={{ display:'flex', gap:10 }}>
+          <button onClick={guardar} disabled={!form.nombre} className="btn-green" style={{ flex:1 }}>Crear empleado</button>
+          <button onClick={onClose} className="btn">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MODAL: Registrar movimiento (cambio de cargo/carrito/salario/salida/reingreso)
+// ════════════════════════════════════════════════════════════════════════════
+function ModalMovimiento({ empleado, onClose, onSaved }) {
+  const [tipo, setTipo] = useState('cambio_carrito')
+  const [valorNuevo, setValorNuevo] = useState('')
+  const [fecha, setFecha] = useState(new Date().toISOString().split('T')[0])
+  const [notas, setNotas] = useState('')
+
+  const valorAnteriorActual = () => {
+    if (tipo === 'cambio_cargo') return empleado.cargo_actual
+    if (tipo === 'cambio_carrito') return empleado.carrito_actual
+    if (tipo === 'cambio_salario') return String(empleado.salario_actual)
+    return ''
+  }
+
+  const confirmar = async () => {
+    const updates = { updated_at: new Date().toISOString() }
+    if (tipo === 'cambio_cargo')    updates.cargo_actual = valorNuevo
+    if (tipo === 'cambio_carrito')  updates.carrito_actual = valorNuevo
+    if (tipo === 'cambio_salario')  updates.salario_actual = parseInt(valorNuevo) || 0
+    if (tipo === 'salida')          { updates.estado = 'inactivo'; updates.fecha_salida = fecha; updates.motivo_salida = notas }
+    if (tipo === 'reingreso')       { updates.estado = 'activo'; updates.fecha_salida = null; updates.motivo_salida = null }
+
+    await supabase.from('zabu_empleados').update(updates).eq('id', empleado.id)
+    await supabase.from('zabu_empleado_movimientos').insert({
+      empleado_id: empleado.id, tipo, valor_anterior: valorAnteriorActual(),
+      valor_nuevo: tipo==='cambio_salario' ? cop(valorNuevo) : valorNuevo, fecha, notas,
+    })
+    onSaved()
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'flex-start', justifyContent:'center', zIndex:100, padding:20, overflowY:'auto' }}>
+      <div style={{ background:'var(--bg2)', borderRadius:16, padding:28, width:'100%', maxWidth:440, border:'1px solid var(--border)', margin:'auto' }}>
+        <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:4 }}>Registrar movimiento</div>
+        <div style={{ fontSize:12, color:'var(--text3)', marginBottom:20 }}>{empleado.nombre}</div>
+
+        <div style={{ marginBottom:14 }}>
+          <div style={{ fontSize:11, color:'var(--text3)', marginBottom:6 }}>Tipo de movimiento</div>
+          <select value={tipo} onChange={e=>{setTipo(e.target.value); setValorNuevo('')}} style={iStyle}>
+            <option value="cambio_carrito">Cambio de punto/carrito</option>
+            <option value="cambio_cargo">Cambio de cargo</option>
+            <option value="cambio_salario">Ajuste de salario</option>
+            {empleado.estado === 'activo' ? <option value="salida">Salida</option> : <option value="reingreso">Reingreso</option>}
+          </select>
+        </div>
+
+        {(tipo === 'cambio_carrito' || tipo === 'cambio_cargo' || tipo === 'cambio_salario') && (
+          <div style={{ marginBottom:14 }}>
+            <div style={{ fontSize:11, color:'var(--text3)', marginBottom:6 }}>
+              Valor actual: <strong style={{color:'var(--text2)'}}>{tipo==='cambio_salario'?cop(valorAnteriorActual()):valorAnteriorActual()}</strong>
+            </div>
+            {tipo === 'cambio_carrito' ? (
+              <select value={valorNuevo} onChange={e=>setValorNuevo(e.target.value)} style={iStyle}>
+                <option value="">Seleccionar nuevo punto</option>
+                <option value="C01">Carrito 01</option><option value="C02">Carrito 02</option><option value="C03">Carrito 03</option><option value="CEDIS">CEDIS</option>
+              </select>
+            ) : (
+              <input type={tipo==='cambio_salario'?'number':'text'} value={valorNuevo} onChange={e=>setValorNuevo(e.target.value)} placeholder="Nuevo valor" style={iStyle} />
+            )}
+          </div>
+        )}
+
+        <div className="grid-2" style={{ gap:10, marginBottom:14 }}>
+          <div><div style={{ fontSize:11, color:'var(--text3)' }}>Fecha</div><input type="date" value={fecha} onChange={e=>setFecha(e.target.value)} style={iStyle} /></div>
+        </div>
+        <div style={{ marginBottom:20 }}>
+          <div style={{ fontSize:11, color:'var(--text3)' }}>Notas {tipo==='salida'?'(motivo de salida)':''}</div>
+          <input type="text" value={notas} onChange={e=>setNotas(e.target.value)} style={iStyle} />
+        </div>
+
+        <div style={{ display:'flex', gap:10 }}>
+          <button onClick={confirmar} disabled={(tipo==='cambio_carrito'||tipo==='cambio_cargo'||tipo==='cambio_salario')&&!valorNuevo} className="btn-green" style={{ flex:1 }}>Confirmar</button>
+          <button onClick={onClose} className="btn">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// PANEL DETALLE DE EMPLEADO — historial, dotación, pagos
+// ════════════════════════════════════════════════════════════════════════════
+function PanelEmpleado({ empleado, onClose, onRefresh }) {
+  const [tab, setTab] = useState('historial')
+  const [movimientos, setMovimientos] = useState([])
+  const [dotacion, setDotacion] = useState([])
+  const [pagos, setPagos] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [modalMov, setModalMov] = useState(false)
+  const [formDotacion, setFormDotacion] = useState({ item:'', cantidad:1, fecha_entrega: new Date().toISOString().split('T')[0] })
+  const [formPago, setFormPago] = useState({ concepto:'salario', monto:'', dias_trabajados:'', fecha_pago: new Date().toISOString().split('T')[0], metodo_pago:'efectivo' })
+
+  useEffect(() => { cargar() }, [empleado.id])
+
+  const cargar = async () => {
+    setLoading(true)
+    const [{ data: m }, { data: d }, { data: p }] = await Promise.all([
+      supabase.from('zabu_empleado_movimientos').select('*').eq('empleado_id', empleado.id).order('fecha', { ascending: false }),
+      supabase.from('zabu_dotacion').select('*').eq('empleado_id', empleado.id).order('fecha_entrega', { ascending: false }),
+      supabase.from('zabu_pagos_personal').select('*').eq('empleado_id', empleado.id).order('fecha_pago', { ascending: false }),
+    ])
+    setMovimientos(m || []); setDotacion(d || []); setPagos(p || [])
+    setLoading(false)
+  }
+
+  const entregarDotacion = async () => {
+    if (!formDotacion.item) return
+    await supabase.from('zabu_dotacion').insert({ empleado_id: empleado.id, ...formDotacion, cantidad: parseInt(formDotacion.cantidad) || 1 })
+    setFormDotacion({ item:'', cantidad:1, fecha_entrega: new Date().toISOString().split('T')[0] })
+    cargar()
+  }
+
+  const registrarPago = async () => {
+    if (!formPago.monto) return
+    await supabase.from('zabu_pagos_personal').insert({ empleado_id: empleado.id, ...formPago, monto: parseInt(formPago.monto), dias_trabajados: parseInt(formPago.dias_trabajados) || null })
+    setFormPago({ concepto:'salario', monto:'', dias_trabajados:'', fecha_pago: new Date().toISOString().split('T')[0], metodo_pago:'efectivo' })
+    cargar()
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'flex-start', justifyContent:'center', zIndex:100, padding:20, overflowY:'auto' }}>
+      <div style={{ background:'var(--bg2)', borderRadius:16, padding:28, width:'100%', maxWidth:680, border:'1px solid var(--border)', margin:'auto' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:16 }}>
+          <div>
+            <div style={{ fontSize:18, fontWeight:800, color:'var(--text)' }}>{empleado.nombre}</div>
+            <div style={{ fontSize:12, color:'var(--text3)', marginTop:2 }}>
+              {empleado.cargo_actual} · {empleado.carrito_actual} · {cop(empleado.salario_actual)} ({empleado.tipo_salario === 'por_dia' ? 'por día' : empleado.tipo_salario})
+            </div>
+          </div>
+          <div style={{ display:'flex', gap:8 }}>
+            <button onClick={() => setModalMov(true)} className="btn-gold" style={{ fontSize:11, padding:'7px 14px' }}>+ Movimiento</button>
+            <div onClick={onClose} style={{ cursor:'pointer', color:'var(--text4)', fontSize:18, padding:'0 6px' }}>×</div>
+          </div>
+        </div>
+
+        <div className="sub-nav" style={{ marginBottom:16 }}>
+          <div className={`sub-nav-item${tab==='historial'?' active':''}`} onClick={()=>setTab('historial')}>Historial</div>
+          <div className={`sub-nav-item${tab==='dotacion'?' active':''}`} onClick={()=>setTab('dotacion')}>Dotación</div>
+          <div className={`sub-nav-item${tab==='pagos'?' active':''}`} onClick={()=>setTab('pagos')}>Pagos</div>
+        </div>
+
+        {tab === 'historial' && (
+          loading ? <div style={{ fontSize:12, color:'var(--text3)' }}>Cargando...</div>
+          : movimientos.length === 0 ? <div style={{ fontSize:12, color:'var(--text4)', textAlign:'center', padding:'20px 0' }}>Sin movimientos registrados</div>
+          : (
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              {movimientos.map(m => (
+                <div key={m.id} style={{ display:'flex', justifyContent:'space-between', padding:'10px 12px', borderRadius:8, background:'rgba(255,255,255,0.02)', border:'1px solid var(--border)' }}>
+                  <div>
+                    <span style={{ fontSize:12, fontWeight:700, color:'var(--gold)' }}>{TIPO_MOVIMIENTO_LABEL[m.tipo] || m.tipo}</span>
+                    {m.valor_anterior && m.valor_nuevo && <span style={{ fontSize:12, color:'var(--text2)' }}> · {m.valor_anterior} → {m.valor_nuevo}</span>}
+                    {m.notas && <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>{m.notas}</div>}
+                  </div>
+                  <span style={{ fontSize:11, color:'var(--text4)', flexShrink:0 }}>{m.fecha}</span>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+
+        {tab === 'dotacion' && (
+          <div>
+            <div className="grid-3" style={{ gap:8, marginBottom:14 }}>
+              <input type="text" value={formDotacion.item} onChange={e=>setFormDotacion(p=>({...p,item:e.target.value}))} placeholder="Item (ej: Gorra ZABÚ)" style={{...iStyle,marginTop:0}} />
+              <input type="number" value={formDotacion.cantidad} onChange={e=>setFormDotacion(p=>({...p,cantidad:e.target.value}))} style={{...iStyle,marginTop:0}} />
+              <input type="date" value={formDotacion.fecha_entrega} onChange={e=>setFormDotacion(p=>({...p,fecha_entrega:e.target.value}))} style={{...iStyle,marginTop:0}} />
+            </div>
+            <button onClick={entregarDotacion} disabled={!formDotacion.item} className="btn-green" style={{ width:'100%', marginBottom:16, padding:'8px' }}>+ Registrar entrega</button>
+            {loading ? <div style={{ fontSize:12, color:'var(--text3)' }}>Cargando...</div>
+            : dotacion.length === 0 ? <div style={{ fontSize:12, color:'var(--text4)', textAlign:'center', padding:'20px 0' }}>Sin dotación registrada</div>
+            : (
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {dotacion.map(d => (
+                  <div key={d.id} style={{ display:'flex', justifyContent:'space-between', padding:'8px 12px', borderRadius:8, background:'rgba(255,255,255,0.02)' }}>
+                    <span style={{ fontSize:12, color:'var(--text2)' }}>{d.item} ×{d.cantidad}</span>
+                    <span style={{ fontSize:11, color:'var(--text4)' }}>{d.fecha_entrega}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {tab === 'pagos' && (
+          <div>
+            <div className="grid-3" style={{ gap:8, marginBottom:8 }}>
+              <select value={formPago.concepto} onChange={e=>setFormPago(p=>({...p,concepto:e.target.value}))} style={{...iStyle,marginTop:0}}>
+                <option value="salario">Salario</option><option value="bono">Bono</option><option value="arl">ARL</option><option value="prestamo">Préstamo</option><option value="otro">Otro</option>
+              </select>
+              <input type="number" value={formPago.monto} onChange={e=>setFormPago(p=>({...p,monto:e.target.value}))} placeholder="Monto" style={{...iStyle,marginTop:0}} />
+              <input type="number" value={formPago.dias_trabajados} onChange={e=>setFormPago(p=>({...p,dias_trabajados:e.target.value}))} placeholder="Días (opcional)" style={{...iStyle,marginTop:0}} />
+            </div>
+            <div className="grid-2" style={{ gap:8, marginBottom:14 }}>
+              <input type="date" value={formPago.fecha_pago} onChange={e=>setFormPago(p=>({...p,fecha_pago:e.target.value}))} style={{...iStyle,marginTop:0}} />
+              <select value={formPago.metodo_pago} onChange={e=>setFormPago(p=>({...p,metodo_pago:e.target.value}))} style={{...iStyle,marginTop:0}}>
+                <option value="efectivo">Efectivo</option><option value="transferencia">Transferencia</option>
+              </select>
+            </div>
+            <button onClick={registrarPago} disabled={!formPago.monto} className="btn-green" style={{ width:'100%', marginBottom:16, padding:'8px' }}>+ Registrar pago</button>
+            {loading ? <div style={{ fontSize:12, color:'var(--text3)' }}>Cargando...</div>
+            : pagos.length === 0 ? <div style={{ fontSize:12, color:'var(--text4)', textAlign:'center', padding:'20px 0' }}>Sin pagos registrados</div>
+            : (
+              <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+                {pagos.map(pg => (
+                  <div key={pg.id} style={{ display:'flex', justifyContent:'space-between', padding:'8px 12px', borderRadius:8, background:'rgba(255,255,255,0.02)' }}>
+                    <div><span style={{ fontSize:12, fontWeight:600, color:'var(--text2)', textTransform:'capitalize' }}>{pg.concepto}</span>{pg.dias_trabajados && <span style={{ fontSize:11, color:'var(--text4)' }}> · {pg.dias_trabajados}d</span>}</div>
+                    <div style={{ textAlign:'right' }}><div style={{ fontSize:13, fontWeight:700, color:'var(--gold)' }}>{cop(pg.monto)}</div><div style={{ fontSize:10, color:'var(--text4)' }}>{pg.fecha_pago}</div></div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {modalMov && <ModalMovimiento empleado={empleado} onClose={()=>setModalMov(false)} onSaved={()=>{setModalMov(false); cargar(); onRefresh()}} />}
+      </div>
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MÓDULO PRINCIPAL
+// ════════════════════════════════════════════════════════════════════════════
 export default function ZabuPersonal() {
-  const [personal, setPersonal]   = useState(PERSONAL_INIT)
-  const [carritos]                = useState(CARRITOS_INIT)
-  const [tab, setTab]             = useState('nomina')
-  const [asistencia, setAsistencia] = useState({})
-  const [modalAdd, setModalAdd]   = useState(false)
-  const [nuevoNombre, setNuevoNombre] = useState('')
-  const [nuevoRol, setNuevoRol]   = useState('Cocinero')
-  const [nuevoCarrito, setNuevoCarrito] = useState('c01')
-  const [nuevoSalario, setNuevoSalario] = useState(80000)
+  const [empleados, setEmpleados] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [modalNuevo, setModalNuevo] = useState(false)
+  const [empleadoSel, setEmpleadoSel] = useState(null)
+  const [filtro, setFiltro] = useState('activos')
 
-  const toggleAsistencia = (personaId, dia) => {
-    const key = `${personaId}-${dia}`
-    setAsistencia(prev => ({ ...prev, [key]: !prev[key] }))
+  useEffect(() => { cargar() }, [])
+  const cargar = async () => {
+    setLoading(true)
+    const { data } = await supabase.from('zabu_empleados').select('*').order('nombre')
+    setEmpleados(data || [])
+    setLoading(false)
   }
 
-  const diasTrabajados = (personaId) =>
-    DIAS_SEMANA.filter((_, i) => asistencia[`${personaId}-${i}`]).length
+  const filtrados = filtro === 'activos' ? empleados.filter(e => e.estado === 'activo')
+    : filtro === 'inactivos' ? empleados.filter(e => e.estado === 'inactivo')
+    : empleados
 
-  const salarioSemana = (p) => diasTrabajados(p.id) * p.salarioDia
-
-  const totalNomina = personal
-    .filter(p => p.activo)
-    .reduce((s, p) => s + salarioSemana(p), 0)
-
-  const agregarPersona = () => {
-    if (!nuevoNombre.trim()) return
-    setPersonal(prev => [...prev, {
-      id: Date.now(), nombre: nuevoNombre, rol: nuevoRol,
-      carrito: nuevoCarrito, salarioDia: nuevoSalario,
-      activo: true, diasTrabajados: 0,
-    }])
-    setNuevoNombre(''); setModalAdd(false)
-  }
-
-  const inputStyle = {
-    width:'100%', padding:'10px 14px', borderRadius:8,
-    background:'rgba(255,255,255,0.05)', border:'1px solid var(--border)',
-    color:'var(--text)', fontSize:14, fontFamily:'inherit', outline:'none',
-    marginTop:6,
-  }
-
-  const selectStyle = { ...inputStyle }
+  const activos = empleados.filter(e => e.estado === 'activo')
+  const nominaTotal = activos.reduce((s,e) => s + e.salario_actual, 0)
 
   return (
     <>
-      {/* KPIs */}
-      <div className="grid-4" style={{ marginBottom:20 }}>
-        {[
-          { label:'Total personal',   val:String(personal.filter(p=>p.activo).length), color:'var(--text)',  sub:'activos esta semana' },
-          { label:'Nómina semana',    val:cop(totalNomina),   color:'var(--gold)',  sub:'según asistencia' },
-          { label:'Nómina mensual',   val:cop(totalNomina*4.3), color:'var(--text)', sub:'estimado x4.3' },
-          { label:'Costo/carrito',    val:cop((personal.filter(p=>p.activo&&p.carrito==='c01').reduce((s,p)=>s+salarioSemana(p),0))), color:'var(--text3)', sub:'Carrito 01 esta semana' },
-        ].map(k => (
-          <div key={k.label} className="kpi-card">
-            <div className="kpi-label">{k.label}</div>
-            <div className="kpi-val" style={{ color:k.color }}>{k.val}</div>
-            <div className="kpi-sub">{k.sub}</div>
-            <div className="kpi-accent" style={{ background:k.color }} />
-          </div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+        <div style={{ fontSize:12, color:'var(--text3)' }}>Empleados, dotación y pagos — historial completo de cada movimiento</div>
+        <button onClick={() => setModalNuevo(true)} className="btn-gold" style={{ padding:'8px 16px', fontSize:12 }}>+ Nuevo empleado</button>
+      </div>
+
+      <div className="grid-3" style={{ marginBottom:20 }}>
+        <div className="kpi-card"><div className="kpi-label">Empleados activos</div><div className="kpi-val" style={{ color:'var(--text)' }}>{loading?'...':activos.length}</div></div>
+        <div className="kpi-card"><div className="kpi-label">Nómina base (suma salarios)</div><div className="kpi-val" style={{ color:'var(--gold)' }}>{loading?'...':cop(nominaTotal)}</div></div>
+        <div className="kpi-card"><div className="kpi-label">Inactivos / histórico</div><div className="kpi-val" style={{ color:'var(--text3)' }}>{loading?'...':empleados.filter(e=>e.estado==='inactivo').length}</div></div>
+      </div>
+
+      <div style={{ display:'flex', gap:8, marginBottom:16 }}>
+        {[{id:'activos',label:'Activos'},{id:'inactivos',label:'Inactivos'},{id:'todos',label:'Todos'}].map(f => (
+          <div key={f.id} onClick={()=>setFiltro(f.id)} style={{ padding:'6px 14px', borderRadius:8, cursor:'pointer', fontSize:12, fontWeight:600,
+            background: filtro===f.id?'var(--gold-dim)':'rgba(255,255,255,0.04)', border:`1px solid ${filtro===f.id?'var(--gold-border)':'var(--border)'}`,
+            color: filtro===f.id?'var(--gold)':'var(--text3)' }}>{f.label}</div>
         ))}
       </div>
 
-      {/* Tabs */}
-      <div className="sub-nav" style={{ marginBottom:20 }}>
-        {[
-          { id:'nomina',     label:'Nómina'      },
-          { id:'asistencia', label:'Asistencia'  },
-          { id:'equipo',     label:'Equipo'      },
-        ].map(t => (
-          <div key={t.id} className={`sub-nav-item${tab===t.id?' active':''}`} onClick={() => setTab(t.id)}>
-            {t.label}
-          </div>
-        ))}
-      </div>
-
-      {/* NÓMINA */}
-      {tab === 'nomina' && (
-        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-          <div className="panel">
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-              <div className="panel-title" style={{ marginBottom:0 }}>Liquidación semanal</div>
-              <div style={{ fontSize:11, color:'var(--text3)' }}>Martes — Domingo · 6 días</div>
-            </div>
-
-            <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr', marginBottom:8 }}>
-              {['Empleado','Rol','Carrito','Días','Total'].map(h => (
-                <div key={h} style={{ fontSize:9, color:'var(--text3)', padding:'0 10px 8px', letterSpacing:0.5, fontWeight:600 }}>{h}</div>
-              ))}
-            </div>
-
-            {personal.filter(p => p.activo).map((p, i) => {
-              const dias = diasTrabajados(p.id)
-              const total = salarioSemana(p)
-              const carNombre = carritos.find(c => c.id === p.carrito)?.nombre || p.carrito
-              return (
-                <div key={p.id} style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr', background: i%2===0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
-                  <div style={{ fontSize:13, padding:'10px', color:'var(--text2)', fontWeight:600, borderBottom:'1px solid rgba(255,255,255,0.04)' }}>{p.nombre}</div>
-                  <div style={{ fontSize:12, padding:'10px', color:'var(--text3)', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>{p.rol}</div>
-                  <div style={{ fontSize:12, padding:'10px', color:'var(--text3)', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>{carNombre}</div>
-                  <div style={{ fontSize:12, padding:'10px', color: dias===6 ? 'var(--green)' : dias===0 ? 'var(--red)' : 'var(--gold)', fontWeight:700, borderBottom:'1px solid rgba(255,255,255,0.04)' }}>{dias}/6</div>
-                  <div style={{ fontSize:13, padding:'10px', color:'var(--gold)', fontWeight:800, borderBottom:'1px solid rgba(255,255,255,0.04)' }}>{cop(total)}</div>
-                </div>
-              )
-            })}
-
-            <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr 1fr', background:'var(--bg4)', marginTop:4, borderRadius:8 }}>
-              <div style={{ fontSize:13, padding:'10px', color:'var(--text)', fontWeight:800, gridColumn:'1/5' }}>TOTAL NÓMINA SEMANA</div>
-              <div style={{ fontSize:16, padding:'10px', color:'var(--gold)', fontWeight:900 }}>{cop(totalNomina)}</div>
-            </div>
-          </div>
-
-          {/* Desglose por carrito */}
-          <div className="panel">
-            <div className="panel-title">Costo de personal por carrito</div>
-            {carritos.filter(c => c.activo).map(c => {
-              const equipo = personal.filter(p => p.activo && p.carrito === c.id)
-              const costoCarrito = equipo.reduce((s, p) => s + salarioSemana(p), 0)
-              return (
-                <div key={c.id} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 0', borderBottom:'1px solid var(--border)' }}>
+      {loading ? <div style={{ textAlign:'center', padding:'40px 0', color:'var(--text3)' }}>Cargando...</div>
+      : filtrados.length === 0 ? (
+        <div className="panel" style={{ textAlign:'center', padding:'40px 0' }}>
+          <div style={{ fontSize:13, color:'var(--text4)' }}>Sin empleados en esta vista. Crea el primero con "+ Nuevo empleado".</div>
+        </div>
+      ) : (
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          {filtrados.map(e => (
+            <div key={e.id} onClick={() => setEmpleadoSel(e)} className="panel" style={{ cursor:'pointer', opacity: e.estado==='inactivo'?0.55:1 }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                  <div style={{ width:38, height:38, borderRadius:10, background:'rgba(201,168,76,0.1)', border:'1px solid rgba(201,168,76,0.3)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:14, fontWeight:800, color:'var(--gold)' }}>
+                    {e.nombre.charAt(0)}
+                  </div>
                   <div>
-                    <div style={{ fontSize:13, fontWeight:600, color:'var(--text2)' }}>{c.nombre}</div>
-                    <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>{equipo.length} persona{equipo.length!==1?'s':''} · {equipo.map(p=>p.rol).join(', ')}</div>
-                  </div>
-                  <div style={{ fontSize:16, fontWeight:800, color:'var(--gold)' }}>{cop(costoCarrito)}</div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* ASISTENCIA */}
-      {tab === 'asistencia' && (
-        <div className="panel">
-          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-            <div className="panel-title" style={{ marginBottom:0 }}>Control de asistencia — semana actual</div>
-            <div style={{ fontSize:11, color:'var(--text3)' }}>Toca para marcar presente</div>
-          </div>
-
-          <div style={{ display:'grid', gridTemplateColumns:'2fr repeat(6,1fr) 1fr', marginBottom:8 }}>
-            <div style={{ fontSize:9, color:'var(--text3)', padding:'0 10px 8px', letterSpacing:0.5, fontWeight:600 }}>Empleado</div>
-            {DIAS_SEMANA.map(d => (
-              <div key={d} style={{ fontSize:9, color:'var(--text3)', padding:'0 6px 8px', letterSpacing:0.5, fontWeight:600, textAlign:'center' }}>{d}</div>
-            ))}
-            <div style={{ fontSize:9, color:'var(--text3)', padding:'0 6px 8px', letterSpacing:0.5, fontWeight:600, textAlign:'center' }}>Total</div>
-          </div>
-
-          {personal.filter(p => p.activo).map((p, i) => {
-            const dias = diasTrabajados(p.id)
-            return (
-              <div key={p.id} style={{ display:'grid', gridTemplateColumns:'2fr repeat(6,1fr) 1fr', background: i%2===0 ? 'transparent' : 'rgba(255,255,255,0.02)', alignItems:'center' }}>
-                <div style={{ padding:'10px', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
-                  <div style={{ fontSize:13, color:'var(--text2)', fontWeight:600 }}>{p.nombre}</div>
-                  <div style={{ fontSize:10, color:'var(--text3)', marginTop:1 }}>{p.rol}</div>
-                </div>
-                {DIAS_SEMANA.map((_, di) => {
-                  const presente = asistencia[`${p.id}-${di}`]
-                  return (
-                    <div key={di} onClick={() => toggleAsistencia(p.id, di)} style={{
-                      padding:'10px 6px', borderBottom:'1px solid rgba(255,255,255,0.04)',
-                      display:'flex', justifyContent:'center', cursor:'pointer',
-                    }}>
-                      <div style={{
-                        width:28, height:28, borderRadius:8,
-                        background: presente ? 'var(--green-dim)' : 'rgba(255,255,255,0.04)',
-                        border:`1px solid ${presente ? 'var(--green-border)' : 'var(--border)'}`,
-                        display:'flex', alignItems:'center', justifyContent:'center',
-                        fontSize:14, color: presente ? 'var(--green)' : 'var(--text4)',
-                        transition:'all .15s',
-                      }}>
-                        {presente ? '✓' : '·'}
-                      </div>
-                    </div>
-                  )
-                })}
-                <div style={{ padding:'10px 6px', borderBottom:'1px solid rgba(255,255,255,0.04)', textAlign:'center' }}>
-                  <div style={{ fontSize:13, fontWeight:800, color: dias===6 ? 'var(--green)' : dias===0 ? 'var(--red)' : 'var(--gold)' }}>{dias}/6</div>
-                  <div style={{ fontSize:10, color:'var(--text3)', marginTop:1 }}>{cop(salarioSemana(p))}</div>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* EQUIPO */}
-      {tab === 'equipo' && (
-        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-          <div style={{ display:'flex', justifyContent:'flex-end' }}>
-            <button className="btn-gold" onClick={() => setModalAdd(true)}>+ Agregar persona</button>
-          </div>
-
-          <div className="grid-2" style={{ gap:12 }}>
-            {personal.map(p => {
-              const carNombre = carritos.find(c => c.id === p.carrito)?.nombre || p.carrito
-              return (
-                <div key={p.id} style={{
-                  background:'var(--bg3)', borderRadius:14, border:'1px solid var(--border)',
-                  padding:'16px 18px', display:'flex', alignItems:'flex-start', gap:14,
-                }}>
-                  <div style={{ width:44, height:44, borderRadius:12, background:'var(--gold-dim)', border:'1px solid var(--gold-border)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:18, fontWeight:800, color:'var(--gold)', flexShrink:0 }}>
-                    {p.nombre.charAt(0).toUpperCase()}
-                  </div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-                      <div>
-                        <div style={{ fontSize:14, fontWeight:700, color:'var(--text)', marginBottom:2 }}>{p.nombre}</div>
-                        <div style={{ fontSize:12, color:'var(--text3)' }}>{p.rol} · {carNombre}</div>
-                      </div>
-                      <div style={{ textAlign:'right' }}>
-                        <div style={{ fontSize:13, fontWeight:700, color:'var(--gold)' }}>{cop(p.salarioDia)}/día</div>
-                        <div style={{ fontSize:10, color:'var(--text3)', marginTop:2 }}>{cop(p.salarioDia*6)}/sem</div>
-                      </div>
-                    </div>
-                    <div style={{ marginTop:10, display:'flex', gap:8 }}>
-                      <div style={{ fontSize:10, padding:'3px 10px', borderRadius:20, background: p.activo ? 'var(--green-dim)' : 'var(--bg4)', color: p.activo ? 'var(--green)' : 'var(--text4)', border:`0.5px solid ${p.activo ? 'var(--green-border)' : 'var(--border)'}` }}>
-                        {p.activo ? 'Activo' : 'Inactivo'}
-                      </div>
-                    </div>
+                    <div style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{e.nombre}</div>
+                    <div style={{ fontSize:11, color:'var(--text3)' }}>{e.cargo_actual} · {e.carrito_actual} · {e.arl ? `ARL: ${e.arl}` : 'Sin ARL registrada'}</div>
                   </div>
                 </div>
-              )
-            })}
-          </div>
-
-          {/* Modal agregar */}
-          {modalAdd && (
-            <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }}>
-              <div style={{ background:'var(--bg2)', borderRadius:16, padding:28, width:360, border:'1px solid var(--border)' }}>
-                <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:20 }}>Agregar persona</div>
-
-                <div style={{ marginBottom:14 }}>
-                  <div style={{ fontSize:11, color:'var(--text3)' }}>Nombre completo</div>
-                  <input type="text" value={nuevoNombre} onChange={e => setNuevoNombre(e.target.value)} placeholder="Nombre..." style={inputStyle} />
-                </div>
-
-                <div style={{ marginBottom:14 }}>
-                  <div style={{ fontSize:11, color:'var(--text3)' }}>Rol</div>
-                  <select value={nuevoRol} onChange={e => setNuevoRol(e.target.value)} style={selectStyle}>
-                    {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                </div>
-
-                <div style={{ marginBottom:14 }}>
-                  <div style={{ fontSize:11, color:'var(--text3)' }}>Carrito asignado</div>
-                  <select value={nuevoCarrito} onChange={e => setNuevoCarrito(e.target.value)} style={selectStyle}>
-                    {carritos.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                  </select>
-                </div>
-
-                <div style={{ marginBottom:20 }}>
-                  <div style={{ fontSize:11, color:'var(--text3)', marginBottom:6 }}>Salario por día: <span style={{ color:'var(--gold)', fontWeight:700 }}>{cop(nuevoSalario)}</span></div>
-                  <input type="range" min={40000} max={150000} step={5000} value={nuevoSalario} onChange={e => setNuevoSalario(Number(e.target.value))} style={{ width:'100%', accentColor:'var(--gold)' }} />
-                </div>
-
-                <div style={{ display:'flex', gap:10 }}>
-                  <button className="btn-green" style={{ flex:1 }} onClick={agregarPersona}>Agregar</button>
-                  <button className="btn" onClick={() => setModalAdd(false)}>Cancelar</button>
+                <div style={{ textAlign:'right' }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:'var(--gold)' }}>{cop(e.salario_actual)}</div>
+                  <span style={{ fontSize:10, padding:'2px 8px', borderRadius:6, background: e.estado==='activo'?'var(--green-dim)':'rgba(255,255,255,0.05)', color: e.estado==='activo'?'var(--green)':'var(--text4)' }}>
+                    {e.estado === 'activo' ? 'Activo' : 'Inactivo'}
+                  </span>
                 </div>
               </div>
             </div>
-          )}
+          ))}
         </div>
       )}
+
+      {modalNuevo && <ModalNuevoEmpleado onClose={()=>setModalNuevo(false)} onSaved={()=>{setModalNuevo(false); cargar()}} />}
+      {empleadoSel && <PanelEmpleado empleado={empleadoSel} onClose={()=>setEmpleadoSel(null)} onRefresh={cargar} />}
     </>
   )
 }
