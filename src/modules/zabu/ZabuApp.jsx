@@ -1,4 +1,4 @@
-import { useState } from 'react'
+// @ts-nocheck
 import ZabuDashboard    from './ZabuDashboard'
 import ZabuPOS          from './ZabuPOS'
 import ZabuRecetario    from './ZabuRecetario'
@@ -29,35 +29,35 @@ const NAV = [
   { id:'contabilidad', label:'Contabilidad'    },
   { id:'vencimientos', label:'Vencimientos'    },
   { id:'configuracion',label:'⚙ Configuración' },
-  { id:'plan', label:'📋 Plan Negocio' },
-  { id:'campana', label:'🚀 Campaña Apertura' },
+  { id:'plan',         label:'📋 Plan Negocio' },
+  { id:'campana',      label:'🚀 Campaña Apertura' },
 ]
 
+// La navegación de ZABÚ vive 100% en el Sidebar (izquierda).
+// ANTES: useState(rolForzado || navExterno || 'dashboard') solo lee navExterno
+// la primera vez que el componente se monta — los clicks del sidebar nunca
+// se reflejaban porque ese estado quedaba "congelado". AHORA: nav es
+// directamente el prop navExterno, sin estado propio, sin sub-nav duplicada.
 export default function ZabuApp({ rolForzado, navExterno, onNavChange, usuario }) {
-  const [nav, setNav] = useState(rolForzado || navExterno || 'dashboard')
-
-  const cambiarNav = (id) => {
-    setNav(id)
-    if (onNavChange) onNavChange(id)
-  }
+  const nav = rolForzado || navExterno || 'dashboard'
 
   const renderModulo = () => {
     switch (nav) {
-      case 'dashboard':    return <ZabuDashboard />
-      case 'pos':          return <ZabuPOS usuario={usuario} />
-      case 'recetario':    return <ZabuRecetario />
-      case 'inventario':   return <ZabuInventario />
-      case 'costos':       return <ZabuCostos />
-      case 'comandero':    return <ZabuComandero />
-      case 'proyeccion':   return <ZabuProyeccion />
-      case 'personal':     return <ZabuPersonal />
-      case 'contabilidad': return <ZabuContabilidad />
-      case 'vencimientos': return <ZabuVencimientos />
-      case 'peps':         return <ZabuPEPS />
-      case 'fifo':         return <ZabuFIFO />
-      case 'configuracion':return <ZabuConfiguracion />
-      case 'plan': return <ZabuPlanNegocio />
-      case 'campana': return <ZabuCampanaApertura />
+      case 'dashboard':     return <ZabuDashboard />
+      case 'pos':           return <ZabuPOS usuario={usuario} />
+      case 'recetario':     return <ZabuRecetario />
+      case 'inventario':    return <ZabuInventario />
+      case 'costos':        return <ZabuCostos />
+      case 'comandero':     return <ZabuComandero />
+      case 'proyeccion':    return <ZabuProyeccion />
+      case 'personal':      return <ZabuPersonal />
+      case 'contabilidad':  return <ZabuContabilidad />
+      case 'vencimientos':  return <ZabuVencimientos />
+      case 'peps':          return <ZabuPEPS />
+      case 'fifo':          return <ZabuFIFO />
+      case 'configuracion': return <ZabuConfiguracion />
+      case 'plan':           return <ZabuPlanNegocio />
+      case 'campana':        return <ZabuCampanaApertura />
       default: return (
         <div className="panel" style={{ maxWidth: 500 }}>
           <div className="panel-title">{NAV.find(n => n.id === nav)?.label?.toUpperCase()}</div>
@@ -69,20 +69,5 @@ export default function ZabuApp({ rolForzado, navExterno, onNavChange, usuario }
     }
   }
 
-  return (
-    <>
-      <div className="sub-nav" style={{ display: rolForzado ? 'none' : 'flex' }}>
-        {NAV.map(n => (
-          <div
-            key={n.id}
-            className={`sub-nav-item${nav === n.id ? ' active' : ''}`}
-            onClick={() => cambiarNav(n.id)}
-          >
-            {n.label}
-          </div>
-        ))}
-      </div>
-      {renderModulo()}
-    </>
-  )
+  return renderModulo()
 }
