@@ -189,7 +189,7 @@ export default function ZabuCompras() {
             </div>
 
             <div style={{ padding:'10px 14px', background:'rgba(55,138,221,0.06)', border:'1px solid rgba(55,138,221,0.2)', borderRadius:10, fontSize:11, color:'var(--blue)', marginBottom:16 }}>
-              📋 Al confirmar: se crearán {lineasValidas.length} lote(s) en Inventario y un asiento contable autom\u00e1tico — Débito Inventario {cop(totalCompra)} / Crédito {metodoPago==='caja'?'Caja':metodoPago==='bancos'?'Bancos':'Proveedores (cuenta por pagar)'}.
+              📋 Al confirmar: se crearán {lineasValidas.length} lote(s) en Inventario y un asiento contable automático — Débito Inventario {cop(totalCompra)} / Crédito {metodoPago==='caja'?'Caja':metodoPago==='bancos'?'Bancos':'Proveedores (cuenta por pagar)'}.
             </div>
 
             {resultado && (

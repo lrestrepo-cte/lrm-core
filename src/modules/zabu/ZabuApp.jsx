@@ -14,6 +14,7 @@ import ZabuFIFO         from './ZabuFIFO'
 import ZabuConfiguracion from './ZabuConfiguracion'
 import ZabuPlanNegocio from './ZabuPlanNegocio'
 import ZabuCampanaApertura from './ZabuCampanaApertura'
+import ZabuCompras      from './ZabuCompras'
 
 const NAV = [
   { id:'dashboard',    label:'Dashboard'       },
@@ -31,6 +32,7 @@ const NAV = [
   { id:'configuracion',label:'⚙ Configuración' },
   { id:'plan',         label:'📋 Plan Negocio' },
   { id:'campana',      label:'🚀 Campaña Apertura' },
+  { id:'compras',      label:'🛒 Compras' },
 ]
 
 // La navegación de ZABÚ vive 100% en el Sidebar (izquierda).
@@ -58,6 +60,7 @@ export default function ZabuApp({ rolForzado, navExterno, onNavChange, usuario }
       case 'configuracion': return <ZabuConfiguracion />
       case 'plan':           return <ZabuPlanNegocio />
       case 'campana':        return <ZabuCampanaApertura />
+      case 'compras':        return <ZabuCompras />
       default: return (
         <div className="panel" style={{ maxWidth: 500 }}>
           <div className="panel-title">{NAV.find(n => n.id === nav)?.label?.toUpperCase()}</div>
