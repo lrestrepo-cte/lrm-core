@@ -1,4 +1,6 @@
+// @ts-nocheck
 import { useState } from 'react'
+import { supabase } from '../lib/supabase'
 
 const NEGOCIOS = [
   { id:'lrm',      nombre:'LRM Trade',   emoji:'🏢', color:'#C9A84C', desc:'Acceso corporativo',     activo:true  },
@@ -20,13 +22,17 @@ const ROLES_RV = [
   { id:'gerente',  nombre:'Gerente',  desc:'Administración y reportes', emoji:'📊' },
 ]
 
-const USUARIOS = [
-  { id:1, nombre:'Luis Restrepo',  email:'luis@zabu.co',   password:'zabu2026', rol:'ceo',      pin:null,   negocio:'lrm',  carrito:null  },
-  { id:2, nombre:'Emelyn Mendoza', email:'emelyn@zabu.co', password:'zabu2026', rol:'ceo',      pin:null,   negocio:'lrm',  carrito:null  },
-  { id:3, nombre:'Operador C01',   email:null,             password:null,       rol:'vendedor', pin:'1234', negocio:'zabu', carrito:'C01' },
-  { id:4, nombre:'Operador C02',   email:null,             password:null,       rol:'vendedor', pin:'2345', negocio:'zabu', carrito:'C02' },
-  { id:5, nombre:'Cocina ZABÚ',    email:null,             password:null,       rol:'cocina',   pin:'9999', negocio:'zabu', carrito:'C01' },
-  { id:6, nombre:'Vendedor RV',    email:null,             password:null,       rol:'vendedor', pin:'5678', negocio:'rv',   carrito:'RV01' },
+// CEOs siguen siendo de acceso fijo (no son "empleados operativos" del POS).
+// Si más adelante quieres mover esto a Supabase Auth también, es un cambio aislado aquí.
+const CEOS = [
+  { id:1, nombre:'Luis Restrepo',  email:'luis@zabu.co',   password:'zabu2026', rol:'ceo', negocio:'lrm', carrito:null },
+  { id:2, nombre:'Emelyn Mendoza', email:'emelyn@zabu.co', password:'zabu2026', rol:'ceo', negocio:'lrm', carrito:null },
+]
+
+// RV Sports todavía no tiene su propia tabla de empleados — se mantiene el PIN demo
+// hasta que se construya el módulo de personal de RV (mismo patrón que ZABÚ).
+const USUARIOS_RV_DEMO = [
+  { id:6, nombre:'Vendedor RV', email:null, rol:'vendedor', pin:'5678', negocio:'rv', carrito:'RV01' },
 ]
 
 export default function Login({ onLogin }) {
@@ -43,11 +49,40 @@ export default function Login({ onLogin }) {
   const loginCEO = () => {
     setLoading(true)
     setTimeout(() => {
-      const user = USUARIOS.find(u => u.email === email.toLowerCase() && u.password === password && u.rol === 'ceo')
+      const user = CEOS.find(u => u.email === email.toLowerCase() && u.password === password)
       if (user) { onLogin(user) }
       else { setError('Email o contraseña incorrectos') }
       setLoading(false)
     }, 600)
+  }
+
+  // Busca el PIN en zabu_empleados (real) para ZABÚ, o en el demo fijo para RV
+  // (RV todavía no tiene módulo de personal propio).
+  const verificarPin = async (pinIngresado) => {
+    if (negocio === 'zabu') {
+      const { data: empleado, error: err } = await supabase
+        .from('zabu_empleados')
+        .select('*')
+        .eq('pin', pinIngresado)
+        .eq('estado', 'activo')
+        .maybeSingle()
+
+      if (err || !empleado) return null
+
+      // El rol elegido en el paso anterior (vendedor/cocina) debe ser coherente con el cargo,
+      // pero no bloqueamos por nombre exacto de cargo — el PIN + estado activo ya autentica.
+      return {
+        id: empleado.id, nombre: empleado.nombre, rol, negocio: 'zabu',
+        carrito: empleado.carrito_actual, cargo: empleado.cargo_actual,
+      }
+    }
+
+    if (negocio === 'rv') {
+      const user = USUARIOS_RV_DEMO.find(u => u.pin === pinIngresado && u.rol === rol)
+      return user || null
+    }
+
+    return null
   }
 
   const addPin = (d) => {
@@ -56,11 +91,11 @@ export default function Login({ onLogin }) {
     setPin(nuevo)
     setError('')
     if (nuevo.length === 4) {
-      setTimeout(() => {
-        const user = USUARIOS.find(u => u.pin === nuevo && u.negocio === negocio && u.rol === rol)
+      setTimeout(async () => {
+        const user = await verificarPin(nuevo)
         if (user) { onLogin(user) }
-        else { setError('PIN incorrecto'); setPin('') }
-      }, 300)
+        else { setError('PIN incorrecto o empleado inactivo'); setPin('') }
+      }, 200)
     }
   }
 
@@ -165,9 +200,6 @@ export default function Login({ onLogin }) {
             <button onClick={loginCEO} disabled={loading} style={btnGold('#C9A84C')}>
               {loading ? 'Verificando...' : 'Ingresar →'}
             </button>
-            <div style={{ marginTop:14, padding:'10px 14px', background:'rgba(255,255,255,0.03)', borderRadius:8, fontSize:11, color:'rgba(255,255,255,0.25)', textAlign:'center' }}>
-              Demo: luis@zabu.co · zabu2026
-            </div>
           </div>
         )}
 
@@ -234,12 +266,6 @@ export default function Login({ onLogin }) {
                   onMouseOut={e => { if(d!=='') e.currentTarget.style.background = d==='⌫' ? 'rgba(224,82,82,0.1)' : 'rgba(255,255,255,0.06)' }}
                 >{d}</div>
               ))}
-            </div>
-
-            <div style={{ marginTop:20, textAlign:'center', fontSize:11, color:'rgba(255,255,255,0.2)' }}>
-              {negocio==='zabu' && rol==='vendedor' ? 'Demo: 1234' :
-               negocio==='zabu' && rol==='cocina'   ? 'Demo: 9999' :
-               negocio==='rv'                       ? 'Demo: 5678' : ''}
             </div>
           </div>
         )}

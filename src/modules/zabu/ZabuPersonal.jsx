@@ -22,13 +22,19 @@ function ModalNuevoEmpleado({ onClose, onSaved }) {
   const [form, setForm] = useState({
     nombre:'', cedula:'', telefono:'', fecha_ingreso: new Date().toISOString().split('T')[0],
     tipo_contrato:'informal', eps:'', arl:'', pension:'',
-    cargo_actual:'Vendedor', carrito_actual:'C01', salario_actual:'', tipo_salario:'por_dia', notas:'',
+    cargo_actual:'Vendedor', carrito_actual:'C01', salario_actual:'', tipo_salario:'por_dia', notas:'', pin:'',
   })
+  const [pinError, setPinError] = useState('')
 
   const guardar = async () => {
     if (!form.nombre) return
+    setPinError('')
+    if (form.pin) {
+      const { data: existente } = await supabase.from('zabu_empleados').select('id').eq('pin', form.pin).maybeSingle()
+      if (existente) { setPinError('Ese PIN ya está en uso por otro empleado. Elige otro.'); return }
+    }
     const { data, error } = await supabase.from('zabu_empleados').insert({
-      ...form, salario_actual: parseInt(form.salario_actual) || 0,
+      ...form, salario_actual: parseInt(form.salario_actual) || 0, pin: form.pin || null,
     }).select().single()
     if (error) { alert('Error: ' + error.message); return }
     await supabase.from('zabu_empleado_movimientos').insert({
@@ -69,7 +75,12 @@ function ModalNuevoEmpleado({ onClose, onSaved }) {
               <option value="por_dia">Por día trabajado</option><option value="quincenal">Quincenal fijo</option><option value="mensual">Mensual fijo</option>
             </select>
           </div>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>PIN de acceso al POS (4 dígitos)</div>
+            <input type="text" maxLength={4} value={form.pin} onChange={e=>setForm(p=>({...p,pin:e.target.value.replace(/\D/g,'')}))} placeholder="Ej: 1234" style={iStyle} />
+          </div>
         </div>
+        {pinError && <div style={{ padding:'8px 12px', background:'var(--red-dim)', border:'1px solid rgba(224,82,82,0.3)', borderRadius:8, fontSize:12, color:'var(--red)', marginBottom:14 }}>{pinError}</div>}
 
         <div style={{ fontSize:11, color:'var(--text3)', fontWeight:700, marginBottom:8, letterSpacing:0.5 }}>CONTACTO Y CONTRATO (opcional)</div>
         <div className="grid-2" style={{ gap:10, marginBottom:16 }}>
@@ -384,7 +395,7 @@ export default function ZabuPersonal() {
                   </div>
                   <div>
                     <div style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{e.nombre}</div>
-                    <div style={{ fontSize:11, color:'var(--text3)' }}>{e.cargo_actual} · {e.carrito_actual} · {e.arl ? `ARL: ${e.arl}` : 'Sin ARL registrada'}</div>
+                    <div style={{ fontSize:11, color:'var(--text3)' }}>{e.cargo_actual} · {e.carrito_actual} · {e.pin ? `PIN: ${e.pin}` : 'Sin PIN asignado'}</div>
                   </div>
                 </div>
                 <div style={{ textAlign:'right' }}>
