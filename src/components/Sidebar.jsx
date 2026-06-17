@@ -17,6 +17,7 @@ const NAV_LRM = [
       { id:'bi',         label:'BI Ejecutivo',     activo:true  },
       { id:'consolidado',label:'Consolidado',      activo:false },
       { id:'informes',   label:'Informes',         activo:false },
+      { id:'inversiones', label:'📈 LRM Inversiones', activo:true },
     ]
   },
   {

@@ -12,6 +12,7 @@ import RVApp from './modules/rv/RVApp'
 import MySpace from './pages/MySpace'
 import { AperturaTurno, PanelTurno } from './modules/zabu/ZabuTurno'
 import { useBreakpoint } from './hooks/useBreakpoint'
+import LRMInversiones from './pages/LRMInversiones'
 
 const TITULOS = {
   dashboard:     'Dashboard LRM Trade',
@@ -27,6 +28,7 @@ const TITULOS = {
   contabilidad:  'Contabilidad',
   configuracion: 'Configuración LRM Core',
   myspace:       'My Space',
+  inversiones:   'Inversiones',
 }
 
 function VendedorApp({ usuario, onCerrarSesion }) {
@@ -136,6 +138,7 @@ export default function App() {
     if (navActivo === 'configuracion') return <LRMConfiguracion />
     if (isZabu) return <ZabuApp navExterno={negNav} onNavChange={(id)=>{setNegNav(id);setNavActivo(id)}} usuario={usuario} />
     if (isRV)   return <RVApp   navExterno={negNav} onNavChange={(id)=>{setNegNav(id);setNavActivo(id)}} usuario={usuario} />
+    if (navActivo === 'inversiones') return <LRMInversiones />
     switch (navActivo) {
       case 'dashboard': return <LRMDashboard onEntrarNegocio={entrarNegocio} />
       case 'finanzas':  return <LRMFinanzas />
