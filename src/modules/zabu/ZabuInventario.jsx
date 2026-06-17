@@ -1,64 +1,120 @@
-import { useState } from 'react'
+// @ts-nocheck
+import { useState, useEffect } from 'react'
+import { supabase } from '../../lib/supabase'
 
-const INVENTARIO = [
-  { id:1, nombre:'ZaBun™ (pan top-split)',   categoria:'Pan',       stock:85,  min:20, max:100, unidad:'uds',  costo:1000,  proveedor:'Panadera (pendiente)',  vence:'2026-06-12' },
-  { id:2, nombre:'Cream Code™',              categoria:'Salsa',     stock:90,  min:20, max:100, unidad:'%',    costo:700,   proveedor:'Producción propia',     vence:'2026-06-12' },
-  { id:3, nombre:'Tocineta Crispy',          categoria:'Proteína',  stock:30,  min:25, max:100, unidad:'%',    costo:600,   proveedor:'Por definir',           vence:'2026-06-15' },
-  { id:4, nombre:'Piña Caramelizada',        categoria:'Topping',   stock:15,  min:20, max:100, unidad:'%',    costo:400,   proveedor:'Producción propia',     vence:'2026-06-11' },
-  { id:5, nombre:'Salchicha Pavo',           categoria:'Proteína',  stock:70,  min:20, max:100, unidad:'uds',  costo:3700,  proveedor:'La Parisienne',        vence:'2026-06-14' },
-  { id:6, nombre:'Salchicha Hot Dog',        categoria:'Proteína',  stock:60,  min:20, max:100, unidad:'uds',  costo:2937,  proveedor:'La Parisienne',        vence:'2026-06-14' },
-  { id:7, nombre:'Salchicha Alemana',        categoria:'Proteína',  stock:50,  min:20, max:100, unidad:'uds',  costo:4140,  proveedor:'La Parisienne',        vence:'2026-06-14' },
-  { id:8, nombre:'Salchicha Parisienne',     categoria:'Proteína',  stock:50,  min:20, max:100, unidad:'uds',  costo:4140,  proveedor:'La Parisienne',        vence:'2026-06-14' },
-  { id:9, nombre:'Queso Cheddar',            categoria:'Queso',     stock:60,  min:20, max:100, unidad:'%',    costo:1000,  proveedor:'Por definir',           vence:'2026-06-16' },
-  { id:10,nombre:'Bandeja boat kraft',       categoria:'Empaque',   stock:65,  min:30, max:100, unidad:'uds',  costo:400,   proveedor:'Proveedor Barranquilla', vence:null },
-  { id:11,nombre:'Papel encerado',           categoria:'Empaque',   stock:80,  min:30, max:100, unidad:'%',    costo:100,   proveedor:'Proveedor Barranquilla', vence:null },
-  { id:12,nombre:'Servilletas x6',           categoria:'Empaque',   stock:75,  min:30, max:100, unidad:'%',    costo:240,   proveedor:'Proveedor Barranquilla', vence:null },
-  { id:13,nombre:'Sticker ZABÚ',             categoria:'Empaque',   stock:70,  min:30, max:100, unidad:'uds',  costo:120,   proveedor:'Imprenta',              vence:null },
-  { id:14,nombre:'Caja kraft ventana',       categoria:'Empaque',   stock:55,  min:20, max:100, unidad:'uds',  costo:1350,  proveedor:'Proveedor Barranquilla', vence:null },
-  { id:15,nombre:'Bolsa papel kraft',        categoria:'Empaque',   stock:60,  min:20, max:100, unidad:'uds',  costo:300,   proveedor:'Proveedor Barranquilla', vence:null },
-  { id:16,nombre:'Coca-Cola 250ml',          categoria:'Bebida',    stock:80,  min:24, max:100, unidad:'uds',  costo:1500,  proveedor:'Distribuidor',          vence:'2026-09-01' },
-]
+function cop(n) { return '$' + Math.round(Math.abs(n||0)).toLocaleString('es-CO') }
 
-const CATEGORIAS = ['Todos', 'Pan', 'Salsa', 'Proteína', 'Topping', 'Queso', 'Empaque', 'Bebida']
-
-function getEstado(item) {
-  if (item.stock <= item.min) return 'critico'
-  if (item.stock <= item.min * 1.5) return 'bajo'
-  return 'ok'
+const iStyle = {
+  width:'100%', padding:'8px 12px', borderRadius:8,
+  background:'rgba(255,255,255,0.06)', border:'1px solid var(--border)',
+  color:'var(--text)', fontSize:12, fontFamily:'inherit', outline:'none', marginTop:4,
 }
 
-function colorEstado(estado) {
-  if (estado === 'critico') return 'var(--red)'
-  if (estado === 'bajo') return 'var(--gold)'
-  return 'var(--green)'
-}
+const CATEGORIAS = ['Todos', 'pan', 'salsa', 'proteina', 'topping', 'queso', 'empaque', 'bebida']
+const CATEGORIA_LABEL = { pan:'Pan', salsa:'Salsa', proteina:'Proteína', topping:'Topping', queso:'Queso', empaque:'Empaque', bebida:'Bebida' }
 
 function diasVence(fecha) {
   if (!fecha) return null
-  const hoy = new Date()
+  const hoy = new Date(); hoy.setHours(0,0,0,0)
   const venc = new Date(fecha)
-  const diff = Math.ceil((venc - hoy) / (1000 * 60 * 60 * 24))
-  return diff
+  return Math.ceil((venc - hoy) / (1000 * 60 * 60 * 24))
+}
+
+// Agrupa lotes activos por producto para mostrar el stock TOTAL real (suma de todos los lotes vivos)
+function agruparPorProducto(lotes) {
+  const grupos = {}
+  lotes.filter(l => l.estado === 'activo').forEach(l => {
+    if (!grupos[l.producto_nombre]) {
+      grupos[l.producto_nombre] = {
+        nombre: l.producto_nombre, categoria: l.categoria, unidad: l.unidad,
+        stockTotal: 0, lotes: [], proximoVencimiento: null, costoPromedio: 0,
+      }
+    }
+    const g = grupos[l.producto_nombre]
+    g.stockTotal += parseFloat(l.cantidad_actual)
+    g.lotes.push(l)
+    const dias = diasVence(l.fecha_vencimiento)
+    if (dias !== null && (g.proximoVencimiento === null || dias < g.proximoVencimiento)) g.proximoVencimiento = dias
+  })
+  Object.values(grupos).forEach(g => {
+    g.costoPromedio = g.lotes.reduce((s,l)=>s+l.costo_unitario,0) / g.lotes.length
+  })
+  return Object.values(grupos)
 }
 
 export default function ZabuInventario() {
+  const [lotes, setLotes] = useState([])
+  const [loading, setLoading] = useState(true)
   const [categoria, setCategoria] = useState('Todos')
   const [sel, setSel] = useState(null)
+  const [modal, setModal] = useState(false)
+  const [form, setForm] = useState({
+    producto_nombre:'', categoria:'pan', cantidad_inicial:'', unidad:'unidades',
+    costo_unitario:'', proveedor:'', ubicacion:'C01', fecha_compra: new Date().toISOString().split('T')[0],
+    fecha_vencimiento:'', notas:'',
+  })
 
-  const filtrados = categoria === 'Todos' ? INVENTARIO : INVENTARIO.filter(i => i.categoria === categoria)
-  const criticos = INVENTARIO.filter(i => getEstado(i) === 'critico')
-  const bajos = INVENTARIO.filter(i => getEstado(i) === 'bajo')
-  const porVencer = INVENTARIO.filter(i => { const d = diasVence(i.vence); return d !== null && d <= 3 })
+  useEffect(() => { cargar() }, [])
+
+  const cargar = async () => {
+    setLoading(true)
+    const { data, error } = await supabase.from('zabu_lotes').select('*').order('fecha_vencimiento', { ascending: true, nullsFirst: false })
+    if (!error && data) setLotes(data)
+    setLoading(false)
+  }
+
+  const registrarLote = async () => {
+    if (!form.producto_nombre || !form.cantidad_inicial) return
+    const cantidad = parseFloat(form.cantidad_inicial)
+    const { error } = await supabase.from('zabu_lotes').insert({
+      producto_nombre: form.producto_nombre, categoria: form.categoria,
+      cantidad_inicial: cantidad, cantidad_actual: cantidad, unidad: form.unidad,
+      costo_unitario: parseInt(form.costo_unitario) || 0, proveedor: form.proveedor,
+      ubicacion: form.ubicacion, fecha_compra: form.fecha_compra,
+      fecha_vencimiento: form.fecha_vencimiento || null, notas: form.notas, estado: 'activo',
+    })
+    if (error) { alert('Error al registrar: ' + error.message); return }
+    setForm({ producto_nombre:'', categoria:'pan', cantidad_inicial:'', unidad:'unidades', costo_unitario:'', proveedor:'', ubicacion:'C01', fecha_compra:new Date().toISOString().split('T')[0], fecha_vencimiento:'', notas:'' })
+    setModal(false)
+    cargar()
+  }
+
+  const ajustarCantidad = async (loteId, nuevaCantidad) => {
+    const valor = Math.max(0, parseFloat(nuevaCantidad) || 0)
+    const nuevoEstado = valor === 0 ? 'agotado' : 'activo'
+    await supabase.from('zabu_lotes').update({ cantidad_actual: valor, estado: nuevoEstado }).eq('id', loteId)
+    cargar()
+  }
+
+  const productos = agruparPorProducto(lotes)
+  const productosFiltrados = categoria === 'Todos' ? productos : productos.filter(p => p.categoria === categoria)
+
+  const getEstadoProducto = (p) => {
+    // Sin umbral hardcodeado de "máximo 100" — el estado se basa en si hay lotes próximos a vencer o agotándose
+    if (p.proximoVencimiento !== null && p.proximoVencimiento <= 0) return 'critico'
+    if (p.proximoVencimiento !== null && p.proximoVencimiento <= 3) return 'bajo'
+    if (p.stockTotal <= 0) return 'critico'
+    return 'ok'
+  }
+  const colorEstado = (estado) => estado === 'critico' ? 'var(--red)' : estado === 'bajo' ? 'var(--gold)' : 'var(--green)'
+
+  const criticos  = productos.filter(p => getEstadoProducto(p) === 'critico')
+  const bajos     = productos.filter(p => getEstadoProducto(p) === 'bajo')
+  const porVencer = lotes.filter(l => l.estado === 'activo' && diasVence(l.fecha_vencimiento) !== null && diasVence(l.fecha_vencimiento) <= 3)
 
   return (
     <>
-      {/* KPIs */}
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+        <div style={{ fontSize:12, color:'var(--text3)' }}>Sistema de lotes — cada compra es un registro independiente con su propio vencimiento</div>
+        <button onClick={() => setModal(true)} className="btn-gold" style={{ padding:'8px 16px', fontSize:12 }}>+ Registrar lote</button>
+      </div>
+
       <div className="grid-4" style={{ marginBottom:20 }}>
         {[
-          { label:'Total items',    val:String(INVENTARIO.length), color:'var(--text)',  sub:'en inventario'      },
-          { label:'Críticos',       val:String(criticos.length),   color:'var(--red)',   sub:'requieren compra'   },
-          { label:'Stock bajo',     val:String(bajos.length),      color:'var(--gold)',  sub:'reponer pronto'     },
-          { label:'Por vencer',     val:String(porVencer.length),  color:'var(--gold)',  sub:'en los próximos 3 días' },
+          { label:'Productos',  val: loading?'...':String(productos.length), color:'var(--text)', sub:'con stock activo' },
+          { label:'Críticos',    val: loading?'...':String(criticos.length),  color:'var(--red)',  sub:'sin stock o vencidos' },
+          { label:'Stock bajo',  val: loading?'...':String(bajos.length),     color:'var(--gold)', sub:'vencen en ≤3 días' },
+          { label:'Lotes activos', val: loading?'...':String(lotes.filter(l=>l.estado==='activo').length), color:'var(--blue)', sub:'compras registradas' },
         ].map(k => (
           <div key={k.label} className="kpi-card">
             <div className="kpi-label">{k.label}</div>
@@ -69,93 +125,98 @@ export default function ZabuInventario() {
         ))}
       </div>
 
-      {/* Filtros */}
       <div className="sub-nav" style={{ marginBottom:16 }}>
         {CATEGORIAS.map(c => (
-          <div key={c} className={`sub-nav-item${categoria === c ? ' active' : ''}`} onClick={() => setCategoria(c)}>{c}</div>
+          <div key={c} className={`sub-nav-item${categoria === c ? ' active' : ''}`} onClick={() => setCategoria(c)}>
+            {c === 'Todos' ? 'Todos' : CATEGORIA_LABEL[c]}
+          </div>
         ))}
       </div>
 
       <div className="grid-2-1" style={{ gap:16, alignItems:'start' }}>
-
-        {/* Tabla */}
         <div className="panel">
-          <div className="panel-title">Inventario actual</div>
-          <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr', marginBottom:6 }}>
-            {['Ingrediente','Stock','Estado','Vence'].map(h => (
-              <div key={h} style={{ fontSize:9, color:'var(--text3)', padding:'0 10px 8px', letterSpacing:0.5, fontWeight:600 }}>{h}</div>
-            ))}
-          </div>
-          {filtrados.map((item, i) => {
-            const estado = getEstado(item)
-            const dias = diasVence(item.vence)
-            return (
-              <div key={item.id} onClick={() => setSel(sel?.id === item.id ? null : item)} style={{
-                display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr', cursor:'pointer',
-                background: sel?.id === item.id ? 'rgba(201,168,76,0.05)' : i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)',
-                borderLeft: sel?.id === item.id ? '2px solid var(--gold)' : '2px solid transparent',
-                transition:'all .15s',
-              }}>
-                <div style={{ fontSize:12, padding:'9px 10px', color:'var(--text2)', fontWeight:500, borderBottom:'1px solid rgba(255,255,255,0.03)' }}>{item.nombre}</div>
-                <div style={{ fontSize:12, padding:'9px 10px', borderBottom:'1px solid rgba(255,255,255,0.03)' }}>
-                  <div style={{ background:'rgba(255,255,255,0.06)', borderRadius:2, height:4, overflow:'hidden', marginBottom:3 }}>
-                    <div style={{ height:4, borderRadius:2, width:`${item.stock}%`, background:colorEstado(estado) }} />
-                  </div>
-                  <span style={{ fontSize:10, color:'var(--text3)' }}>{item.stock}%</span>
-                </div>
-                <div style={{ fontSize:11, padding:'9px 10px', fontWeight:600, color:colorEstado(estado), borderBottom:'1px solid rgba(255,255,255,0.03)' }}>
-                  {estado === 'critico' ? '🔴 Crítico' : estado === 'bajo' ? '⚠️ Bajo' : '✅ OK'}
-                </div>
-                <div style={{ fontSize:11, padding:'9px 10px', borderBottom:'1px solid rgba(255,255,255,0.03)', color: dias !== null && dias <= 2 ? 'var(--red)' : dias !== null && dias <= 5 ? 'var(--gold)' : 'var(--text3)' }}>
-                  {dias !== null ? (dias <= 0 ? 'Vencido' : `${dias}d`) : '—'}
-                </div>
+          <div className="panel-title">Inventario actual — stock por producto (suma de lotes activos)</div>
+          {loading ? <div style={{ fontSize:12, color:'var(--text3)', padding:'20px 0', textAlign:'center' }}>Cargando...</div>
+          : productosFiltrados.length === 0 ? <div style={{ fontSize:13, color:'var(--text4)', padding:'30px 0', textAlign:'center' }}>Sin productos registrados en esta categoría</div>
+          : (
+            <>
+              <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr', marginBottom:6 }}>
+                {['Producto','Stock total','Estado','Próx. vence'].map(h => (
+                  <div key={h} style={{ fontSize:9, color:'var(--text3)', padding:'0 10px 8px', letterSpacing:0.5, fontWeight:600 }}>{h}</div>
+                ))}
               </div>
-            )
-          })}
+              {productosFiltrados.map((p, i) => {
+                const estado = getEstadoProducto(p)
+                return (
+                  <div key={p.nombre} onClick={() => setSel(sel?.nombre === p.nombre ? null : p)} style={{
+                    display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr', cursor:'pointer',
+                    background: sel?.nombre === p.nombre ? 'rgba(201,168,76,0.05)' : i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)',
+                    borderLeft: sel?.nombre === p.nombre ? '2px solid var(--gold)' : '2px solid transparent',
+                    transition:'all .15s',
+                  }}>
+                    <div style={{ fontSize:12, padding:'9px 10px', color:'var(--text2)', fontWeight:500, borderBottom:'1px solid rgba(255,255,255,0.03)' }}>{p.nombre}</div>
+                    <div style={{ fontSize:12, padding:'9px 10px', borderBottom:'1px solid rgba(255,255,255,0.03)', fontWeight:600, color:'var(--text2)' }}>
+                      {p.stockTotal} {p.unidad}
+                    </div>
+                    <div style={{ fontSize:11, padding:'9px 10px', fontWeight:600, color:colorEstado(estado), borderBottom:'1px solid rgba(255,255,255,0.03)' }}>
+                      {estado === 'critico' ? '🔴 Crítico' : estado === 'bajo' ? '⚠️ Bajo' : '✅ OK'}
+                    </div>
+                    <div style={{ fontSize:11, padding:'9px 10px', borderBottom:'1px solid rgba(255,255,255,0.03)', color: p.proximoVencimiento !== null && p.proximoVencimiento <= 2 ? 'var(--red)' : p.proximoVencimiento !== null && p.proximoVencimiento <= 5 ? 'var(--gold)' : 'var(--text3)' }}>
+                      {p.proximoVencimiento !== null ? (p.proximoVencimiento <= 0 ? 'Vencido' : `${p.proximoVencimiento}d`) : 'No aplica'}
+                    </div>
+                  </div>
+                )
+              })}
+            </>
+          )}
         </div>
 
-        {/* Detalle + Alertas */}
         <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-
-          {/* Detalle item */}
           {sel ? (
             <div className="panel">
-              <div className="panel-title">Detalle — {sel.nombre}</div>
-              {[
-                { label:'Categoría',   val:sel.categoria   },
-                { label:'Proveedor',   val:sel.proveedor   },
-                { label:'Costo/ud',    val:'$'+sel.costo.toLocaleString('es-CO') },
-                { label:'Stock mín.',  val:sel.min+'%'     },
-                { label:'Estado',      val: getEstado(sel) === 'critico' ? '🔴 Crítico' : getEstado(sel) === 'bajo' ? '⚠️ Bajo' : '✅ OK' },
-                { label:'Vencimiento', val: sel.vence ? sel.vence : 'No aplica' },
-              ].map(r => (
-                <div key={r.label} style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid var(--border)' }}>
-                  <span style={{ fontSize:12, color:'var(--text3)' }}>{r.label}</span>
-                  <span style={{ fontSize:12, fontWeight:600, color:'var(--text2)' }}>{r.val}</span>
-                </div>
-              ))}
-              <button className="btn-gold" style={{ width:'100%', marginTop:14, padding:'8px' }}>
-                + Registrar entrada
-              </button>
+              <div className="panel-title">Lotes de — {sel.nombre}</div>
+              {sel.lotes.map(l => {
+                const dias = diasVence(l.fecha_vencimiento)
+                return (
+                  <div key={l.id} style={{ padding:'10px 0', borderBottom:'1px solid var(--border)' }}>
+                    <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
+                      <span style={{ fontSize:12, fontWeight:700, color:'var(--text)' }}>{l.numero_lote || `Lote ${l.id.slice(0,6)}`}</span>
+                      <span style={{ fontSize:12, fontWeight:700, color:'var(--gold)' }}>{cop(l.costo_unitario)}/{l.unidad}</span>
+                    </div>
+                    <div style={{ fontSize:11, color:'var(--text3)', marginBottom:6 }}>
+                      Compra: {l.fecha_compra} · {l.proveedor || 'Sin proveedor'} · {l.ubicacion}
+                    </div>
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      <input type="number" defaultValue={l.cantidad_actual} onBlur={e=>ajustarCantidad(l.id, e.target.value)}
+                        style={{ ...iStyle, marginTop:0, width:80, fontSize:11 }} />
+                      <span style={{ fontSize:11, color:'var(--text3)' }}>{l.unidad} restantes</span>
+                      {dias !== null && (
+                        <span style={{ fontSize:10, marginLeft:'auto', color: dias<=2?'var(--red)':dias<=5?'var(--gold)':'var(--text4)' }}>
+                          {dias<=0?'Vencido':`Vence en ${dias}d`}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           ) : (
             <div className="panel" style={{ textAlign:'center', padding:'30px 20px' }}>
-              <div style={{ fontSize:13, color:'var(--text4)' }}>Selecciona un item para ver el detalle</div>
+              <div style={{ fontSize:13, color:'var(--text4)' }}>Selecciona un producto para ver sus lotes</div>
             </div>
           )}
 
-          {/* Alertas vencimiento */}
           <div className="panel">
             <div className="panel-title">Alertas de vencimiento</div>
             {porVencer.length === 0 ? (
               <div style={{ fontSize:12, color:'var(--text4)', textAlign:'center', padding:'20px 0' }}>Sin alertas activas</div>
-            ) : porVencer.map((item, i) => {
-              const dias = diasVence(item.vence)
+            ) : porVencer.map((l) => {
+              const dias = diasVence(l.fecha_vencimiento)
               return (
-                <div key={i} className="alert-row" style={{ borderColor: dias <= 1 ? 'rgba(224,82,82,0.2)' : 'rgba(201,168,76,0.2)' }}>
+                <div key={l.id} className="alert-row" style={{ borderColor: dias <= 1 ? 'rgba(224,82,82,0.2)' : 'rgba(201,168,76,0.2)' }}>
                   <div className="alert-dot" style={{ background: dias <= 1 ? 'var(--red)' : 'var(--gold)' }} />
                   <div className="alert-txt">
-                    <span style={{ fontWeight:600, color:'var(--text2)' }}>{item.nombre}</span>
+                    <span style={{ fontWeight:600, color:'var(--text2)' }}>{l.producto_nombre}</span>
                     {' — '}{dias <= 0 ? 'Vencido' : `vence en ${dias} día${dias !== 1 ? 's' : ''}`}
                   </div>
                 </div>
@@ -163,24 +224,80 @@ export default function ZabuInventario() {
             })}
           </div>
 
-          {/* Críticos */}
           <div className="panel">
             <div className="panel-title">Compras urgentes</div>
             {criticos.length === 0 ? (
               <div style={{ fontSize:12, color:'var(--text4)', textAlign:'center', padding:'20px 0' }}>Sin compras urgentes</div>
-            ) : criticos.map((item, i) => (
+            ) : criticos.map((p, i) => (
               <div key={i} className="alert-row" style={{ borderColor:'rgba(224,82,82,0.2)' }}>
                 <div className="alert-dot" style={{ background:'var(--red)' }} />
-                <div className="alert-txt">
-                  <span style={{ fontWeight:600, color:'var(--text2)' }}>{item.nombre}</span>
-                  {' — '}{item.proveedor}
-                </div>
+                <div className="alert-txt"><span style={{ fontWeight:600, color:'var(--text2)' }}>{p.nombre}</span> — sin stock disponible</div>
                 <div style={{ fontSize:9, fontWeight:600, padding:'2px 8px', borderRadius:8, background:'var(--red-dim)', color:'var(--red)', flexShrink:0 }}>Urgente</div>
               </div>
             ))}
           </div>
         </div>
       </div>
+
+      {modal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'flex-start', justifyContent:'center', zIndex:100, padding:20, overflowY:'auto' }}>
+          <div style={{ background:'var(--bg2)', borderRadius:16, padding:28, width:'100%', maxWidth:480, border:'1px solid var(--border)', margin:'auto' }}>
+            <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:20 }}>Registrar nuevo lote</div>
+            <div style={{ marginBottom:12 }}>
+              <div style={{ fontSize:11, color:'var(--text3)' }}>Producto</div>
+              <input type="text" value={form.producto_nombre} onChange={e=>setForm(p=>({...p,producto_nombre:e.target.value}))} placeholder="Ej: Cream Code™, Salchicha Pavo..." style={iStyle} />
+            </div>
+            <div className="grid-2" style={{ gap:10, marginBottom:12 }}>
+              <div>
+                <div style={{ fontSize:11, color:'var(--text3)' }}>Categoría</div>
+                <select value={form.categoria} onChange={e=>setForm(p=>({...p,categoria:e.target.value}))} style={iStyle}>
+                  {CATEGORIAS.filter(c=>c!=='Todos').map(c => <option key={c} value={c}>{CATEGORIA_LABEL[c]}</option>)}
+                </select>
+              </div>
+              <div>
+                <div style={{ fontSize:11, color:'var(--text3)' }}>Unidad</div>
+                <select value={form.unidad} onChange={e=>setForm(p=>({...p,unidad:e.target.value}))} style={iStyle}>
+                  <option value="unidades">Unidades</option><option value="kg">Kilogramos</option><option value="g">Gramos</option><option value="litros">Litros</option><option value="ml">Mililitros</option>
+                </select>
+              </div>
+              <div>
+                <div style={{ fontSize:11, color:'var(--text3)' }}>Cantidad comprada</div>
+                <input type="number" value={form.cantidad_inicial} onChange={e=>setForm(p=>({...p,cantidad_inicial:e.target.value}))} style={iStyle} />
+              </div>
+              <div>
+                <div style={{ fontSize:11, color:'var(--text3)' }}>Costo unitario (COP)</div>
+                <input type="number" value={form.costo_unitario} onChange={e=>setForm(p=>({...p,costo_unitario:e.target.value}))} style={iStyle} />
+              </div>
+              <div>
+                <div style={{ fontSize:11, color:'var(--text3)' }}>Proveedor</div>
+                <input type="text" value={form.proveedor} onChange={e=>setForm(p=>({...p,proveedor:e.target.value}))} style={iStyle} />
+              </div>
+              <div>
+                <div style={{ fontSize:11, color:'var(--text3)' }}>Ubicación</div>
+                <select value={form.ubicacion} onChange={e=>setForm(p=>({...p,ubicacion:e.target.value}))} style={iStyle}>
+                  <option value="C01">Carrito 01</option><option value="C02">Carrito 02</option><option value="C03">Carrito 03</option><option value="CEDIS">CEDIS</option>
+                </select>
+              </div>
+              <div>
+                <div style={{ fontSize:11, color:'var(--text3)' }}>Fecha de compra</div>
+                <input type="date" value={form.fecha_compra} onChange={e=>setForm(p=>({...p,fecha_compra:e.target.value}))} style={iStyle} />
+              </div>
+              <div>
+                <div style={{ fontSize:11, color:'var(--text3)' }}>Fecha de vencimiento</div>
+                <input type="date" value={form.fecha_vencimiento} onChange={e=>setForm(p=>({...p,fecha_vencimiento:e.target.value}))} placeholder="Dejar vacío si no aplica" style={iStyle} />
+              </div>
+            </div>
+            <div style={{ marginBottom:20 }}>
+              <div style={{ fontSize:11, color:'var(--text3)' }}>Notas</div>
+              <input type="text" value={form.notas} onChange={e=>setForm(p=>({...p,notas:e.target.value}))} style={iStyle} />
+            </div>
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={registrarLote} disabled={!form.producto_nombre||!form.cantidad_inicial} className="btn-green" style={{ flex:1 }}>Registrar lote</button>
+              <button onClick={()=>setModal(false)} className="btn">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   )
 }
