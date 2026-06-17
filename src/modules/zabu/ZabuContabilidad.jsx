@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 
@@ -8,13 +9,21 @@ function cop(n) {
 }
 
 const TIPO_COLORS = {
-  activo:    { color:'#378ADD', bg:'rgba(55,138,221,0.1)',  border:'rgba(55,138,221,0.3)'  },
-  pasivo:    { color:'#e05252', bg:'rgba(224,82,82,0.1)',   border:'rgba(224,82,82,0.3)'   },
-  patrimonio:{ color:'#9C27B0', bg:'rgba(156,39,176,0.1)', border:'rgba(156,39,176,0.3)'  },
-  ingreso:   { color:'#4caf50', bg:'rgba(76,175,80,0.1)',   border:'rgba(76,175,80,0.3)'   },
-  costo:     { color:'#FF9800', bg:'rgba(255,152,0,0.1)',   border:'rgba(255,152,0,0.3)'   },
-  gasto:     { color:'#C9A84C', bg:'rgba(201,168,76,0.1)', border:'rgba(201,168,76,0.3)'  },
+  activo:           { color:'#378ADD', bg:'rgba(55,138,221,0.1)',  border:'rgba(55,138,221,0.3)'  },
+  pasivo:           { color:'#e05252', bg:'rgba(224,82,82,0.1)',   border:'rgba(224,82,82,0.3)'   },
+  patrimonio:       { color:'#9C27B0', bg:'rgba(156,39,176,0.1)', border:'rgba(156,39,176,0.3)'  },
+  ingreso:          { color:'#4caf50', bg:'rgba(76,175,80,0.1)',   border:'rgba(76,175,80,0.3)'   },
+  costo:            { color:'#FF9800', bg:'rgba(255,152,0,0.1)',   border:'rgba(255,152,0,0.3)'   },
+  gasto:            { color:'#C9A84C', bg:'rgba(201,168,76,0.1)', border:'rgba(201,168,76,0.3)'  },
+  orden_deudora:    { color:'#7E57C2', bg:'rgba(126,87,194,0.1)', border:'rgba(126,87,194,0.3)'  },
+  orden_acreedora:  { color:'#26A69A', bg:'rgba(38,166,154,0.1)', border:'rgba(38,166,154,0.3)'  },
 }
+const TIPO_LABEL = {
+  activo:'Activo', pasivo:'Pasivo', patrimonio:'Patrimonio', ingreso:'Ingreso',
+  costo:'Costo de ventas', gasto:'Gasto', orden_deudora:'Cuentas de orden deudoras', orden_acreedora:'Cuentas de orden acreedoras',
+}
+// Tipos que afectan el balance/estado de resultados real (las de orden son solo de control)
+const TIPOS_BALANCE = ['activo','pasivo','patrimonio','ingreso','costo','gasto']
 
 export default function ZabuContabilidad() {
   const [tab, setTab]             = useState('diario')
@@ -26,8 +35,8 @@ export default function ZabuContabilidad() {
   const [modalMov, setModalMov]   = useState(false)
   const [cuentaSel, setCuentaSel] = useState(null)
   const [filtroTipo, setFiltroTipo] = useState('todos')
+  const [verInactivas, setVerInactivas] = useState(false)
 
-  // Nuevo asiento
   const [nFecha,    setNFecha]    = useState(new Date().toISOString().split('T')[0])
   const [nDesc,     setNDesc]     = useState('')
   const [nPartidas, setNPartidas] = useState([
@@ -35,7 +44,6 @@ export default function ZabuContabilidad() {
     { codigo:'', nombre:'', debe:0, haber:0 },
   ])
 
-  // Nuevo movimiento
   const [mTipo,     setMTipo]     = useState('egreso')
   const [mFecha,    setMFecha]    = useState(new Date().toISOString().split('T')[0])
   const [mDesc,     setMDesc]     = useState('')
@@ -48,7 +56,7 @@ export default function ZabuContabilidad() {
   const cargarTodo = async () => {
     setLoading(true)
     const [{ data: planData }, { data: asientosData }, { data: movsData }] = await Promise.all([
-      supabase.from('plan_cuentas').select('*').eq('activo', true).order('codigo'),
+      supabase.from('plan_cuentas').select('*').order('codigo'),
       supabase.from('asientos').select('*, partidas(*)').order('fecha', { ascending: false }),
       supabase.from('movimientos').select('*').order('fecha', { ascending: false }),
     ])
@@ -58,11 +66,17 @@ export default function ZabuContabilidad() {
     setLoading(false)
   }
 
+  // Solo cuentas activas para tu régimen actual participan en cálculos y selects de asiento
+  const planActivo = plan.filter(c => c.activo)
+  const planInactivo = plan.filter(c => !c.activo)
+  // Para cálculos contables reales, excluimos las cuentas de orden (no afectan balance)
+  const planContable = planActivo.filter(c => TIPOS_BALANCE.includes(c.tipo))
+
   // ─── CÁLCULOS ──────────────────────────────────────────────────────────────
 
   const saldoPorCuenta = () => {
     const saldos = {}
-    plan.forEach(c => { saldos[c.codigo] = { ...c, debe:0, haber:0, saldo:0 } })
+    planContable.forEach(c => { saldos[c.codigo] = { ...c, debe:0, haber:0, saldo:0 } })
     asientos.forEach(a => {
       (a.partidas || []).forEach(p => {
         if (saldos[p.codigo]) {
@@ -106,7 +120,7 @@ export default function ZabuContabilidad() {
     setNPartidas(prev => {
       const next = [...prev]
       if (field === 'codigo') {
-        const cuenta = plan.find(c=>c.codigo===val)
+        const cuenta = planActivo.find(c=>c.codigo===val)
         next[i] = { ...next[i], codigo:val, nombre:cuenta?.nombre||'' }
       } else {
         next[i] = { ...next[i], [field]:val }
@@ -156,12 +170,14 @@ export default function ZabuContabilidad() {
     </div>
   )
 
-  const categorias = [...new Set(plan.map(c=>c.grupo))].sort()
   const movsFiltrados = filtroTipo === 'todos' ? movimientos : movimientos.filter(m=>m.tipo===filtroTipo)
 
   return (
     <>
-      {/* KPIs */}
+      <div style={{ padding:'8px 14px', background:'rgba(55,138,221,0.06)', border:'1px solid rgba(55,138,221,0.2)', borderRadius:8, fontSize:11, color:'var(--blue)', marginBottom:14 }}>
+        📋 Régimen actual: Persona Natural — Régimen Simple de Tributación. {planInactivo.length} cuentas adicionales del PUC están disponibles e inactivas para cuando avances a Régimen Ordinario (ver pestaña Plan de cuentas).
+      </div>
+
       <div className="grid-4" style={{ marginBottom:20 }}>
         {[
           { label:'Ingresos',     val:cop(totalIngresos), color:'var(--green)', sub:'ventas acumuladas'    },
@@ -178,7 +194,6 @@ export default function ZabuContabilidad() {
         ))}
       </div>
 
-      {/* Tabs */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20, flexWrap:'wrap', gap:10 }}>
         <div className="sub-nav" style={{ marginBottom:0 }}>
           {[
@@ -313,7 +328,7 @@ export default function ZabuContabilidad() {
       {tab === 'mayor' && (
         <div>
           <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:16 }}>
-            {['activo','pasivo','patrimonio','ingreso','costo','gasto'].map(t => {
+            {TIPOS_BALANCE.map(t => {
               const tc = TIPO_COLORS[t]
               return (
                 <div key={t} onClick={() => setCuentaSel(cuentaSel===t?null:t)} style={{
@@ -322,13 +337,13 @@ export default function ZabuContabilidad() {
                   border:`0.5px solid ${cuentaSel===t?tc.border:'var(--border)'}`,
                   color:cuentaSel===t?tc.color:'var(--text3)',
                   fontWeight:cuentaSel===t?700:400, textTransform:'capitalize',
-                }}>{t}</div>
+                }}>{TIPO_LABEL[t]}</div>
               )
             })}
           </div>
 
           <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-            {plan
+            {planContable
               .filter(c => !cuentaSel || c.tipo===cuentaSel)
               .filter(c => saldos[c.codigo]?.debe>0 || saldos[c.codigo]?.haber>0)
               .map(cuenta => {
@@ -374,6 +389,9 @@ export default function ZabuContabilidad() {
                   </div>
                 )
               })}
+            {planContable.filter(c => (!cuentaSel || c.tipo===cuentaSel) && (saldos[c.codigo]?.debe>0 || saldos[c.codigo]?.haber>0)).length === 0 && (
+              <div className="panel" style={{ textAlign:'center', padding:'30px 0', color:'var(--text4)' }}>Sin movimientos en esta categoría todavía</div>
+            )}
           </div>
         </div>
       )}
@@ -395,7 +413,7 @@ export default function ZabuContabilidad() {
               <div key={h} style={{ fontSize:9, color:'var(--text3)', padding:'0 8px 8px', letterSpacing:0.5, fontWeight:600 }}>{h}</div>
             ))}
           </div>
-          {plan.filter(c=>saldos[c.codigo]?.debe>0||saldos[c.codigo]?.haber>0).map((c,i) => {
+          {planContable.filter(c=>saldos[c.codigo]?.debe>0||saldos[c.codigo]?.haber>0).map((c,i) => {
             const s = saldos[c.codigo]
             const tc = TIPO_COLORS[c.tipo]
             return (
@@ -411,6 +429,9 @@ export default function ZabuContabilidad() {
               </div>
             )
           })}
+          {planContable.filter(c=>saldos[c.codigo]?.debe>0||saldos[c.codigo]?.haber>0).length === 0 && (
+            <div style={{ textAlign:'center', padding:'30px 0', color:'var(--text4)', fontSize:13 }}>Sin movimientos registrados todavía</div>
+          )}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 3fr 1fr 1fr 1fr 1fr', background:'var(--bg4)', marginTop:6, borderRadius:8 }}>
             <div style={{ padding:'10px', gridColumn:'1/3' }}><span style={{ fontSize:13, color:'var(--text)', fontWeight:800 }}>TOTALES</span></div>
             <div style={{ fontSize:14, padding:'10px', color:'var(--gold)', fontWeight:900 }}>{cop(totalDebe)}</div>
@@ -437,7 +458,7 @@ export default function ZabuContabilidad() {
             ].map(grupo => (
               <div key={grupo.titulo} style={{ marginBottom:16 }}>
                 <div style={{ fontSize:11, color:grupo.color, letterSpacing:1, fontWeight:700, marginBottom:8 }}>{grupo.titulo}</div>
-                {plan.filter(c=>c.tipo===grupo.tipo&&saldos[c.codigo]?.saldo>0).map(c => (
+                {planContable.filter(c=>c.tipo===grupo.tipo&&saldos[c.codigo]?.saldo>0).map(c => (
                   <div key={c.codigo} style={{ display:'flex', justifyContent:'space-between', padding:'5px 0', borderBottom:'1px solid rgba(255,255,255,0.03)' }}>
                     <span style={{ fontSize:12, color:'var(--text3)', paddingLeft:12 }}>{c.nombre}</span>
                     <span style={{ fontSize:12, fontWeight:600, color:grupo.color }}>{cop(saldos[c.codigo].saldo)}</span>
@@ -457,13 +478,12 @@ export default function ZabuContabilidad() {
 
             <div style={{ marginBottom:16 }}>
               <div style={{ fontSize:11, color:'var(--gold)', letterSpacing:1, fontWeight:700, marginBottom:8 }}>GASTOS OPERACIONALES</div>
-              {[...new Set(plan.filter(c=>c.tipo==='gasto').map(c=>c.grupo))].map(grp => {
-                const cuentasGrp = plan.filter(c=>c.tipo==='gasto'&&c.grupo===grp&&saldos[c.codigo]?.saldo>0)
+              {[...new Set(planContable.filter(c=>c.tipo==='gasto').map(c=>c.grupo))].map(grp => {
+                const cuentasGrp = planContable.filter(c=>c.tipo==='gasto'&&c.grupo===grp&&saldos[c.codigo]?.saldo>0)
                 if (cuentasGrp.length===0) return null
-                const totalGrp = cuentasGrp.reduce((s,c)=>s+saldos[c.codigo].saldo,0)
                 return (
                   <div key={grp} style={{ marginBottom:10 }}>
-                    <div style={{ fontSize:10, color:'var(--text4)', letterSpacing:1, marginBottom:4, paddingLeft:4 }}>{grp.replace('Gastos operacionales — ','').toUpperCase()}</div>
+                    <div style={{ fontSize:10, color:'var(--text4)', letterSpacing:1, marginBottom:4, paddingLeft:4 }}>{(grp||'').replace(/^\d+\s*/,'').toUpperCase()}</div>
                     {cuentasGrp.map(c => (
                       <div key={c.codigo} style={{ display:'flex', justifyContent:'space-between', padding:'4px 0', borderBottom:'1px solid rgba(255,255,255,0.03)' }}>
                         <span style={{ fontSize:12, color:'var(--text3)', paddingLeft:12 }}>{c.nombre}</span>
@@ -497,12 +517,12 @@ export default function ZabuContabilidad() {
               <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>{new Date().toLocaleDateString('es-CO')}</div>
             </div>
             <div style={{ fontSize:11, color:'var(--blue)', letterSpacing:1, fontWeight:700, marginBottom:10 }}>ACTIVOS</div>
-            {[...new Set(plan.filter(c=>c.tipo==='activo').map(c=>c.grupo))].map(grp => {
-              const cuentasGrp = plan.filter(c=>c.tipo==='activo'&&c.grupo===grp&&saldos[c.codigo]?.saldo>0)
+            {[...new Set(planContable.filter(c=>c.tipo==='activo').map(c=>c.grupo))].map(grp => {
+              const cuentasGrp = planContable.filter(c=>c.tipo==='activo'&&c.grupo===grp&&saldos[c.codigo]?.saldo>0)
               if (cuentasGrp.length===0) return null
               return (
                 <div key={grp} style={{ marginBottom:10 }}>
-                  <div style={{ fontSize:10, color:'var(--text4)', letterSpacing:1, marginBottom:4 }}>{grp.toUpperCase()}</div>
+                  <div style={{ fontSize:10, color:'var(--text4)', letterSpacing:1, marginBottom:4 }}>{(grp||'').toUpperCase()}</div>
                   {cuentasGrp.map(c => (
                     <div key={c.codigo} style={{ display:'flex', justifyContent:'space-between', padding:'4px 8px', borderBottom:'1px solid rgba(255,255,255,0.03)' }}>
                       <span style={{ fontSize:12, color:'var(--text3)' }}>{c.nombre}</span>
@@ -512,6 +532,9 @@ export default function ZabuContabilidad() {
                 </div>
               )
             })}
+            {planContable.filter(c=>c.tipo==='activo'&&saldos[c.codigo]?.saldo>0).length === 0 && (
+              <div style={{ fontSize:12, color:'var(--text4)', padding:'8px', textAlign:'center' }}>Sin activos registrados</div>
+            )}
             <div style={{ display:'flex', justifyContent:'space-between', padding:'10px 8px', borderTop:'2px solid var(--border)', marginTop:4 }}>
               <span style={{ fontSize:14, fontWeight:800, color:'var(--text)' }}>TOTAL ACTIVOS</span>
               <span style={{ fontSize:16, fontWeight:900, color:'var(--blue)' }}>{cop(totalActivos)}</span>
@@ -521,13 +544,13 @@ export default function ZabuContabilidad() {
           <div className="panel">
             <div style={{ height:60, marginBottom:14 }} />
             <div style={{ fontSize:11, color:'var(--red)', letterSpacing:1, fontWeight:700, marginBottom:10 }}>PASIVOS</div>
-            {plan.filter(c=>c.tipo==='pasivo'&&saldos[c.codigo]?.saldo>0).map(c => (
+            {planContable.filter(c=>c.tipo==='pasivo'&&saldos[c.codigo]?.saldo>0).map(c => (
               <div key={c.codigo} style={{ display:'flex', justifyContent:'space-between', padding:'4px 8px', borderBottom:'1px solid rgba(255,255,255,0.03)' }}>
                 <span style={{ fontSize:12, color:'var(--text3)' }}>{c.nombre}</span>
                 <span style={{ fontSize:12, fontWeight:600, color:'var(--red)' }}>{cop(saldos[c.codigo].saldo)}</span>
               </div>
             ))}
-            {plan.filter(c=>c.tipo==='pasivo').every(c=>!saldos[c.codigo]?.saldo) && (
+            {planContable.filter(c=>c.tipo==='pasivo').every(c=>!saldos[c.codigo]?.saldo) && (
               <div style={{ fontSize:12, color:'var(--text4)', padding:'8px', textAlign:'center' }}>Sin pasivos registrados</div>
             )}
             <div style={{ display:'flex', justifyContent:'space-between', padding:'8px', borderTop:'1px solid var(--border)', marginBottom:16 }}>
@@ -536,7 +559,7 @@ export default function ZabuContabilidad() {
             </div>
 
             <div style={{ fontSize:11, color:'#9C27B0', letterSpacing:1, fontWeight:700, marginBottom:10 }}>PATRIMONIO</div>
-            {plan.filter(c=>c.tipo==='patrimonio'&&saldos[c.codigo]?.saldo>0).map(c => (
+            {planContable.filter(c=>c.tipo==='patrimonio'&&saldos[c.codigo]?.saldo>0).map(c => (
               <div key={c.codigo} style={{ display:'flex', justifyContent:'space-between', padding:'4px 8px', borderBottom:'1px solid rgba(255,255,255,0.03)' }}>
                 <span style={{ fontSize:12, color:'var(--text3)' }}>{c.nombre}</span>
                 <span style={{ fontSize:12, fontWeight:600, color:'#9C27B0' }}>{cop(saldos[c.codigo].saldo)}</span>
@@ -569,27 +592,64 @@ export default function ZabuContabilidad() {
 
       {/* ── PLAN DE CUENTAS ── */}
       {tab === 'plan' && (
-        <div className="panel">
-          <div className="panel-title">Plan de cuentas — {plan.length} cuentas activas</div>
-          {['activo','pasivo','patrimonio','ingreso','costo','gasto'].map(tipo => {
-            const tc = TIPO_COLORS[tipo]
-            const cuentas = plan.filter(c=>c.tipo===tipo)
-            if (cuentas.length===0) return null
-            return (
-              <div key={tipo} style={{ marginBottom:20 }}>
-                <div style={{ fontSize:11, padding:'4px 12px', borderRadius:6, display:'inline-block', background:tc.bg, color:tc.color, border:`0.5px solid ${tc.border}`, fontWeight:700, letterSpacing:1, marginBottom:10, textTransform:'uppercase' }}>{tipo}</div>
-                {cuentas.map((c,i) => (
-                  <div key={c.codigo} style={{ display:'flex', alignItems:'center', gap:12, padding:'7px 10px', background:i%2===0?'transparent':'rgba(255,255,255,0.02)', borderBottom:'1px solid rgba(255,255,255,0.03)' }}>
-                    <div style={{ fontSize:12, fontWeight:700, color:tc.color, minWidth:44 }}>{c.codigo}</div>
-                    <div style={{ fontSize:12, color:'var(--text2)', flex:1 }}>{c.nombre}</div>
-                    <div style={{ fontSize:10, color:'var(--text4)' }}>{c.grupo.replace('Gastos operacionales — ','')}</div>
-                    <div style={{ fontSize:10, padding:'1px 7px', borderRadius:6, background:'rgba(255,255,255,0.04)', color:'var(--text3)' }}>{c.naturaleza==='debito'?'Débito':'Crédito'}</div>
-                  </div>
-                ))}
+        <>
+          <div className="panel" style={{ marginBottom:14 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+              <div className="panel-title" style={{ marginBottom:0 }}>Plan de cuentas — {planActivo.length} cuentas activas (Régimen Simple)</div>
+            </div>
+            {['activo','pasivo','patrimonio','ingreso','costo','gasto','orden_deudora','orden_acreedora'].map(tipo => {
+              const tc = TIPO_COLORS[tipo]
+              const cuentas = planActivo.filter(c=>c.tipo===tipo)
+              if (cuentas.length===0) return null
+              return (
+                <div key={tipo} style={{ marginBottom:20, marginTop:14 }}>
+                  <div style={{ fontSize:11, padding:'4px 12px', borderRadius:6, display:'inline-block', background:tc.bg, color:tc.color, border:`0.5px solid ${tc.border}`, fontWeight:700, letterSpacing:1, marginBottom:10 }}>{TIPO_LABEL[tipo].toUpperCase()}</div>
+                  {cuentas.map((c,i) => (
+                    <div key={c.codigo} style={{ display:'flex', alignItems:'center', gap:12, padding:'7px 10px', background:i%2===0?'transparent':'rgba(255,255,255,0.02)', borderBottom:'1px solid rgba(255,255,255,0.03)' }}>
+                      <div style={{ fontSize:12, fontWeight:700, color:tc.color, minWidth:44 }}>{c.codigo}</div>
+                      <div style={{ fontSize:12, color:'var(--text2)', flex:1 }}>{c.nombre}</div>
+                      <div style={{ fontSize:10, color:'var(--text4)' }}>{(c.grupo||'').replace(/^\d+\s*/,'')}</div>
+                      <div style={{ fontSize:10, padding:'1px 7px', borderRadius:6, background:'rgba(255,255,255,0.04)', color:'var(--text3)' }}>{c.naturaleza==='debito'?'Débito':'Crédito'}</div>
+                    </div>
+                  ))}
+                </div>
+              )
+            })}
+          </div>
+
+          <div className="panel" style={{ border:'1px dashed var(--border)' }}>
+            <div onClick={() => setVerInactivas(v=>!v)} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', cursor:'pointer' }}>
+              <div className="panel-title" style={{ marginBottom:0 }}>
+                Cuentas disponibles para Régimen Ordinario (inactivas) — {planInactivo.length} cuentas
               </div>
-            )
-          })}
-        </div>
+              <div style={{ fontSize:12, color:'var(--text3)' }}>{verInactivas ? '▲ Ocultar' : '▼ Mostrar'}</div>
+            </div>
+            <div style={{ fontSize:11, color:'var(--text3)', marginTop:6 }}>
+              Estas cuentas existen en el catálogo pero no participan en los cálculos mientras operes en Régimen Simple. Cuando cambies de régimen, se activan sin perder ninguna estructura.
+            </div>
+            {verInactivas && (
+              <div style={{ marginTop:14 }}>
+                {['activo','pasivo','patrimonio','ingreso','costo','gasto','orden_deudora','orden_acreedora'].map(tipo => {
+                  const tc = TIPO_COLORS[tipo]
+                  const cuentas = planInactivo.filter(c=>c.tipo===tipo)
+                  if (cuentas.length===0) return null
+                  return (
+                    <div key={tipo} style={{ marginBottom:16 }}>
+                      <div style={{ fontSize:11, padding:'4px 12px', borderRadius:6, display:'inline-block', background:tc.bg, color:tc.color, border:`0.5px solid ${tc.border}`, fontWeight:700, letterSpacing:1, marginBottom:8, opacity:0.7 }}>{TIPO_LABEL[tipo].toUpperCase()}</div>
+                      {cuentas.map((c,i) => (
+                        <div key={c.codigo} style={{ display:'flex', alignItems:'center', gap:12, padding:'6px 10px', opacity:0.55, borderBottom:'1px solid rgba(255,255,255,0.03)' }}>
+                          <div style={{ fontSize:11, fontWeight:700, color:tc.color, minWidth:44 }}>{c.codigo}</div>
+                          <div style={{ fontSize:11, color:'var(--text3)', flex:1 }}>{c.nombre}</div>
+                          <div style={{ fontSize:9, color:'var(--text4)' }}>{(c.grupo||'').replace(/^\d+\s*/,'')}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        </>
       )}
 
       {/* ── MODAL NUEVO ASIENTO ── */}
@@ -618,7 +678,7 @@ export default function ZabuContabilidad() {
               <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 3fr 1fr 1fr 28px', gap:6, marginBottom:6 }}>
                 <select value={p.codigo} onChange={e=>updatePartida(i,'codigo',e.target.value)} style={{ ...inputStyle, padding:'7px 8px', marginTop:0 }}>
                   <option value="">—</option>
-                  {plan.map(c => <option key={c.codigo} value={c.codigo}>{c.codigo}</option>)}
+                  {planActivo.filter(c=>TIPOS_BALANCE.includes(c.tipo)).map(c => <option key={c.codigo} value={c.codigo}>{c.codigo} · {c.nombre}</option>)}
                 </select>
                 <div style={{ padding:'8px 10px', borderRadius:8, background:'rgba(255,255,255,0.03)', border:'1px solid var(--border)', fontSize:11, color:'var(--text3)', display:'flex', alignItems:'center' }}>
                   {p.nombre || '—'}
