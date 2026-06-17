@@ -64,8 +64,8 @@ const NAV_ZABU = [
   {
     seccion:'Producto',
     items:[
-      { id:'recetario', label:'Recetario' },
-      { id:'peps',      label:'PEPs'      },
+      { id:'recetario',    label:'Recetario'      },
+      { id:'fichatecnica', label:'Ficha Técnica'  },
     ]
   },
   {
