@@ -1,209 +1,432 @@
-import { useState } from 'react'
-const RECETAS = [
-  {
-    id: 'zabu',
-    nombre: 'ZABÚ',
-    emoji: '🌭',
-    descripcion: 'El producto insignia. Sin queso. El equivalente al Big Mac de ZABÚ.',
-    tiempo: '20-30 seg',
-    ingredientes: [
-      { nombre: 'ZaBun™ (pan top-split)',      cantidad: '1 ud',        gramaje: '~160g',  costo: 1000, proceso: 'Mantequilla ~3g por lado · plancha 180-200°C · 35-45 seg · color dorado miel' },
-      { nombre: 'TurkeyLink™ (salchicha pavo)',cantidad: '1 ud',        gramaje: '80-100g', costo: 3700, proceso: 'Plancha 180-200°C · 90-120 seg · girar cada 30 seg · no perforar' },
-      { nombre: 'Cream Code™',                cantidad: '1 pulsación', gramaje: '26ml',    costo: 700,  proceso: 'Dispensador One Shot · una pulsación · baño uniforme · nunca zigzag' },
-      { nombre: 'Tocineta Crispy',            cantidad: '1 porción',   gramaje: '15g',     costo: 600,  proceso: 'Cuchara Z15 · distribuir uniformemente · acento visual crujiente' },
-      { nombre: 'Piña Caramelizada',          cantidad: '1 porción',   gramaje: '20g',     costo: 400,  proceso: 'Cuchara Z20 · toque final · opcional · no debe dominar' },
-      { nombre: 'Bandeja boat kraft',         cantidad: '1 ud',        gramaje: '—',       costo: 400,  proceso: 'Venta directa · papel encerado interior · sticker ZABÚ' },
-      { nombre: 'Papel encerado',             cantidad: '1 lámina',    gramaje: '—',       costo: 100,  proceso: 'Base interior de la bandeja' },
-      { nombre: 'Servilletas x6',             cantidad: '6 uds',       gramaje: '—',       costo: 240,  proceso: 'Entrega al cliente con el pedido' },
-      { nombre: 'Sticker ZABÚ',               cantidad: '1 ud',        gramaje: '—',       costo: 120,  proceso: 'Sella la bandeja o la bolsa de domicilio' },
-    ],
-    pasos: [
-      { n:1, titulo:'ZaBun™ — ZaBun Butter Seal™',  desc:'Aplicar mantequilla ~3g por lado. Plancha 180-200°C. Sellar 35-45 seg por lado. Objetivo: color dorado miel, micro caramelización, interior suave.' },
-      { n:2, titulo:'TurkeyLink™ — cocción',         desc:'Plancha 180-200°C. 90-120 seg total. Girar cada 30 seg. No perforar. Exterior brillante con marcas suaves. Interior jugoso.' },
-      { n:3, titulo:'Armar base',                    desc:'Abrir ZaBun™ por apertura superior. Colocar TurkeyLink™ centrada. Debe sobresalir 0.5-1 cm por cada extremo.' },
-      { n:4, titulo:'Tocineta Crispy — Cuchara Z15', desc:'15g exactos. Deslizar sobre la salchicha en una sola pasada. Distribución uniforme. Acento visual crujiente.' },
-      { n:5, titulo:'Piña ZABÚ — Cuchara Z20',       desc:'20g exactos. Toque final opcional. Poca cantidad. Complementa el sabor, no lo domina.' },
-      { n:6, titulo:'Cream Code™ — One Shot',        desc:'Una sola pulsación = 26ml. Baño uniforme y elegante. Cobertura homogénea. Nunca en zigzag ni desordenada.' },
-      { n:7, titulo:'Empacar y entregar',            desc:'Papel encerado en bandeja boat. Colocar el perro. Sticker ZABÚ. 6 servilletas. Entregar.' },
-    ]
-  },
-  {
-    id: 'cheezabu',
-    nombre: 'CheeZabú',
-    emoji: '🧀',
-    descripcion: 'Con queso cheddar derretido. $2.000 más que el ZABÚ. Máxima indulgencia.',
-    tiempo: '20-35 seg',
-    ingredientes: [
-      { nombre: 'ZaBun™ (pan top-split)',      cantidad: '1 ud',        gramaje: '~160g',  costo: 1000, proceso: 'Mismo proceso que ZABÚ · ZaBun Butter Seal™' },
-      { nombre: 'TurkeyLink™ (salchicha pavo)',cantidad: '1 ud',        gramaje: '80-100g', costo: 3700, proceso: 'Mismo proceso que ZABÚ' },
-      { nombre: 'Queso Cheddar',              cantidad: '1 porción',   gramaje: '~20g',    costo: 1000, proceso: 'Aplicar sobre la salchicha caliente · dejar derretir antes del Cream Code' },
-      { nombre: 'Cream Code™',                cantidad: '1 pulsación', gramaje: '26ml',    costo: 700,  proceso: 'Dispensador One Shot · sobre el queso ya derretido' },
-      { nombre: 'Tocineta Crispy',            cantidad: '1 porción',   gramaje: '15g',     costo: 600,  proceso: 'Cuchara Z15 · sobre el queso y la Cream Code' },
-      { nombre: 'Piña Caramelizada',          cantidad: '1 porción',   gramaje: '20g',     costo: 400,  proceso: 'Cuchara Z20 · opcional · toque final' },
-      { nombre: 'Bandeja boat kraft',         cantidad: '1 ud',        gramaje: '—',       costo: 400,  proceso: 'Venta directa · papel encerado interior' },
-      { nombre: 'Papel encerado',             cantidad: '1 lámina',    gramaje: '—',       costo: 100,  proceso: 'Base interior de la bandeja' },
-      { nombre: 'Servilletas x6',             cantidad: '6 uds',       gramaje: '—',       costo: 240,  proceso: 'Entrega al cliente' },
-      { nombre: 'Sticker ZABÚ',               cantidad: '1 ud',        gramaje: '—',       costo: 120,  proceso: 'Sella la bandeja' },
-    ],
-    pasos: [
-      { n:1, titulo:'ZaBun™ — ZaBun Butter Seal™',  desc:'Mismo proceso que ZABÚ. Mantequilla, plancha 180-200°C, 35-45 seg por lado, dorado miel.' },
-      { n:2, titulo:'TurkeyLink™ — cocción',         desc:'Mismo proceso que ZABÚ. Plancha 180-200°C, 90-120 seg, girar cada 30 seg.' },
-      { n:3, titulo:'Armar base + queso',            desc:'Abrir ZaBun™. Colocar TurkeyLink™. Aplicar queso cheddar (~20g) sobre la salchicha caliente. Esperar 10-15 seg para que derrita.' },
-      { n:4, titulo:'Tocineta Crispy — Cuchara Z15', desc:'15g exactos sobre el queso. Distribución uniforme.' },
-      { n:5, titulo:'Piña ZABÚ — Cuchara Z20',       desc:'20g opcionales. Toque final. No domina.' },
-      { n:6, titulo:'Cream Code™ — One Shot',        desc:'Una sola pulsación = 26ml. Baño uniforme sobre todo. El queso ya derretido queda debajo.' },
-      { n:7, titulo:'Empacar y entregar',            desc:'Papel encerado · bandeja boat · sticker · 6 servilletas.' },
-    ]
-  },
-]
+// @ts-nocheck
+import { useState, useEffect } from 'react'
+import { supabase } from '../../lib/supabase'
 
-function cop(n) {
-  return '$' + Math.round(n).toLocaleString('es-CO')
+function cop(n) { return '$' + Math.round(Math.abs(n||0)).toLocaleString('es-CO') }
+
+const iStyle = {
+  width:'100%', padding:'8px 12px', borderRadius:8,
+  background:'rgba(255,255,255,0.06)', border:'1px solid var(--border)',
+  color:'var(--text)', fontSize:12, fontFamily:'inherit', outline:'none', marginTop:4,
+}
+const taStyle = { ...iStyle, resize:'none', lineHeight:1.6 }
+
+const CATEGORIAS = ['salsa', 'topping', 'proteina', 'pan', 'queso', 'empaque', 'bebida']
+const CATEGORIA_LABEL = { salsa:'Salsa', topping:'Topping', proteina:'Proteína', pan:'Pan', queso:'Queso', empaque:'Empaque', bebida:'Bebida' }
+
+function diasVence(fecha) {
+  if (!fecha) return null
+  const hoy = new Date(); hoy.setHours(0,0,0,0)
+  const venc = new Date(fecha)
+  return Math.ceil((venc - hoy) / (1000 * 60 * 60 * 24))
 }
 
-export default function ZabuRecetario() {
-  const [sel, setSel] = useState(RECETAS[0])
-  const [infoAbierta, setInfoAbierta] = useState(null)
+// ════════════════════════════════════════════════════════════════════════════
+// MOTOR DE PRODUCCIÓN — descuenta insumos por FIFO real, crea lote del resultado
+// ════════════════════════════════════════════════════════════════════════════
+async function ejecutarProduccion({ receta, ingredientes, factor, lotesDisponibles, fechaVencimientoResultado, ubicacion, responsable }) {
+  const consumos = []
+  let costoTotal = 0
 
-  const costoTotal = sel.ingredientes.reduce((s, i) => s + i.costo, 0)
-  const precioVenta = sel.id === 'zabu' ? 17000 : 19000
-  const utilidad = precioVenta - costoTotal
-  const margen = ((utilidad / precioVenta) * 100).toFixed(1)
+  for (const ing of ingredientes) {
+    const necesario = ing.cantidad * factor
+    let restante = necesario
+
+    // Lotes activos de este insumo, ordenados FIFO (más próximo a vencer primero)
+    const lotesInsumo = lotesDisponibles
+      .filter(l => l.producto_nombre === ing.insumo_nombre && l.estado === 'activo' && l.cantidad_actual > 0)
+      .map(l => ({ ...l, dias: diasVence(l.fecha_vencimiento) }))
+      .sort((a, b) => {
+        if (a.dias === null && b.dias === null) return 0
+        if (a.dias === null) return 1
+        if (b.dias === null) return -1
+        return a.dias - b.dias
+      })
+
+    const stockDisponible = lotesInsumo.reduce((s, l) => s + parseFloat(l.cantidad_actual), 0)
+    if (stockDisponible < necesario) {
+      return { error: `Stock insuficiente de "${ing.insumo_nombre}": necesitas ${necesario} ${ing.unidad}, hay ${stockDisponible} ${ing.unidad}` }
+    }
+
+    for (const lote of lotesInsumo) {
+      if (restante <= 0) break
+      const disponibleEnLote = parseFloat(lote.cantidad_actual)
+      const aDescontar = Math.min(disponibleEnLote, restante)
+      const nuevaCantidad = disponibleEnLote - aDescontar
+
+      await supabase.from('zabu_lotes').update({
+        cantidad_actual: nuevaCantidad,
+        estado: nuevaCantidad === 0 ? 'agotado' : 'activo',
+      }).eq('id', lote.id)
+
+      const costoConsumo = aDescontar * lote.costo_unitario
+      costoTotal += costoConsumo
+      consumos.push({ insumo: ing.insumo_nombre, lote_id: lote.id, numero_lote: lote.numero_lote, cantidad_descontada: aDescontar, unidad: ing.unidad, costo: costoConsumo })
+      restante -= aDescontar
+    }
+  }
+
+  // Crear el lote nuevo del producto preparado
+  const cantidadProducida = receta.rendimiento * factor
+  const { data: loteNuevo, error: errLote } = await supabase.from('zabu_lotes').insert({
+    producto_nombre: receta.nombre, categoria: receta.categoria,
+    cantidad_inicial: cantidadProducida, cantidad_actual: cantidadProducida,
+    unidad: receta.unidad_rendimiento, costo_unitario: Math.round(costoTotal / cantidadProducida) || 0,
+    proveedor: 'Producción propia', ubicacion: ubicacion || 'C01',
+    fecha_compra: new Date().toISOString().split('T')[0],
+    fecha_vencimiento: fechaVencimientoResultado || null,
+    estado: 'activo', notas: `Producido desde receta: ${receta.nombre}`,
+  }).select().single()
+
+  if (errLote) return { error: 'Error al crear el lote del producto: ' + errLote.message }
+
+  await supabase.from('zabu_producciones').insert({
+    receta_id: receta.id, receta_nombre: receta.nombre,
+    cantidad_producida: cantidadProducida, unidad: receta.unidad_rendimiento,
+    lote_resultado_id: loteNuevo.id, costo_total: Math.round(costoTotal),
+    insumos_consumidos: consumos, responsable: responsable || 'Sin asignar',
+  })
+
+  return { ok: true, loteNuevo, costoTotal, consumos }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MODAL: Crear / Editar receta
+// ════════════════════════════════════════════════════════════════════════════
+function ModalReceta({ receta, productosExistentes, onClose, onSaved }) {
+  const [form, setForm] = useState(receta || {
+    nombre:'', categoria:'salsa', rendimiento:1, unidad_rendimiento:'litros', tiempo_preparacion:'', instrucciones:'',
+  })
+  const [ingredientes, setIngredientes] = useState([])
+  const [loading, setLoading] = useState(!!receta)
+
+  useEffect(() => { if (receta) cargarIngredientes() }, [receta])
+
+  const cargarIngredientes = async () => {
+    const { data } = await supabase.from('zabu_receta_ingredientes').select('*').eq('receta_id', receta.id).order('orden')
+    setIngredientes(data || [])
+    setLoading(false)
+  }
+
+  const agregarIngrediente = () => setIngredientes(prev => [...prev, { insumo_nombre:'', cantidad:'', unidad:'unidades', _nuevo:true }])
+  const actualizarIngrediente = (i, campo, valor) => setIngredientes(prev => prev.map((ing, idx) => idx === i ? { ...ing, [campo]: valor } : ing))
+  const quitarIngrediente = (i) => setIngredientes(prev => prev.filter((_, idx) => idx !== i))
+
+  const guardar = async () => {
+    if (!form.nombre || ingredientes.length === 0) return
+    let recetaId = receta?.id
+
+    if (recetaId) {
+      await supabase.from('zabu_recetas').update({ ...form, updated_at: new Date().toISOString() }).eq('id', recetaId)
+      await supabase.from('zabu_receta_ingredientes').delete().eq('receta_id', recetaId)
+    } else {
+      const { data, error } = await supabase.from('zabu_recetas').insert(form).select().single()
+      if (error) { alert('Error: ' + error.message); return }
+      recetaId = data.id
+    }
+
+    const ingredientesInsert = ingredientes.filter(i => i.insumo_nombre && i.cantidad).map((ing, idx) => ({
+      receta_id: recetaId, insumo_nombre: ing.insumo_nombre, cantidad: parseFloat(ing.cantidad), unidad: ing.unidad, orden: idx,
+    }))
+    if (ingredientesInsert.length > 0) await supabase.from('zabu_receta_ingredientes').insert(ingredientesInsert)
+
+    onSaved()
+  }
 
   return (
-    <div className="grid-1-2" style={{ gap:16, alignItems:'start' }}>
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'flex-start', justifyContent:'center', zIndex:100, padding:20, overflowY:'auto' }}>
+      <div style={{ background:'var(--bg2)', borderRadius:16, padding:28, width:'100%', maxWidth:560, border:'1px solid var(--border)', margin:'auto' }}>
+        <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:20 }}>{receta ? 'Editar receta' : 'Nueva receta'}</div>
 
-      {/* Panel izquierdo */}
-      <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-
-        {/* Selector */}
-        <div className="panel">
-          <div className="panel-title">Recetas activas</div>
-          {RECETAS.map(r => {
-            const ct = r.ingredientes.reduce((s,i) => s+i.costo, 0)
-            const pv = r.id === 'zabu' ? 17000 : 19000
-            return (
-              <div key={r.id} onClick={() => { setSel(r); setInfoAbierta(null) }} style={{
-                padding: '12px 14px', borderRadius: 10, cursor: 'pointer', marginBottom: 8,
-                background: sel.id === r.id ? 'var(--gold-dim)' : 'rgba(255,255,255,0.02)',
-                border: `1px solid ${sel.id === r.id ? 'var(--gold-border)' : 'var(--border)'}`,
-                transition: 'all .15s',
-              }}>
-                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:4 }}>
-                  <span style={{ fontSize:22 }}>{r.emoji}</span>
-                  <span style={{ fontSize:14, fontWeight:700, color: sel.id === r.id ? 'var(--gold)' : 'var(--text)' }}>{r.nombre}</span>
-                </div>
-                <div style={{ fontSize:11, color:'var(--text3)', marginBottom:8 }}>{r.descripcion}</div>
-                <div style={{ display:'flex', justifyContent:'space-between', fontSize:12 }}>
-                  <span style={{ color:'var(--text3)' }}>Costo: <span style={{ color:'var(--text2)', fontWeight:600 }}>{cop(ct)}</span></span>
-                  <span style={{ color:'var(--gold)', fontWeight:700 }}>{cop(pv)}</span>
-                </div>
-              </div>
-            )
-          })}
+        <div className="grid-2" style={{ gap:10, marginBottom:12 }}>
+          <div style={{ gridColumn:'1 / -1' }}>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Nombre del producto preparado</div>
+            <input type="text" value={form.nombre} onChange={e=>setForm(p=>({...p,nombre:e.target.value}))} placeholder="Ej: Cream Code™, Salsa Sriracha Casera..." style={iStyle} />
+          </div>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Categoría</div>
+            <select value={form.categoria} onChange={e=>setForm(p=>({...p,categoria:e.target.value}))} style={iStyle}>
+              {CATEGORIAS.map(c => <option key={c} value={c}>{CATEGORIA_LABEL[c]}</option>)}
+            </select>
+          </div>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Tiempo de preparación</div>
+            <input type="text" value={form.tiempo_preparacion||''} onChange={e=>setForm(p=>({...p,tiempo_preparacion:e.target.value}))} placeholder="Ej: 30 min" style={iStyle} />
+          </div>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Rendimiento por tanda</div>
+            <input type="number" value={form.rendimiento} onChange={e=>setForm(p=>({...p,rendimiento:parseFloat(e.target.value)||0}))} style={iStyle} />
+          </div>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Unidad de rendimiento</div>
+            <select value={form.unidad_rendimiento} onChange={e=>setForm(p=>({...p,unidad_rendimiento:e.target.value}))} style={iStyle}>
+              <option value="litros">Litros</option><option value="kg">Kilogramos</option><option value="g">Gramos</option><option value="ml">Mililitros</option><option value="unidades">Unidades</option>
+            </select>
+          </div>
         </div>
 
-        {/* PEP resumen */}
-        <div className="panel">
-          <div className="panel-title">PEP — {sel.nombre}</div>
-          {[
-            { label:'Ingredientes',    val:sel.ingredientes.length + ' items',  color:'var(--text2)' },
-            { label:'Costo total',     val:cop(costoTotal),                      color:'var(--text2)' },
-            { label:'Precio de venta', val:cop(precioVenta),                     color:'var(--gold)'  },
-            { label:'Utilidad',        val:cop(utilidad),                        color:'var(--green)' },
-            { label:'Tiempo',          val:sel.tiempo,                           color:'var(--text2)' },
-          ].map(r => (
-            <div key={r.label} style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid var(--border)' }}>
-              <span style={{ fontSize:12, color:'var(--text3)' }}>{r.label}</span>
-              <span style={{ fontSize:13, fontWeight:600, color:r.color }}>{r.val}</span>
+        <div style={{ marginBottom:16 }}>
+          <div style={{ fontSize:11, color:'var(--text3)' }}>Instrucciones (opcional)</div>
+          <textarea value={form.instrucciones||''} onChange={e=>setForm(p=>({...p,instrucciones:e.target.value}))} style={{...taStyle,height:50}} />
+        </div>
+
+        <div style={{ marginBottom:16 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
+            <div style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>Ingredientes (por tanda estándar)</div>
+            <div onClick={agregarIngrediente} style={{ cursor:'pointer', fontSize:11, color:'var(--gold)' }}>+ agregar ingrediente</div>
+          </div>
+          <div style={{ fontSize:10, color:'var(--text4)', marginBottom:8 }}>El nombre debe coincidir exactamente con el producto registrado en Inventario para que el descuento automático funcione.</div>
+          {loading ? <div style={{ fontSize:12, color:'var(--text3)', padding:'10px 0' }}>Cargando...</div>
+          : ingredientes.length === 0 ? <div style={{ fontSize:12, color:'var(--text4)', padding:'10px 0' }}>Sin ingredientes — agrega al menos uno</div>
+          : ingredientes.map((ing, i) => (
+            <div key={i} style={{ display:'flex', gap:8, alignItems:'center', marginBottom:6 }}>
+              <input type="text" list="productos-existentes" value={ing.insumo_nombre} onChange={e=>actualizarIngrediente(i,'insumo_nombre',e.target.value)} placeholder="Nombre del insumo" style={{...iStyle,marginTop:0,flex:1.5}} />
+              <input type="number" value={ing.cantidad} onChange={e=>actualizarIngrediente(i,'cantidad',e.target.value)} placeholder="Cant." style={{...iStyle,marginTop:0,width:80}} />
+              <select value={ing.unidad} onChange={e=>actualizarIngrediente(i,'unidad',e.target.value)} style={{...iStyle,marginTop:0,width:100}}>
+                <option value="unidades">uds</option><option value="kg">kg</option><option value="g">g</option><option value="litros">L</option><option value="ml">ml</option>
+              </select>
+              <div onClick={()=>quitarIngrediente(i)} style={{ cursor:'pointer', color:'var(--text4)', fontSize:14 }}>×</div>
             </div>
           ))}
-          <div style={{ display:'flex', justifyContent:'space-between', paddingTop:10, marginTop:2 }}>
-            <span style={{ fontSize:12, color:'var(--text3)' }}>Margen</span>
-            <span style={{ fontSize:18, fontWeight:800, color: parseFloat(margen) >= 55 ? 'var(--green)' : 'var(--gold)' }}>{margen}%</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Panel derecho */}
-      <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-
-        {/* Header receta */}
-        <div className="panel">
-          <div style={{ display:'flex', alignItems:'flex-start', gap:16 }}>
-            <div style={{ fontSize:52 }}>{sel.emoji}</div>
-            <div style={{ flex:1 }}>
-              <div style={{ fontSize:22, fontWeight:800, color:'var(--text)', letterSpacing:-0.5, marginBottom:4 }}>{sel.nombre}</div>
-              <div style={{ fontSize:12, color:'var(--text3)', lineHeight:1.6, marginBottom:14 }}>{sel.descripcion}</div>
-              <div style={{ display:'flex', gap:24 }}>
-                {[
-                  { label:'INGREDIENTES', val:sel.ingredientes.length },
-                  { label:'PASOS',        val:sel.pasos.length        },
-                  { label:'TIEMPO',       val:sel.tiempo              },
-                  { label:'MARGEN',       val:margen+'%'              },
-                ].map(s => (
-                  <div key={s.label}>
-                    <div style={{ fontSize:9, color:'var(--text3)', letterSpacing:1, marginBottom:3 }}>{s.label}</div>
-                    <div style={{ fontSize:16, fontWeight:700, color: s.label === 'MARGEN' ? 'var(--green)' : 'var(--text)' }}>{s.val}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+          <datalist id="productos-existentes">
+            {productosExistentes.map(p => <option key={p} value={p} />)}
+          </datalist>
         </div>
 
-        {/* Ingredientes */}
-        <div className="panel">
-          <div className="panel-title">Ingredientes y PEPs — toca para ver el proceso</div>
-          <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr', marginBottom:6 }}>
-            {['Ingrediente','Cantidad','Gramaje','Costo'].map(h => (
-              <div key={h} style={{ fontSize:9, color:'var(--text3)', padding:'0 10px 8px', letterSpacing:0.5, fontWeight:600 }}>{h}</div>
-            ))}
-          </div>
-          {sel.ingredientes.map((ing, i) => (
-            <div key={i}>
-              <div onClick={() => setInfoAbierta(infoAbierta === i ? null : i)} style={{
-                display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr', cursor:'pointer',
-                background: infoAbierta === i ? 'rgba(201,168,76,0.05)' : i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)',
-                borderLeft: infoAbierta === i ? '2px solid var(--gold)' : '2px solid transparent',
-                transition: 'all .15s',
-              }}>
-                {[ing.nombre, ing.cantidad, ing.gramaje, cop(ing.costo)].map((val, j) => (
-                  <div key={j} style={{ fontSize:12, padding:'9px 10px', borderBottom:'1px solid rgba(255,255,255,0.03)', color: j===3 ? 'var(--gold)' : j===0 ? 'var(--text2)' : 'var(--text3)', fontWeight: j===3 ? 700 : j===0 ? 500 : 400 }}>{val}</div>
-                ))}
-              </div>
-              {infoAbierta === i && (
-                <div style={{ padding:'10px 12px 10px 14px', background:'rgba(201,168,76,0.05)', borderBottom:'1px solid rgba(255,255,255,0.04)', fontSize:11, color:'var(--text3)', lineHeight:1.7 }}>
-                  <span style={{ color:'var(--gold)', fontWeight:600 }}>Proceso: </span>{ing.proceso}
-                </div>
-              )}
-            </div>
-          ))}
-          <div style={{ display:'flex', justifyContent:'flex-end', padding:'10px 10px 0', borderTop:'1px solid var(--border)', marginTop:4 }}>
-            <span style={{ fontSize:12, color:'var(--text3)', marginRight:16 }}>Costo total</span>
-            <span style={{ fontSize:16, fontWeight:800, color:'var(--gold)' }}>{cop(costoTotal)}</span>
-          </div>
-        </div>
-
-        {/* Pasos */}
-        <div className="panel">
-          <div className="panel-title">Línea de ensamblaje — proceso paso a paso</div>
-          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-            {sel.pasos.map((p) => (
-              <div key={p.n} style={{ display:'flex', gap:14, padding:'12px 14px', borderRadius:10, background:'rgba(255,255,255,0.02)', border:'1px solid var(--border)', transition:'border-color .15s' }}
-                onMouseOver={e => e.currentTarget.style.borderColor='var(--gold-border)'}
-                onMouseOut={e => e.currentTarget.style.borderColor='var(--border)'}
-              >
-                <div style={{ width:28, height:28, borderRadius:8, background:'var(--gold-dim)', display:'flex', alignItems:'center', justifyContent:'center', fontSize:13, fontWeight:800, color:'var(--gold)', flexShrink:0 }}>{p.n}</div>
-                <div>
-                  <div style={{ fontSize:13, fontWeight:700, color:'var(--text)', marginBottom:3 }}>{p.titulo}</div>
-                  <div style={{ fontSize:11, color:'var(--text3)', lineHeight:1.7 }}>{p.desc}</div>
-                </div>
-              </div>
-            ))}
-          </div>
+        <div style={{ display:'flex', gap:10 }}>
+          <button onClick={guardar} disabled={!form.nombre} className="btn-green" style={{ flex:1 }}>{receta ? 'Guardar cambios' : 'Crear receta'}</button>
+          <button onClick={onClose} className="btn">Cancelar</button>
         </div>
       </div>
     </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MODAL: Producir
+// ════════════════════════════════════════════════════════════════════════════
+function ModalProducir({ receta, lotes, onClose, onProducido }) {
+  const [ingredientes, setIngredientes] = useState([])
+  const [factor, setFactor] = useState(1)
+  const [fechaVencimiento, setFechaVencimiento] = useState('')
+  const [ubicacion, setUbicacion] = useState('C01')
+  const [loading, setLoading] = useState(true)
+  const [produciendo, setProduciendo] = useState(false)
+  const [resultado, setResultado] = useState(null)
+
+  useEffect(() => { cargar() }, [])
+
+  const cargar = async () => {
+    const { data } = await supabase.from('zabu_receta_ingredientes').select('*').eq('receta_id', receta.id).order('orden')
+    setIngredientes(data || [])
+    setLoading(false)
+  }
+
+  const stockDisponible = (nombreInsumo) => lotes.filter(l => l.producto_nombre === nombreInsumo && l.estado === 'activo').reduce((s,l)=>s+parseFloat(l.cantidad_actual),0)
+
+  const verificarStock = ingredientes.map(ing => {
+    const necesario = ing.cantidad * factor
+    const disponible = stockDisponible(ing.insumo_nombre)
+    return { ...ing, necesario, disponible, suficiente: disponible >= necesario }
+  })
+  const hayFaltantes = verificarStock.some(v => !v.suficiente)
+
+  const producir = async () => {
+    setProduciendo(true)
+    const res = await ejecutarProduccion({
+      receta, ingredientes, factor, lotesDisponibles: lotes,
+      fechaVencimientoResultado: fechaVencimiento, ubicacion, responsable: 'Luis Restrepo',
+    })
+    setProduciendo(false)
+    if (res.error) { setResultado({ ok:false, msg:res.error }); return }
+    setResultado({ ok:true, msg:`✅ Se produjeron ${receta.rendimiento*factor} ${receta.unidad_rendimiento} de ${receta.nombre}. Costo total: ${cop(res.costoTotal)}` })
+    setTimeout(() => { onProducido() }, 1800)
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'flex-start', justifyContent:'center', zIndex:100, padding:20, overflowY:'auto' }}>
+      <div style={{ background:'var(--bg2)', borderRadius:16, padding:28, width:'100%', maxWidth:520, border:'1px solid var(--border)', margin:'auto' }}>
+        <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:4 }}>🍳 Producir — {receta.nombre}</div>
+        <div style={{ fontSize:12, color:'var(--text3)', marginBottom:20 }}>Rendimiento estándar: {receta.rendimiento} {receta.unidad_rendimiento} por tanda</div>
+
+        <div className="grid-2" style={{ gap:10, marginBottom:16 }}>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Multiplicador de tanda</div>
+            <input type="number" step="0.5" value={factor} onChange={e=>setFactor(parseFloat(e.target.value)||1)} style={iStyle} />
+            <div style={{ fontSize:10, color:'var(--gold)', marginTop:4 }}>Producirás: {receta.rendimiento*factor} {receta.unidad_rendimiento}</div>
+          </div>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Ubicación del lote resultante</div>
+            <select value={ubicacion} onChange={e=>setUbicacion(e.target.value)} style={iStyle}>
+              <option value="C01">Carrito 01</option><option value="C02">Carrito 02</option><option value="C03">Carrito 03</option><option value="CEDIS">CEDIS</option>
+            </select>
+          </div>
+          <div style={{ gridColumn:'1 / -1' }}>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Fecha de vencimiento del producto resultante</div>
+            <input type="date" value={fechaVencimiento} onChange={e=>setFechaVencimiento(e.target.value)} style={iStyle} />
+          </div>
+        </div>
+
+        <div style={{ fontSize:13, fontWeight:700, color:'var(--text)', marginBottom:8 }}>Insumos a consumir (FIFO automático)</div>
+        {loading ? <div style={{ fontSize:12, color:'var(--text3)' }}>Cargando...</div>
+        : (
+          <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:16 }}>
+            {verificarStock.map((v, i) => (
+              <div key={i} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', padding:'8px 12px', borderRadius:8,
+                background: v.suficiente ? 'rgba(255,255,255,0.02)' : 'rgba(224,82,82,0.08)', border:`1px solid ${v.suficiente?'var(--border)':'rgba(224,82,82,0.3)'}` }}>
+                <span style={{ fontSize:12, color:'var(--text2)' }}>{v.insumo_nombre}</span>
+                <span style={{ fontSize:12, fontWeight:600, color: v.suficiente?'var(--text3)':'var(--red)' }}>
+                  {v.necesario} {v.unidad} <span style={{ color:'var(--text4)' }}>de {v.disponible} disp.</span>
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {hayFaltantes && (
+          <div style={{ padding:'10px 14px', background:'rgba(224,82,82,0.1)', border:'1px solid rgba(224,82,82,0.3)', borderRadius:10, fontSize:12, color:'var(--red)', marginBottom:16 }}>
+            ⚠️ No hay suficiente stock de uno o más insumos. Registra más lotes en Inventario antes de producir.
+          </div>
+        )}
+
+        {resultado && (
+          <div style={{ padding:'12px 14px', borderRadius:10, fontSize:13, fontWeight:600, marginBottom:16, background: resultado.ok?'var(--green-dim)':'var(--red-dim)', color: resultado.ok?'var(--green)':'var(--red)', border:`1px solid ${resultado.ok?'var(--green-border)':'rgba(224,82,82,0.3)'}` }}>
+            {resultado.msg}
+          </div>
+        )}
+
+        <div style={{ display:'flex', gap:10 }}>
+          <button onClick={producir} disabled={hayFaltantes||produciendo||resultado?.ok} className="btn-green" style={{ flex:1 }}>
+            {produciendo ? '⏳ Produciendo...' : '🍳 Confirmar producción'}
+          </button>
+          <button onClick={onClose} className="btn">Cerrar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// MÓDULO PRINCIPAL
+// ════════════════════════════════════════════════════════════════════════════
+export default function ZabuRecetario() {
+  const [recetas, setRecetas] = useState([])
+  const [lotes, setLotes] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [modalReceta, setModalReceta] = useState(null) // null | 'nueva' | receta object
+  const [modalProducir, setModalProducir] = useState(null)
+  const [producciones, setProducciones] = useState([])
+  const [tab, setTab] = useState('recetas')
+
+  useEffect(() => { cargar() }, [])
+
+  const cargar = async () => {
+    setLoading(true)
+    const [{ data: r }, { data: l }, { data: p }] = await Promise.all([
+      supabase.from('zabu_recetas').select('*').order('nombre'),
+      supabase.from('zabu_lotes').select('*'),
+      supabase.from('zabu_producciones').select('*').order('created_at', { ascending: false }).limit(20),
+    ])
+    setRecetas(r || []); setLotes(l || []); setProducciones(p || [])
+    setLoading(false)
+  }
+
+  const eliminarReceta = async (id) => {
+    await supabase.from('zabu_recetas').delete().eq('id', id)
+    cargar()
+  }
+
+  const productosExistentes = [...new Set(lotes.map(l => l.producto_nombre))]
+
+  return (
+    <>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
+        <div style={{ fontSize:12, color:'var(--text3)' }}>Recetas de producción interna — Cream Code, salsas, toppings preparados</div>
+        <button onClick={() => setModalReceta('nueva')} className="btn-gold" style={{ padding:'8px 16px', fontSize:12 }}>+ Nueva receta</button>
+      </div>
+
+      <div className="grid-3" style={{ marginBottom:20 }}>
+        <div className="kpi-card"><div className="kpi-label">Recetas activas</div><div className="kpi-val" style={{ color:'var(--gold)' }}>{loading?'...':recetas.length}</div></div>
+        <div className="kpi-card"><div className="kpi-label">Producciones registradas</div><div className="kpi-val" style={{ color:'var(--blue)' }}>{loading?'...':producciones.length}</div></div>
+        <div className="kpi-card"><div className="kpi-label">Costo total producido</div><div className="kpi-val" style={{ color:'var(--green)' }}>{loading?'...':cop(producciones.reduce((s,p)=>s+p.costo_total,0))}</div></div>
+      </div>
+
+      <div className="sub-nav" style={{ marginBottom:20 }}>
+        <div className={`sub-nav-item${tab==='recetas'?' active':''}`} onClick={()=>setTab('recetas')}>Recetas</div>
+        <div className={`sub-nav-item${tab==='historial'?' active':''}`} onClick={()=>setTab('historial')}>Historial de producción</div>
+      </div>
+
+      {tab === 'recetas' && (
+        loading ? <div style={{ textAlign:'center', padding:'40px 0', color:'var(--text3)' }}>Cargando...</div>
+        : recetas.length === 0 ? (
+          <div className="panel" style={{ textAlign:'center', padding:'40px 0' }}>
+            <div style={{ fontSize:13, color:'var(--text4)' }}>Sin recetas registradas. Crea tu primera receta (ej: Cream Code™).</div>
+          </div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            {recetas.map(r => (
+              <div key={r.id} className="panel">
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                  <div>
+                    <div style={{ fontSize:14, fontWeight:700, color:'var(--text)' }}>{r.nombre}</div>
+                    <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>
+                      {CATEGORIA_LABEL[r.categoria]} · Rinde {r.rendimiento} {r.unidad_rendimiento} · {r.tiempo_preparacion || 'Tiempo no especificado'}
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', gap:8 }}>
+                    <button onClick={() => setModalProducir(r)} className="btn-green" style={{ fontSize:11, padding:'7px 14px' }}>🍳 Producir</button>
+                    <button onClick={() => setModalReceta(r)} className="btn" style={{ fontSize:11, padding:'7px 14px' }}>Editar</button>
+                    <div onClick={() => eliminarReceta(r.id)} style={{ cursor:'pointer', color:'var(--text4)', fontSize:14, display:'flex', alignItems:'center', padding:'0 6px' }}>×</div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      )}
+
+      {tab === 'historial' && (
+        loading ? <div style={{ textAlign:'center', padding:'40px 0', color:'var(--text3)' }}>Cargando...</div>
+        : producciones.length === 0 ? (
+          <div className="panel" style={{ textAlign:'center', padding:'40px 0' }}>
+            <div style={{ fontSize:13, color:'var(--text4)' }}>Sin producciones registradas todavía.</div>
+          </div>
+        ) : (
+          <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+            {producciones.map(p => (
+              <div key={p.id} className="panel">
+                <div style={{ display:'flex', justifyContent:'space-between' }}>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{p.receta_nombre}</div>
+                    <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>
+                      {p.cantidad_producida} {p.unidad} · {p.fecha} · {p.responsable}
+                    </div>
+                  </div>
+                  <div style={{ fontSize:13, fontWeight:700, color:'var(--gold)' }}>{cop(p.costo_total)}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      )}
+
+      {modalReceta && (
+        <ModalReceta
+          receta={modalReceta === 'nueva' ? null : modalReceta}
+          productosExistentes={productosExistentes}
+          onClose={() => setModalReceta(null)}
+          onSaved={() => { setModalReceta(null); cargar() }}
+        />
+      )}
+
+      {modalProducir && (
+        <ModalProducir
+          receta={modalProducir}
+          lotes={lotes}
+          onClose={() => setModalProducir(null)}
+          onProducido={() => { setModalProducir(null); cargar() }}
+        />
+      )}
+    </>
   )
 }
