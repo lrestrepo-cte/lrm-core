@@ -1,13 +1,14 @@
 const NEGOCIOS = [
-  { id:'zabu',      nombre:'ZABÚ',       color:'#C9A84C', estado:'activo'  },
-  { id:'rv',        nombre:'RV Sports',  color:'#378ADD', estado:'activo'  },
-  { id:'bombas',    nombre:'Las Bombas', color:'#4caf50', estado:'dev'     },
-  { id:'coco',      nombre:'Coco Shake', color:'#00BCD4', estado:'pronto'  },
-  { id:'quesolote', nombre:'Quesolote',  color:'#FF9800', estado:'pronto'  },
-  { id:'puffys',    nombre:'Puffys',     color:'#9C27B0', estado:'pronto'  },
+  { id:'zabu',        nombre:'ZABÚ',            color:'#C9A84C', estado:'activo'  },
+  { id:'rv',          nombre:'RV Sports',       color:'#378ADD', estado:'activo'  },
+  { id:'inversiones', nombre:'LRM Inversiones', color:'#9C27B0', estado:'activo'  },
+  { id:'bombas',      nombre:'Las Bombas',      color:'#4caf50', estado:'dev'     },
+  { id:'coco',        nombre:'Coco Shake',      color:'#00BCD4', estado:'pronto'  },
+  { id:'quesolote',   nombre:'Quesolote',       color:'#FF9800', estado:'pronto'  },
+  { id:'puffys',      nombre:'Puffys',          color:'#9C27B0', estado:'pronto'  },
 ]
 
-const ACTIVOS = ['zabu', 'rv']
+const ACTIVOS = ['zabu', 'rv', 'inversiones']
 
 const NAV_LRM = [
   {
@@ -17,7 +18,6 @@ const NAV_LRM = [
       { id:'bi',         label:'BI Ejecutivo',     activo:true  },
       { id:'consolidado',label:'Consolidado',      activo:false },
       { id:'informes',   label:'Informes',         activo:false },
-      { id:'inversiones', label:'📈 LRM Inversiones', activo:true },
     ]
   },
   {
