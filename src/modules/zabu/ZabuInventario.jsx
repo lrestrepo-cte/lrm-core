@@ -86,6 +86,12 @@ export default function ZabuInventario() {
     cargar()
   }
 
+  const eliminarLote = async (loteId, nombreProducto) => {
+    if (!window.confirm(`¿Eliminar este lote de "${nombreProducto}"? Esta acción no se puede deshacer.`)) return
+    await supabase.from('zabu_lotes').delete().eq('id', loteId)
+    cargar()
+  }
+
   const productos = agruparPorProducto(lotes)
   const productosFiltrados = categoria === 'Todos' ? productos : productos.filter(p => p.categoria === categoria)
 
@@ -195,6 +201,8 @@ export default function ZabuInventario() {
                           {dias<=0?'Vencido':`Vence en ${dias}d`}
                         </span>
                       )}
+                      <div onClick={()=>eliminarLote(l.id, l.producto_nombre)} title="Eliminar este lote"
+                        style={{ cursor:'pointer', color:'var(--red)', fontSize:14, padding:'2px 6px', borderRadius:6, background:'rgba(224,82,82,0.08)', flexShrink:0, marginLeft: dias===null?'auto':0 }}>🗑</div>
                     </div>
                   </div>
                 )
