@@ -412,8 +412,12 @@ function TabBackups() {
     {tabla:'ordenes',nombre:'Órdenes ZABÚ',negocio:'ZABÚ',color:'#C9A84C'},
     {tabla:'movimientos',nombre:'Movimientos ZABÚ',negocio:'ZABÚ',color:'#C9A84C'},
     {tabla:'turnos',nombre:'Turnos ZABÚ',negocio:'ZABÚ',color:'#C9A84C'},
+    {tabla:'zabu_inventario',nombre:'Inventario ZABÚ',negocio:'ZABÚ',color:'#C9A84C'},
+    {tabla:'zabu_plan_negocio',nombre:'Plan de Negocio ZABÚ',negocio:'ZABÚ',color:'#C9A84C'},
+    {tabla:'zabu_campana_tareas',nombre:'Campaña Apertura — Tareas',negocio:'ZABÚ',color:'#C9A84C'},
     {tabla:'rv_ordenes',nombre:'Órdenes RV Sports',negocio:'RV Sports',color:'#378ADD'},
     {tabla:'rv_clientes',nombre:'Clientes RV Sports',negocio:'RV Sports',color:'#378ADD'},
+    {tabla:'inv_prestamos',nombre:'Préstamos — Gota a gota',negocio:'LRM Inversiones',color:'#9C27B0'},
     {tabla:'my_space_ingresos_v2',nombre:'Ingresos My Space',negocio:'Personal',color:'var(--gold)'},
     {tabla:'my_space_gastos_v2',nombre:'Gastos My Space',negocio:'Personal',color:'var(--gold)'},
     {tabla:'my_space_metas_v2',nombre:'Metas My Space',negocio:'Personal',color:'var(--gold)'},
@@ -512,16 +516,27 @@ function TabIntegraciones() {
 }
 
 // ─── TAB SISTEMA — RESET INDIVIDUAL + NUCLEAR ────────────────────────────────
+// ACTUALIZADO: ZABÚ ahora incluye inventario, plan de negocio y campaña de apertura
+// (8 tablas nuevas que se agregaron en sesiones recientes). LRM Inversiones pasa
+// de "Sin tablas aún" a módulo activo con sus 6 tablas reales (gota a gota,
+// empeños, libranzas, portafolio) ya que está operando con capital real.
 function TabSistema() {
   const UUID_FAKE = '00000000-0000-0000-0000-000000000000'
 
   const MODULOS = [
     { id:'zabu',       nombre:'ZABÚ',           emoji:'🌭', color:'#C9A84C', activo:true,
-      desc:'Órdenes, turnos, movimientos, contabilidad, consecutivos',
-      tablas:['ordenes','movimientos','turnos','asientos','partidas','consecutivos','cierres_contables'] },
+      desc:'Órdenes, turnos, inventario, plan de negocio, campaña de apertura, contabilidad',
+      tablas:[
+        'ordenes','movimientos','turnos','asientos','partidas','consecutivos','cierres_contables',
+        'zabu_inventario','zabu_plan_negocio',
+        'zabu_campana_tareas','zabu_proveedores','zabu_montaje_items','zabu_redes_config',
+      ] },
     { id:'rv',         nombre:'RV Sports',       emoji:'⚽', color:'#378ADD', activo:true,
       desc:'Órdenes, clientes, inventario',
       tablas:['rv_ordenes','rv_clientes','rv_inventario'] },
+    { id:'inversiones',nombre:'LRM Inversiones', emoji:'📈', color:'#9C27B0', activo:true,
+      desc:'Gota a gota, cuotas, pagos, empeños, libranzas, portafolio',
+      tablas:['inv_prestamos','inv_cuotas','inv_pagos','inv_empenos','inv_libranzas','inv_portafolio'] },
     { id:'myspace',    nombre:'My Space',        emoji:'🔐', color:'var(--gold)', activo:true,
       desc:'Ingresos, gastos, metas, deudas, opciones, escenarios',
       tablas:['my_space_ingresos_v2','my_space_gastos_v2','my_space_metas_v2','my_space_deudas','my_space_opciones','my_space_escenarios','my_space_metas','my_space_finanzas','my_space_presupuesto','my_space_inversiones','my_space_calendario','my_space_ingresos','my_space_gastos_fijos','my_space_gastos_mes'] },
@@ -530,8 +545,6 @@ function TabSistema() {
     { id:'coco',       nombre:'Coco Shake',      emoji:'🥥', color:'#00BCD4', activo:false,
       desc:'Tablas pendientes de crear cuando arranque el módulo', tablas:[] },
     { id:'quesolote',  nombre:'Quesolote',        emoji:'🌽', color:'#FF9800', activo:false,
-      desc:'Tablas pendientes de crear cuando arranque el módulo', tablas:[] },
-    { id:'inversiones',nombre:'LRM Inversiones', emoji:'📈', color:'#9C27B0', activo:false,
       desc:'Tablas pendientes de crear cuando arranque el módulo', tablas:[] },
   ]
 
@@ -655,7 +668,7 @@ function TabSistema() {
             <div style={{ fontSize:16, fontWeight:900, color:'var(--red)', letterSpacing:1 }}>BORRADO NUCLEAR MAESTRO</div>
             <div style={{ fontSize:12, color:'var(--text3)', marginTop:2 }}>
               Elimina TODOS los datos de TODOS los módulos activos.<br/>
-              ZABÚ + RV Sports + My Space · {TODAS.length} tablas · Estructura siempre intacta.
+              ZABÚ + RV Sports + LRM Inversiones + My Space · {TODAS.length} tablas · Estructura siempre intacta.
             </div>
           </div>
         </div>
