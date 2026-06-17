@@ -9,7 +9,7 @@ import ZabuProyeccion   from './ZabuProyeccion'
 import ZabuPersonal     from './ZabuPersonal'
 import ZabuContabilidad from './ZabuContabilidad'
 import ZabuVencimientos from './ZabuVencimientos'
-import ZabuPEPS         from './ZabuPEPS'
+import ZabuFichaTecnica from './ZabuFichaTecnica'
 import ZabuFIFO         from './ZabuFIFO'
 import ZabuConfiguracion from './ZabuConfiguracion'
 import ZabuPlanNegocio from './ZabuPlanNegocio'
@@ -19,7 +19,7 @@ const NAV = [
   { id:'dashboard',    label:'Dashboard'       },
   { id:'pos',          label:'Ventas POS'      },
   { id:'recetario',    label:'Recetario'       },
-  { id:'peps',         label:'PEPs'            },
+  { id:'fichatecnica', label:'Ficha Técnica'   },
   { id:'inventario',   label:'Inventario'      },
   { id:'fifo',         label:'FIFO'            },
   { id:'costos',       label:'Costos'          },
@@ -53,7 +53,7 @@ export default function ZabuApp({ rolForzado, navExterno, onNavChange, usuario }
       case 'personal':      return <ZabuPersonal />
       case 'contabilidad':  return <ZabuContabilidad />
       case 'vencimientos':  return <ZabuVencimientos />
-      case 'peps':          return <ZabuPEPS />
+      case 'fichatecnica':  return <ZabuFichaTecnica usuario={usuario} />
       case 'fifo':          return <ZabuFIFO />
       case 'configuracion': return <ZabuConfiguracion />
       case 'plan':           return <ZabuPlanNegocio />
