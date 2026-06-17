@@ -1,274 +1,220 @@
-import { useState } from 'react'
+// @ts-nocheck
+import { useState, useEffect } from 'react'
+import { supabase } from '../../lib/supabase'
 
-function cop(n) {
-  return '$' + Math.round(n).toLocaleString('es-CO')
+function cop(n) { return '$' + Math.round(Math.abs(n||0)).toLocaleString('es-CO') }
+
+const DIAS_SEMANA = ['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado']
+const INGREDIENTES_BASE = ['ZaBun™ (pan top-split)', 'Cream Code™', 'Tocineta Crispy', 'Piña Caramelizada']
+const EMPAQUE_DIRECTO = ['Bandeja boat kraft', 'Papel encerado', 'Servilletas x6', 'Sticker ZABÚ']
+
+function costoPromedio(lotes, nombreProducto) {
+  const activos = lotes.filter(l => l.producto_nombre === nombreProducto && l.estado === 'activo')
+  if (activos.length === 0) return null
+  return activos.reduce((s,l)=>s+l.costo_unitario,0) / activos.length
 }
 
-const DIAS = ['Martes','Miércoles','Jueves','Viernes','Sábado','Domingo']
-const TIPO_DIA = ['Malo','Malo','Normal','Normal','Fuerte','Fuerte']
-const UDIAS_BASE = {
-  conservador: [18, 18, 28, 28, 45, 45],
-  realista:    [25, 25, 40, 40, 70, 70],
-  optimista:   [35, 35, 55, 55, 90, 90],
-}
-
-function colorTipo(t) {
-  if (t === 'Malo')   return 'var(--red)'
-  if (t === 'Normal') return 'var(--gold)'
-  return 'var(--green)'
-}
-
-function bgTipo(t) {
-  if (t === 'Malo')   return 'rgba(224,82,82,0.05)'
-  if (t === 'Normal') return 'rgba(201,168,76,0.05)'
-  return 'rgba(76,175,80,0.05)'
+// Cuenta items reales dentro del jsonb `items` de cada orden
+function contarItems(orden) {
+  if (!orden.items || !Array.isArray(orden.items)) return 0
+  return orden.items.length
 }
 
 export default function ZabuProyeccion() {
-  const [carritos,    setCarritos]    = useState(1)
-  const [escenario,   setEscenario]   = useState('realista')
-  const [pvMix,       setPvMix]       = useState(18500)
-  const [costoUd,     setCostoUd]     = useState(7400)
-  const [salCocinero, setSalCocinero] = useState(80000)
-  const [salAyudante, setSalAyudante] = useState(60000)
-  const [gasOp,       setGasOp]       = useState(200000)
-  const [salProp,     setSalProp]     = useState(1000000)
-  const [inversion,   setInversion]   = useState(3500000)
+  const [ordenes, setOrdenes] = useState([])
+  const [lotes, setLotes] = useState([])
+  const [empleados, setEmpleados] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [gasOp, setGasOp] = useState('')
 
-  const udsDia    = UDIAS_BASE[escenario].map(u => u * carritos)
-  const utilUd    = pvMix - costoUd
-  const personal  = (salCocinero + salAyudante) * carritos * 6
-  const gastosFijos = personal + gasOp
-  const totalNecesario = gastosFijos + salProp
+  useEffect(() => { cargar() }, [])
 
-  const semana = DIAS.map((dia, i) => ({
-    dia,
-    tipo: TIPO_DIA[i],
-    uds:  udsDia[i],
-    ventas:   udsDia[i] * pvMix,
-    utilidad: udsDia[i] * utilUd,
-  }))
-
-  const totalVentasSem  = semana.reduce((s, d) => s + d.ventas, 0)
-  const totalUtilidadSem = semana.reduce((s, d) => s + d.utilidad, 0)
-  const utilidadNeta    = totalUtilidadSem - gastosFijos
-  const cajaLibre       = utilidadNeta - salProp
-  const pePerros        = Math.ceil(totalNecesario / utilUd)
-  const peDiario        = Math.ceil(pePerros / 6)
-  const semRecupero     = Math.ceil(inversion / Math.max(cajaLibre, 1))
-  const totalPerrosSem  = semana.reduce((s, d) => s + d.uds, 0)
-
-  const sliderStyle = {
-    width:'100%', accentColor:'var(--gold)',
-    marginTop:6, cursor:'pointer',
+  const cargar = async () => {
+    setLoading(true)
+    const [{ data: o }, { data: l }, { data: e }] = await Promise.all([
+      supabase.from('ordenes').select('*').order('fecha', { ascending: false }),
+      supabase.from('zabu_lotes').select('*'),
+      supabase.from('zabu_empleados').select('*').eq('estado', 'activo'),
+    ])
+    setOrdenes(o || []); setLotes(l || []); setEmpleados(e || [])
+    setLoading(false)
   }
 
-  const inputNum = (val, set, min, max, step, label, fmt) => (
-    <div style={{ marginBottom:16 }}>
-      <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, marginBottom:4 }}>
-        <span style={{ color:'var(--text3)' }}>{label}</span>
-        <span style={{ color:'var(--gold)', fontWeight:700 }}>{fmt ? fmt(val) : val}</span>
-      </div>
-      <input type="range" min={min} max={max} step={step} value={val}
-        onChange={e => set(Number(e.target.value))} style={sliderStyle} />
-      <div style={{ display:'flex', justifyContent:'space-between', fontSize:10, color:'var(--text4)', marginTop:2 }}>
-        <span>{fmt ? fmt(min) : min}</span><span>{fmt ? fmt(max) : max}</span>
-      </div>
-    </div>
-  )
+  // ── Costo real promedio por hot dog vendido ──
+  const costosBase = INGREDIENTES_BASE.map(n => costoPromedio(lotes, n))
+  const totalFijo = costosBase.reduce((s,c)=>s+(c||0),0)
+  const empaque = EMPAQUE_DIRECTO.reduce((s,n)=>s+(costoPromedio(lotes,n)||0),0)
+  const faltaCosto = costosBase.some(c => c === null) || totalFijo === 0
+  // Costo promedio de salchicha real (promedio de todas las que existan en inventario)
+  const salchichas = [...new Set(lotes.map(l=>l.producto_nombre))].filter(n=>n.toLowerCase().includes('salchicha'))
+  const costoSalchichaProm = salchichas.length > 0
+    ? salchichas.reduce((s,n)=>s+(costoPromedio(lotes,n)||0),0) / salchichas.length
+    : null
+  const costoUnidad = (!faltaCosto && costoSalchichaProm !== null) ? Math.round(totalFijo + empaque + costoSalchichaProm) : null
+
+  // ── Ventas reales agrupadas por día de la semana ──
+  const ventasPorDiaSemana = {} // { 'Lunes': [total1, total2, ...] }
+  DIAS_SEMANA.forEach(d => ventasPorDiaSemana[d] = [])
+  const fechasConVenta = new Set()
+
+  ordenes.forEach(o => {
+    if (!o.fecha) return
+    fechasConVenta.add(o.fecha)
+    const fecha = new Date(o.fecha + 'T00:00:00')
+    const diaSemana = DIAS_SEMANA[fecha.getDay()]
+    if (!ventasPorDiaSemana[diaSemana]) ventasPorDiaSemana[diaSemana] = []
+    ventasPorDiaSemana[diaSemana].push(o)
+  })
+
+  const diasConData = DIAS_SEMANA.filter(d => ventasPorDiaSemana[d].length > 0)
+  const hayDataSuficiente = fechasConVenta.size >= 7 // al menos una semana completa de operación
+
+  // Promedio real de unidades e ingresos por día de semana (si hay data)
+  const promediosPorDia = DIAS_SEMANA.map(dia => {
+    const ordenesDelDia = ventasPorDiaSemana[dia]
+    if (ordenesDelDia.length === 0) return { dia, sinData: true }
+    // Agrupar por fecha específica para sacar promedio entre semanas distintas
+    const porFecha = {}
+    ordenesDelDia.forEach(o => { porFecha[o.fecha] = (porFecha[o.fecha] || { total: 0, items: 0 }); porFecha[o.fecha].total += o.total; porFecha[o.fecha].items += contarItems(o) })
+    const fechas = Object.values(porFecha)
+    const promTotal = fechas.reduce((s,f)=>s+f.total,0) / fechas.length
+    const promItems = fechas.reduce((s,f)=>s+f.items,0) / fechas.length
+    return { dia, sinData: false, promTotal, promItems: Math.round(promItems), muestras: fechas.length }
+  })
+
+  const totalVentasSemanaReal = promediosPorDia.reduce((s,d)=>s+(d.sinData?0:d.promTotal),0)
+  const totalItemsSemanaReal = promediosPorDia.reduce((s,d)=>s+(d.sinData?0:d.promItems),0)
+  const diasSinData = promediosPorDia.filter(d=>d.sinData).length
+
+  // ── Gastos reales: personal activo + gasto operativo manual ──
+  const nominaSemanal = empleados.reduce((s,e) => {
+    if (e.tipo_salario === 'por_dia') return s + (e.salario_actual * 6) // 6 días operativos
+    if (e.tipo_salario === 'quincenal') return s + (e.salario_actual / 2)
+    if (e.tipo_salario === 'mensual') return s + (e.salario_actual / 4.3)
+    return s
+  }, 0)
+  const gastoOperativoSemanal = parseInt(gasOp) || 0
+  const gastosFijosSemanales = nominaSemanal + gastoOperativoSemanal
+
+  const utilidadBrutaReal = costoUnidad !== null ? totalItemsSemanaReal * (totalVentasSemanaReal/Math.max(totalItemsSemanaReal,1) - costoUnidad) : null
+  // Más simple y honesto: utilidad = ventas reales - (items reales * costo real) - gastos fijos
+  const costoTotalInsumosSemana = costoUnidad !== null ? totalItemsSemanaReal * costoUnidad : null
+  const utilidadNetaReal = (costoTotalInsumosSemana !== null) ? (totalVentasSemanaReal - costoTotalInsumosSemana - gastosFijosSemanales) : null
+
+  if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--text3)' }}>Cargando datos reales de ventas, costos y personal...</div>
 
   return (
     <>
-      {/* KPIs principales */}
+      {!hayDataSuficiente && (
+        <div style={{ padding:'14px 18px', background:'rgba(201,168,76,0.08)', border:'1px solid rgba(201,168,76,0.3)', borderRadius:10, fontSize:13, color:'var(--gold)', marginBottom:20, lineHeight:1.6 }}>
+          ⚠️ Todavía no hay suficiente historial de ventas reales ({fechasConVenta.size} día{fechasConVenta.size!==1?'s':''} registrado{fechasConVenta.size!==1?'s':''} en el POS) para proyectar con confianza.
+          Esta vista se va llenando automáticamente con cada venta que se registre en el POS — entre más días de operación real tengas, más precisa será la proyección.
+        </div>
+      )}
+
+      {faltaCosto && (
+        <div style={{ padding:'12px 16px', background:'rgba(224,82,82,0.08)', border:'1px solid rgba(224,82,82,0.3)', borderRadius:10, fontSize:12, color:'var(--red)', marginBottom:20 }}>
+          ⚠️ Falta costo real de uno o más ingredientes base en Inventario para calcular el costo unitario del ZABÚ. Ve a Costos para ver el detalle.
+        </div>
+      )}
+
       <div className="grid-4" style={{ marginBottom:20 }}>
         {[
-          { label:'Ventas semana',     val:cop(totalVentasSem),   color:'var(--gold)',  sub:`${totalPerrosSem} perros · ${carritos} carrito${carritos>1?'s':''}` },
-          { label:'Utilidad neta',     val:cop(utilidadNeta),     color: utilidadNeta > 0 ? 'var(--green)' : 'var(--red)', sub:'después de gastos fijos' },
-          { label:'Caja libre',        val:cop(cajaLibre),        color: cajaLibre > 0 ? 'var(--green)' : 'var(--red)', sub:'después de tu salario' },
-          { label:'Punto equilibrio',  val:`${peDiario} perros`,  color:'var(--text)',  sub:'diarios por carrito' },
+          { label:'Días reales registrados', val:String(fechasConVenta.size), color:'var(--text)', sub:'desde que opera el POS' },
+          { label:'Ventas promedio/semana', val: totalVentasSemanaReal>0?cop(totalVentasSemanaReal):'Sin datos', color:'var(--gold)', sub:`${totalItemsSemanaReal} items/sem` },
+          { label:'Costo real por hot dog', val: costoUnidad!==null?cop(costoUnidad):'Incompleto', color:'var(--text)', sub:'desde Inventario' },
+          { label:'Utilidad neta/semana', val: utilidadNetaReal!==null?cop(utilidadNetaReal):'Faltan datos', color: utilidadNetaReal>0?'var(--green)':'var(--red)', sub:'ventas - costos - gastos' },
         ].map(k => (
           <div key={k.label} className="kpi-card">
             <div className="kpi-label">{k.label}</div>
-            <div className="kpi-val" style={{ color:k.color }}>{k.val}</div>
+            <div className="kpi-val" style={{ color:k.color, fontSize: typeof k.val==='string' && k.val.length>10 ? 16 : 22 }}>{k.val}</div>
             <div className="kpi-sub">{k.sub}</div>
             <div className="kpi-accent" style={{ background:k.color }} />
           </div>
         ))}
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'300px 1fr', gap:16, alignItems:'start' }}>
-
-        {/* Panel de configuración */}
-        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-
-          {/* Escenario */}
-          <div className="panel">
-            <div className="panel-title">Escenario de ventas</div>
-            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-              {['conservador','realista','optimista'].map(e => (
-                <div key={e} onClick={() => setEscenario(e)} style={{
-                  padding:'10px 14px', borderRadius:10, cursor:'pointer',
-                  background: escenario === e ? 'var(--gold-dim)' : 'rgba(255,255,255,0.03)',
-                  border:`1px solid ${escenario === e ? 'var(--gold-border)' : 'var(--border)'}`,
-                  transition:'all .15s',
-                }}>
-                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
-                    <div>
-                      <div style={{ fontSize:13, fontWeight:700, color: escenario === e ? 'var(--gold)' : 'var(--text)', textTransform:'capitalize' }}>{e}</div>
-                      <div style={{ fontSize:10, color:'var(--text3)', marginTop:2 }}>
-                        {e === 'conservador' ? '18-45 perros/día' : e === 'realista' ? '25-70 perros/día' : '35-90 perros/día'}
-                      </div>
-                    </div>
-                    {escenario === e && <div style={{ color:'var(--gold)', fontSize:16 }}>✓</div>}
-                  </div>
-                </div>
-              ))}
-            </div>
+      <div className="panel" style={{ marginBottom:16 }}>
+        <div className="panel-title">Promedio real de ventas por día de la semana</div>
+        <div style={{ fontSize:11, color:'var(--text3)', marginBottom:10 }}>Calculado desde las órdenes reales registradas en el POS — no son números inventados.</div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', marginBottom:8 }}>
+          {['Día','Muestras','Items prom.','Ventas prom.'].map(h => (
+            <div key={h} style={{ fontSize:9, color:'var(--text3)', padding:'0 10px 8px', letterSpacing:0.5, fontWeight:600 }}>{h}</div>
+          ))}
+        </div>
+        {promediosPorDia.map((d, i) => (
+          <div key={d.dia} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', background: i % 2 === 0 ? 'transparent' : 'rgba(255,255,255,0.02)' }}>
+            <div style={{ fontSize:12, padding:'10px', color:'var(--text2)', fontWeight:600, borderBottom:'1px solid rgba(255,255,255,0.04)' }}>{d.dia}</div>
+            {d.sinData ? (
+              <div style={{ fontSize:11, padding:'10px', color:'var(--text4)', gridColumn:'2 / 5', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>Sin ventas registradas todavía</div>
+            ) : (
+              <>
+                <div style={{ fontSize:12, padding:'10px', color:'var(--text3)', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>{d.muestras} semana{d.muestras!==1?'s':''}</div>
+                <div style={{ fontSize:12, padding:'10px', color:'var(--text2)', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>{d.promItems}</div>
+                <div style={{ fontSize:12, padding:'10px', color:'var(--gold)', fontWeight:700, borderBottom:'1px solid rgba(255,255,255,0.04)' }}>{cop(d.promTotal)}</div>
+              </>
+            )}
           </div>
-
-          {/* Sliders */}
-          <div className="panel">
-            <div className="panel-title">Configuración</div>
-
-            {/* Carritos */}
-            <div style={{ marginBottom:16 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', fontSize:12, marginBottom:8 }}>
-                <span style={{ color:'var(--text3)' }}>Carritos activos</span>
-                <span style={{ color:'var(--gold)', fontWeight:700 }}>{carritos}</span>
-              </div>
-              <div style={{ display:'flex', gap:8 }}>
-                {[1,2,3].map(n => (
-                  <div key={n} onClick={() => setCarritos(n)} style={{
-                    flex:1, padding:'10px', borderRadius:8, cursor:'pointer', textAlign:'center',
-                    background: carritos === n ? 'var(--gold-dim)' : 'rgba(255,255,255,0.04)',
-                    border:`1px solid ${carritos === n ? 'var(--gold-border)' : 'var(--border)'}`,
-                    fontSize:16, fontWeight:800, color: carritos === n ? 'var(--gold)' : 'var(--text3)',
-                    transition:'all .15s',
-                  }}>{n}</div>
-                ))}
-              </div>
-            </div>
-
-            {inputNum(pvMix, setPvMix, 17000, 22000, 500, 'Ticket promedio', cop)}
-            {inputNum(costoUd, setCostoUd, 5000, 10000, 100, 'Costo por perro', cop)}
-            {inputNum(salCocinero, setSalCocinero, 60000, 120000, 5000, 'Salario cocinero/día', cop)}
-            {inputNum(salAyudante, setSalAyudante, 40000, 100000, 5000, 'Salario ayudante/día', cop)}
-            {inputNum(gasOp, setGasOp, 50000, 500000, 10000, 'Gastos operativos/sem', cop)}
-            {inputNum(salProp, setSalProp, 500000, 3000000, 100000, 'Tu salario semanal', cop)}
+        ))}
+        {totalVentasSemanaReal > 0 && (
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', background:'var(--bg4)', marginTop:4, borderRadius:8 }}>
+            <div style={{ fontSize:12, padding:'10px', color:'var(--text)', fontWeight:700 }}>TOTAL SEMANA</div>
+            <div style={{ fontSize:12, padding:'10px' }} />
+            <div style={{ fontSize:13, padding:'10px', color:'var(--gold)', fontWeight:800 }}>{totalItemsSemanaReal}</div>
+            <div style={{ fontSize:13, padding:'10px', color:'var(--gold)', fontWeight:800 }}>{cop(totalVentasSemanaReal)}</div>
           </div>
+        )}
+      </div>
 
-          {/* Inversión y retorno */}
-          <div className="panel">
-            <div className="panel-title">Retorno de inversión</div>
-            {inputNum(inversion, setInversion, 500000, 15000000, 100000, 'Inversión inicial', cop)}
-            <div className="divider" />
-            <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0' }}>
-              <span style={{ fontSize:12, color:'var(--text3)' }}>Caja libre/semana</span>
-              <span style={{ fontSize:13, fontWeight:700, color: cajaLibre > 0 ? 'var(--green)' : 'var(--red)' }}>{cop(cajaLibre)}</span>
-            </div>
-            <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0' }}>
-              <span style={{ fontSize:12, color:'var(--text3)' }}>Semanas para recuperar</span>
-              <span style={{ fontSize:13, fontWeight:700, color:'var(--gold)' }}>{cajaLibre > 0 ? semRecupero : '∞'}</span>
-            </div>
-            <div style={{ display:'flex', justifyContent:'space-between', padding:'6px 0' }}>
-              <span style={{ fontSize:12, color:'var(--text3)' }}>Meses aprox.</span>
-              <span style={{ fontSize:16, fontWeight:800, color: cajaLibre > 0 ? 'var(--green)' : 'var(--red)' }}>
-                {cajaLibre > 0 ? (semRecupero / 4.3).toFixed(1) + ' meses' : 'Ajusta los valores'}
-              </span>
-            </div>
+      <div className="grid-2" style={{ gap:14 }}>
+        <div className="panel">
+          <div className="panel-title">Gastos fijos reales (semanales)</div>
+          <div style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid var(--border)' }}>
+            <span style={{ fontSize:12, color:'var(--text3)' }}>Nómina ({empleados.length} empleado{empleados.length!==1?'s':''} activo{empleados.length!==1?'s':''})</span>
+            <span style={{ fontSize:13, fontWeight:700, color:'var(--text2)' }}>{cop(nominaSemanal)}</span>
+          </div>
+          <div style={{ padding:'10px 0' }}>
+            <div style={{ fontSize:11, color:'var(--text3)', marginBottom:4 }}>Gastos operativos semanales (gas, transporte, etc.)</div>
+            <input type="number" value={gasOp} onChange={e=>setGasOp(e.target.value)} placeholder="Ingresa el gasto real de esta semana"
+              style={{ width:'100%', padding:'8px 12px', borderRadius:8, background:'rgba(255,255,255,0.06)', border:'1px solid var(--border)', color:'var(--text)', fontSize:13, fontFamily:'inherit', outline:'none' }} />
+          </div>
+          <div style={{ display:'flex', justifyContent:'space-between', paddingTop:10, borderTop:'1px solid var(--border)', marginTop:4 }}>
+            <span style={{ fontSize:12, color:'var(--text3)' }}>Total gastos fijos</span>
+            <span style={{ fontSize:16, fontWeight:800, color:'var(--gold)' }}>{cop(gastosFijosSemanales)}</span>
           </div>
         </div>
 
-        {/* Panel derecho */}
-        <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
-
-          {/* Proyección semanal */}
-          <div className="panel">
-            <div className="panel-title">Proyección semanal — escenario {escenario}</div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr', marginBottom:8 }}>
-              {['Día','Tipo','Perros','Ventas','Utilidad'].map(h => (
-                <div key={h} style={{ fontSize:9, color:'var(--text3)', padding:'0 10px 8px', letterSpacing:0.5, fontWeight:600 }}>{h}</div>
-              ))}
+        <div className="panel">
+          <div className="panel-title">Resultado real de la semana</div>
+          {[
+            { label:'Ventas reales',          val: totalVentasSemanaReal,  color:'var(--gold)' },
+            { label:'(-) Costo insumos',       val: -(costoTotalInsumosSemana||0), color:'var(--red)' },
+            { label:'(-) Gastos fijos',        val: -gastosFijosSemanales,  color:'var(--red)' },
+            { label:'Utilidad neta',           val: utilidadNetaReal||0,    color: (utilidadNetaReal||0)>0?'var(--green)':'var(--red)' },
+          ].map(r => (
+            <div key={r.label} style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid var(--border)' }}>
+              <span style={{ fontSize:12, color:'var(--text3)' }}>{r.label}</span>
+              <span style={{ fontSize:13, fontWeight:700, color:r.color }}>{cop(r.val)}</span>
             </div>
-            {semana.map((d, i) => (
-              <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr', background:bgTipo(d.tipo) }}>
-                <div style={{ fontSize:12, padding:'10px', color:'var(--text2)', fontWeight:600, borderBottom:'1px solid rgba(255,255,255,0.04)' }}>{d.dia}</div>
-                <div style={{ fontSize:12, padding:'10px', color:colorTipo(d.tipo), fontWeight:700, borderBottom:'1px solid rgba(255,255,255,0.04)' }}>{d.tipo}</div>
-                <div style={{ fontSize:12, padding:'10px', color:'var(--text3)', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>{d.uds}</div>
-                <div style={{ fontSize:12, padding:'10px', color:'var(--text2)', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>{cop(d.ventas)}</div>
-                <div style={{ fontSize:12, padding:'10px', color:colorTipo(d.tipo), fontWeight:700, borderBottom:'1px solid rgba(255,255,255,0.04)' }}>{cop(d.utilidad)}</div>
+          ))}
+          {utilidadNetaReal !== null && (
+            <div style={{ marginTop:10, padding:'12px 14px', background: utilidadNetaReal > 0 ? 'var(--green-dim)' : 'var(--red-dim)', borderRadius:10, border:`1px solid ${utilidadNetaReal > 0 ? 'var(--green-border)' : 'rgba(224,82,82,0.3)'}` }}>
+              <div style={{ fontSize:11, color: utilidadNetaReal > 0 ? 'var(--green)' : 'var(--red)', marginBottom:4 }}>
+                {utilidadNetaReal > 0 ? '✅ Operación rentable con datos reales' : '⚠️ La operación real no cubre gastos esta semana'}
               </div>
-            ))}
-            {/* Totales */}
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr 1fr', background:'var(--bg4)', marginTop:4, borderRadius:8 }}>
-              <div style={{ fontSize:12, padding:'10px', color:'var(--text)', fontWeight:700 }}>TOTAL</div>
-              <div style={{ fontSize:12, padding:'10px' }} />
-              <div style={{ fontSize:13, padding:'10px', color:'var(--gold)', fontWeight:800 }}>{totalPerrosSem}</div>
-              <div style={{ fontSize:13, padding:'10px', color:'var(--gold)', fontWeight:800 }}>{cop(totalVentasSem)}</div>
-              <div style={{ fontSize:13, padding:'10px', color:'var(--gold)', fontWeight:800 }}>{cop(totalUtilidadSem)}</div>
+              <div style={{ fontSize:20, fontWeight:800, color: utilidadNetaReal > 0 ? 'var(--green)' : 'var(--red)' }}>{cop(utilidadNetaReal)}/semana</div>
             </div>
-          </div>
-
-          {/* Resumen financiero */}
-          <div className="grid-2" style={{ gap:12 }}>
-            <div className="panel">
-              <div className="panel-title">Estructura de gastos semana</div>
-              {[
-                { label:`Personal (${carritos} carrito${carritos>1?'s':''})`, val:personal,    color:'var(--red)'   },
-                { label:'Gastos operativos',                                   val:gasOp,       color:'var(--red)'   },
-                { label:'Total gastos fijos',                                  val:gastosFijos, color:'var(--gold)'  },
-                { label:'Tu salario',                                          val:salProp,     color:'var(--red)'   },
-                { label:'Total a cubrir',                                      val:totalNecesario, color:'var(--text)'},
-              ].map(r => (
-                <div key={r.label} style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid var(--border)' }}>
-                  <span style={{ fontSize:12, color:'var(--text3)' }}>{r.label}</span>
-                  <span style={{ fontSize:13, fontWeight:700, color:r.color }}>{cop(r.val)}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="panel">
-              <div className="panel-title">Resultado final semana</div>
-              {[
-                { label:'Utilidad bruta',   val:totalUtilidadSem,  color:'var(--green)' },
-                { label:'(-) Gastos fijos', val:-gastosFijos,       color:'var(--red)'   },
-                { label:'Utilidad neta',    val:utilidadNeta,       color: utilidadNeta > 0 ? 'var(--green)' : 'var(--red)' },
-                { label:'(-) Tu salario',   val:-salProp,           color:'var(--red)'   },
-                { label:'Caja libre',       val:cajaLibre,          color: cajaLibre > 0 ? 'var(--green)' : 'var(--red)' },
-              ].map(r => (
-                <div key={r.label} style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid var(--border)' }}>
-                  <span style={{ fontSize:12, color:'var(--text3)' }}>{r.label}</span>
-                  <span style={{ fontSize:13, fontWeight:700, color:r.color }}>{cop(r.val)}</span>
-                </div>
-              ))}
-              <div style={{ marginTop:10, padding:'12px 14px', background: cajaLibre > 0 ? 'var(--green-dim)' : 'var(--red-dim)', borderRadius:10, border:`1px solid ${cajaLibre > 0 ? 'var(--green-border)' : 'rgba(224,82,82,0.3)'}` }}>
-                <div style={{ fontSize:11, color: cajaLibre > 0 ? 'var(--green)' : 'var(--red)', marginBottom:4 }}>
-                  {cajaLibre > 0 ? '✅ El negocio es viable con este escenario' : '⚠️ Ajusta los parámetros — el negocio no cubre gastos'}
-                </div>
-                <div style={{ fontSize:20, fontWeight:800, color: cajaLibre > 0 ? 'var(--green)' : 'var(--red)' }}>{cop(cajaLibre)}/semana</div>
-              </div>
-            </div>
-          </div>
-
-          {/* Proyección mensual */}
-          <div className="panel">
-            <div className="panel-title">Proyección mensual y anual</div>
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:10 }}>
-              {[
-                { label:'Ventas mes',      val:cop(totalVentasSem * 4.3),   color:'var(--gold)'  },
-                { label:'Utilidad mes',    val:cop(utilidadNeta * 4.3),     color: utilidadNeta > 0 ? 'var(--green)' : 'var(--red)' },
-                { label:'Caja libre mes',  val:cop(cajaLibre * 4.3),        color: cajaLibre > 0 ? 'var(--green)' : 'var(--red)'   },
-                { label:'Ventas año',      val:cop(totalVentasSem * 52),    color:'var(--gold)'  },
-              ].map(k => (
-                <div key={k.label} style={{ background:'var(--bg4)', borderRadius:10, padding:'12px 14px', border:'1px solid var(--border)' }}>
-                  <div style={{ fontSize:10, color:'var(--text3)', marginBottom:6 }}>{k.label}</div>
-                  <div style={{ fontSize:16, fontWeight:800, color:k.color }}>{k.val}</div>
-                </div>
-              ))}
-            </div>
-          </div>
+          )}
         </div>
       </div>
+
+      {diasSinData > 0 && diasSinData < 7 && (
+        <div className="panel" style={{ marginTop:14, background:'rgba(255,255,255,0.01)' }}>
+          <div style={{ fontSize:12, color:'var(--text3)', lineHeight:1.7 }}>
+            💡 Tienes {7-diasSinData} de 7 días de la semana con historial real. Los {diasSinData} día{diasSinData!==1?'s':''} restante{diasSinData!==1?'s':''} se sumará{diasSinData===1?'':'n'} automáticamente al promedio en cuanto registres ventas en el POS ese día.
+          </div>
+        </div>
+      )}
     </>
   )
 }
