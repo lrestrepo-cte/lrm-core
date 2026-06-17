@@ -74,6 +74,7 @@ const NAV_ZABU = [
       { id:'inventario',  label:'Inventario'   },
       { id:'vencimientos',label:'Vencimientos' },
       { id:'fifo',        label:'FIFO'         },
+      { id:'compras',     label:'Compras'      },
     ]
   },
   {
