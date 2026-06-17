@@ -6,13 +6,13 @@ import LRMDashboard from './pages/LRMDashboard'
 import LRMFinanzas from './pages/LRMFinanzas'
 import LRMBiEjecutivo from './pages/LRMBiEjecutivo'
 import LRMConfiguracion from './pages/LRMConfiguracion'
+import LRMInversiones from './pages/LRMInversiones'
 import ZabuApp from './modules/zabu/ZabuApp'
 import ZabuComandero from './modules/zabu/ZabuComandero'
 import RVApp from './modules/rv/RVApp'
 import MySpace from './pages/MySpace'
 import { AperturaTurno, PanelTurno } from './modules/zabu/ZabuTurno'
 import { useBreakpoint } from './hooks/useBreakpoint'
-import LRMInversiones from './pages/LRMInversiones'
 
 const TITULOS = {
   dashboard:     'Dashboard LRM Trade',
@@ -28,7 +28,7 @@ const TITULOS = {
   contabilidad:  'Contabilidad',
   configuracion: 'Configuración LRM Core',
   myspace:       'My Space',
-  inversiones:   'Inversiones',
+  inversiones:   'LRM Inversiones',
 }
 
 function VendedorApp({ usuario, onCerrarSesion }) {
@@ -126,19 +126,24 @@ export default function App() {
   if (usuario.rol==='vendedor') return <VendedorApp usuario={usuario} onCerrarSesion={cerrarSesion} />
   if (usuario.rol==='cocina')   return <CocinaApp   usuario={usuario} onCerrarSesion={cerrarSesion} />
 
+  // IMPORTANTE: estas variables se usan dentro de renderContenido() y del JSX de retorno.
+  // 'inversiones' se trata exactamente igual que zabu/rv: una vista de negocio con su propio
+  // layout completo (sidebar + topbar), NO un return temprano fuera del layout.
   const isZabu = vista === 'zabu'
   const isRV   = vista === 'rv'
+  const isInversiones = vista === 'inversiones'
 
   const tituloTopbar = isZabu ? 'ZABÚ — Hot Dogs de Verdad'
     : isRV   ? 'RV Sports — Calcetines'
+    : isInversiones ? 'LRM Inversiones'
     : (TITULOS[navActivo] || 'LRM Trade')
 
   const renderContenido = () => {
     if (navActivo === 'myspace')       return <MySpace />
     if (navActivo === 'configuracion') return <LRMConfiguracion />
-    if (isZabu) return <ZabuApp navExterno={negNav} onNavChange={(id)=>{setNegNav(id);setNavActivo(id)}} usuario={usuario} />
-    if (isRV)   return <RVApp   navExterno={negNav} onNavChange={(id)=>{setNegNav(id);setNavActivo(id)}} usuario={usuario} />
-    if (navActivo === 'inversiones') return <LRMInversiones />
+    if (isZabu)        return <ZabuApp navExterno={negNav} onNavChange={(id)=>{setNegNav(id);setNavActivo(id)}} usuario={usuario} />
+    if (isRV)          return <RVApp   navExterno={negNav} onNavChange={(id)=>{setNegNav(id);setNavActivo(id)}} usuario={usuario} />
+    if (isInversiones) return <LRMInversiones />
     switch (navActivo) {
       case 'dashboard': return <LRMDashboard onEntrarNegocio={entrarNegocio} />
       case 'finanzas':  return <LRMFinanzas />
