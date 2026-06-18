@@ -21,7 +21,7 @@ const P_EMOJI     = { Hogar:'🏠', Luis:'👤', Emelyn:'👩', Lucía:'👧' }
 
 // ─── CATEGORÍAS DE GASTOS ─────────────────────────────────────────────────────
 const CATS_GASTO  = {
-  Hogar:  ['Arriendo','Electricidad','Agua','Gas','Internet','Alimentación','Empleada','Streaming','Otro'],
+  Hogar:  ['Arriendo','Electricidad','Agua','Gas','Internet','Alimentación','Empleada','Streaming','Mantenimiento','Gasolina','Salud','Ocio','Servicios públicos','Otro'],
   Luis:   ['Salud','Transporte','Gym','Tecnología','Ropa','Ejecutivo','Entretenimiento','Cuota crédito','Otro'],
   Emelyn: ['Salud','Gym','Ropa','Celular','Entretenimiento','Cuota crédito','Otro'],
   Lucía:  ['Colegio','Extracurriculares','Salud','Útiles','Ropa','Ahorro','Otro'],
@@ -389,7 +389,7 @@ function Gastos() {
   const [loading,   setLoading]   = useState(true)
   const [modal,     setModal]     = useState(false)
   const [modoCarga, setModoCarga] = useState('manual') // 'manual' | 'pegar'
-  const [persona,   setPersona]   = useState('Hogar')
+  const [persona,   setPersona]   = useState('')
   const [categoria, setCategoria] = useState('')
   const [subcat,    setSubcat]    = useState('')
   const [desc,      setDesc]      = useState('')
@@ -404,25 +404,36 @@ function Gastos() {
   const [guardandoLote, setGuardandoLote] = useState(false)
   const [resultadoLote, setResultadoLote] = useState(null)
   const [subcatsExistentes, setSubcatsExistentes] = useState([])
- 
+  const [intentoSinClasificar, setIntentoSinClasificar] = useState(false)
+
   useEffect(() => { cargar(); cargarMetas(); cargarSubcats() }, [filtroMes, filtroP])
- 
+
+  // Devuelve el último día real del mes (28, 29, 30 o 31) para no pedirle a
+  // Supabase fechas que no existen, como "2026-06-31".
+  const ultimoDiaMes = (ym) => {
+    const [anio, mes] = ym.split('-').map(Number)
+    return new Date(anio, mes, 0).getDate()
+  }
+
   const cargar = async () => {
     setLoading(true)
+    const ultimoDia = ultimoDiaMes(filtroMes)
     let q = supabase.from('my_space_gastos_v2').select('*')
-      .gte('fecha', filtroMes+'-01').lte('fecha', filtroMes+'-31')
+      .gte('fecha', filtroMes+'-01')
+      .lte('fecha', filtroMes+'-'+String(ultimoDia).padStart(2,'0'))
       .order('fecha', { ascending:false })
     if (filtroP !== 'Todos') q = q.eq('persona', filtroP)
-    const { data } = await q
+    const { data, error } = await q
+    if (error) console.error('Error cargando gastos:', error)
     if (data) setItems(data)
     setLoading(false)
   }
- 
+
   const cargarMetas = async () => {
     const { data } = await supabase.from('my_space_metas_v2').select('id,nombre,emoji').eq('estado','activa')
     if (data) setMetas(data)
   }
- 
+
   // Toma todas las subcategorías que ya se han escrito antes, para sugerirlas
   // como autocompletado y evitar errores de tipeo (ej: "Netflix" vs "netflix").
   const cargarSubcats = async () => {
@@ -432,9 +443,12 @@ function Gastos() {
       setSubcatsExistentes(unicas)
     }
   }
- 
+
+  // Persona y categoría son obligatorias siempre — sin esto, no se guarda nada.
+  const faltaClasificar = !persona || !categoria
+
   const guardar = async () => {
-    if (!monto || !categoria) return
+    if (faltaClasificar || !monto) { setIntentoSinClasificar(true); return }
     await supabase.from('my_space_gastos_v2').insert({
       fecha, persona, categoria, subcategoria:subcat, descripcion:desc,
       monto:parseInt(monto), recurrente:recur, meta_id:metaId||null
@@ -443,49 +457,50 @@ function Gastos() {
       const { data:meta } = await supabase.from('my_space_metas_v2').select('valor_actual').eq('id',metaId).single()
       if (meta) await supabase.from('my_space_metas_v2').update({ valor_actual: meta.valor_actual + parseInt(monto) }).eq('id', metaId)
     }
-    setCategoria(''); setSubcat(''); setDesc(''); setMonto(''); setRecur(false); setMetaId('')
+    setCategoria(''); setSubcat(''); setDesc(''); setMonto(''); setRecur(false); setMetaId(''); setIntentoSinClasificar(false)
     setModal(false); cargar(); cargarSubcats()
   }
- 
+
   // Crea un gasto por cada línea pegada de la factura, usando persona/categoría/
-  // fecha elegidas una sola vez en el modal.
+  // fecha elegidas una sola vez en el modal — obligatorias antes de avanzar.
   const guardarLotePegado = async () => {
     const lineas = parsearTextoFactura(textoPegado)
-    if (lineas.length === 0 || !categoria) return
+    if (faltaClasificar || lineas.length === 0) { setIntentoSinClasificar(true); return }
     setGuardandoLote(true)
- 
+
     const registros = lineas.map(l => ({
       fecha, persona, categoria, subcategoria: subcat, descripcion: l.descripcion,
       monto: l.monto, recurrente: false, meta_id: null,
     }))
     const { error } = await supabase.from('my_space_gastos_v2').insert(registros)
- 
+
     setGuardandoLote(false)
     if (error) { setResultadoLote({ ok:false, msg:'Error: '+error.message }); return }
- 
+
     const totalLote = registros.reduce((s,r)=>s+r.monto,0)
     setResultadoLote({ ok:true, msg:`✅ Se crearon ${registros.length} gastos por un total de ${cop(totalLote)}.` })
     setTimeout(() => {
-      setTextoPegado(''); setResultadoLote(null); setCategoria(''); setSubcat('')
+      setTextoPegado(''); setResultadoLote(null); setCategoria(''); setSubcat(''); setIntentoSinClasificar(false)
       setModal(false); cargar(); cargarSubcats()
     }, 1800)
   }
- 
+
   const eliminar = async (id) => {
     await supabase.from('my_space_gastos_v2').delete().eq('id', id)
     setItems(prev=>prev.filter(i=>i.id!==id))
   }
- 
+
   const total = items.reduce((s,i)=>s+i.monto,0)
   const porPersona = PERSONAS.map(p => ({ p, val: items.filter(i=>i.persona===p).reduce((s,i)=>s+i.monto,0) }))
- 
+
   const lineasPreview = textoPegado ? parsearTextoFactura(textoPegado) : []
   const totalPreview = lineasPreview.reduce((s,l)=>s+l.monto,0)
- 
+
   const cerrarModal = () => {
     setModal(false); setModoCarga('manual'); setTextoPegado(''); setResultadoLote(null)
+    setPersona(''); setCategoria(''); setIntentoSinClasificar(false)
   }
- 
+
   return (
     <div>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
@@ -499,7 +514,7 @@ function Gastos() {
           <button onClick={() => setModal(true)} className="btn-gold" style={{ padding:'8px 16px', fontSize:12 }}>+ Registrar</button>
         </div>
       </div>
- 
+
       <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
         {['Todos',...PERSONAS].map(p => (
           <div key={p} onClick={() => setFiltroP(p)} style={{
@@ -513,7 +528,7 @@ function Gastos() {
           </div>
         ))}
       </div>
- 
+
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))', gap:10, marginBottom:16 }}>
         {porPersona.map(({ p, val }) => (
           <div key={p} className="kpi-card" style={{ border:`1px solid ${P_COLOR[p]}33` }}>
@@ -522,7 +537,7 @@ function Gastos() {
           </div>
         ))}
       </div>
- 
+
       <div className="panel">
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:12 }}>
           <span style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>Total: <span style={{ color:'var(--red)' }}>{cop(total)}</span></span>
@@ -554,12 +569,12 @@ function Gastos() {
           </div>
         ))}
       </div>
- 
+
       {modal && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'flex-start', justifyContent:'center', zIndex:100, padding:20, overflowY:'auto' }}>
           <div style={{ background:'var(--bg2)', borderRadius:16, padding:28, width:'100%', maxWidth:480, border:'1px solid var(--border)', margin:'auto' }}>
             <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:16 }}>Registrar gasto</div>
- 
+
             <div style={{ display:'flex', gap:8, marginBottom:18 }}>
               {[{id:'manual',label:'✍️ Manual'},{id:'pegar',label:'📋 Pegar de factura'}].map(m => (
                 <div key={m.id} onClick={() => setModoCarga(m.id)} style={{
@@ -570,41 +585,52 @@ function Gastos() {
                 }}>{m.label}</div>
               ))}
             </div>
- 
+
             <div style={{ marginBottom:14 }}>
-              <div style={{ fontSize:11, color:'var(--text3)', marginBottom:8 }}>¿Para quién?</div>
+              <div style={{ fontSize:11, color:intentoSinClasificar&&!persona?'var(--red)':'var(--text3)', marginBottom:8, fontWeight:intentoSinClasificar&&!persona?700:400 }}>
+                ¿Para quién? {intentoSinClasificar&&!persona && '— obligatorio'}
+              </div>
               <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
                 {PERSONAS.map(p => (
                   <div key={p} onClick={() => { setPersona(p); setCategoria('') }} style={{
                     padding:'8px 14px', borderRadius:8, cursor:'pointer', fontSize:12, fontWeight:600,
                     background: persona===p?`${P_COLOR[p]}22`:'rgba(255,255,255,0.04)',
-                    border:`1px solid ${persona===p?P_COLOR[p]:'var(--border)'}`,
+                    border:`1px solid ${persona===p?P_COLOR[p]:(intentoSinClasificar&&!persona?'var(--red)':'var(--border)')}`,
                     color: persona===p?P_COLOR[p]:'var(--text3)',
                   }}>{P_EMOJI[p]} {p}</div>
                 ))}
               </div>
             </div>
- 
+
             <div style={{ marginBottom:12 }}>
-              <div style={{ fontSize:11, color:'var(--text3)' }}>Categoría {modoCarga==='pegar' && '(se aplica a todas las líneas pegadas)'}</div>
-              <select value={categoria} onChange={e=>setCategoria(e.target.value)} style={iStyle}>
+              <div style={{ fontSize:11, color:intentoSinClasificar&&!categoria?'var(--red)':'var(--text3)', fontWeight:intentoSinClasificar&&!categoria?700:400 }}>
+                Categoría {intentoSinClasificar&&!categoria && '— obligatorio'} {modoCarga==='pegar' && !(intentoSinClasificar&&!categoria) && '(se aplica a todas las líneas pegadas)'}
+              </div>
+              <select value={categoria} onChange={e=>setCategoria(e.target.value)}
+                style={{ ...iStyle, border: intentoSinClasificar&&!categoria?'1px solid var(--red)':iStyle.border }}>
                 <option value="">Seleccionar...</option>
                 {(CATS_GASTO[persona]||[]).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
- 
+
+            {intentoSinClasificar && faltaClasificar && (
+              <div style={{ padding:'10px 14px', background:'var(--red-dim)', border:'1px solid rgba(224,82,82,0.3)', borderRadius:10, fontSize:12, color:'var(--red)', marginBottom:14 }}>
+                ⚠️ Debes elegir a quién pertenece y la categoría antes de continuar.
+              </div>
+            )}
+
             {modoCarga === 'manual' ? (
               <>
                 <div style={{ marginBottom:12 }}>
                   <div style={{ fontSize:11, color:'var(--text3)' }}>Subcategoría / Detalle</div>
                   <input type="text" list="subcats-existentes" value={subcat} onChange={e=>setSubcat(e.target.value)} placeholder="Ej: Netflix, Gasolina Full, D1..." style={iStyle} />
                 </div>
- 
+
                 <div style={{ marginBottom:12 }}>
                   <div style={{ fontSize:11, color:'var(--text3)' }}>Descripción adicional</div>
                   <input type="text" value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Nota opcional" style={iStyle} />
                 </div>
- 
+
                 <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }}>
                   <div>
                     <div style={{ fontSize:11, color:'var(--text3)' }}>Monto (COP)</div>
@@ -615,7 +641,7 @@ function Gastos() {
                     <input type="date" value={fecha} onChange={e=>setFecha(e.target.value)} style={iStyle} />
                   </div>
                 </div>
- 
+
                 {metas.length > 0 && (
                   <div style={{ marginBottom:12 }}>
                     <div style={{ fontSize:11, color:'var(--text3)' }}>¿Asociar a una meta? (opcional)</div>
@@ -625,14 +651,14 @@ function Gastos() {
                     </select>
                   </div>
                 )}
- 
+
                 <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:20, cursor:'pointer' }} onClick={()=>setRecur(p=>!p)}>
                   <div style={{ width:18, height:18, borderRadius:5, border:'1px solid var(--border)', background:recur?'var(--gold-dim)':'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, color:'var(--gold)' }}>{recur&&'✓'}</div>
                   <div style={{ fontSize:12, color:'var(--text3)' }}>Gasto recurrente mensual</div>
                 </div>
- 
+
                 <div style={{ display:'flex', gap:10 }}>
-                  <button onClick={guardar} disabled={!monto||!categoria} className="btn-green" style={{ flex:1 }}>Guardar gasto</button>
+                  <button onClick={guardar} className="btn-green" style={{ flex:1, opacity:(!monto)?0.5:1 }}>Guardar gasto</button>
                   <button onClick={cerrarModal} className="btn">Cancelar</button>
                 </div>
               </>
@@ -642,25 +668,25 @@ function Gastos() {
                   <div style={{ fontSize:11, color:'var(--text3)' }}>Fecha de la factura (se aplica a todas las líneas)</div>
                   <input type="date" value={fecha} onChange={e=>setFecha(e.target.value)} style={iStyle} />
                 </div>
- 
+
                 <div style={{ marginBottom:8 }}>
                   <div style={{ fontSize:11, color:'var(--text3)' }}>Subcategoría / Proveedor (opcional, se aplica a todas)</div>
                   <input type="text" list="subcats-existentes" value={subcat} onChange={e=>setSubcat(e.target.value)} placeholder="Ej: D1, Air-e, AAA..." style={iStyle} />
                 </div>
- 
+
                 <div style={{ marginBottom:8 }}>
                   <div style={{ fontSize:11, color:'var(--text3)' }}>Pega aquí el texto que Claude te dio (formato: descripción|monto, una línea por producto)</div>
                   <textarea value={textoPegado} onChange={e=>setTextoPegado(e.target.value)}
                     placeholder={"Toalla de cocina|3500\nCrema dental|10600\nTocineta ahumada|6600"}
                     style={{ ...iStyle, height:140, resize:'vertical', fontFamily:'monospace', fontSize:12 }} />
                 </div>
- 
+
                 {lineasPreview.length > 0 && (
                   <div style={{ padding:'10px 14px', background:'rgba(55,138,221,0.06)', border:'1px solid rgba(55,138,221,0.2)', borderRadius:10, fontSize:12, color:'var(--blue)', marginBottom:14 }}>
                     📋 Se detectaron {lineasPreview.length} línea(s) — total {cop(totalPreview)}
                   </div>
                 )}
- 
+
                 {resultadoLote && (
                   <div style={{ padding:'12px 14px', borderRadius:10, fontSize:13, fontWeight:600, marginBottom:14,
                     background: resultadoLote.ok?'var(--green-dim)':'var(--red-dim)',
@@ -669,9 +695,9 @@ function Gastos() {
                     {resultadoLote.msg}
                   </div>
                 )}
- 
+
                 <div style={{ display:'flex', gap:10 }}>
-                  <button onClick={guardarLotePegado} disabled={lineasPreview.length===0||!categoria||guardandoLote||resultadoLote?.ok} className="btn-green" style={{ flex:1 }}>
+                  <button onClick={guardarLotePegado} disabled={lineasPreview.length===0||guardandoLote||resultadoLote?.ok} className="btn-green" style={{ flex:1 }}>
                     {guardandoLote ? '⏳ Creando...' : `Crear ${lineasPreview.length||''} gasto(s)`}
                   </button>
                   <button onClick={cerrarModal} className="btn">Cancelar</button>
@@ -681,7 +707,7 @@ function Gastos() {
           </div>
         </div>
       )}
- 
+
       <datalist id="subcats-existentes">
         {subcatsExistentes.map(s => <option key={s} value={s} />)}
       </datalist>
