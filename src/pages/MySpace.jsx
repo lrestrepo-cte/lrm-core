@@ -403,8 +403,9 @@ function Gastos() {
   const [textoPegado, setTextoPegado]     = useState('')
   const [guardandoLote, setGuardandoLote] = useState(false)
   const [resultadoLote, setResultadoLote] = useState(null)
+  const [subcatsExistentes, setSubcatsExistentes] = useState([])
  
-  useEffect(() => { cargar(); cargarMetas() }, [filtroMes, filtroP])
+  useEffect(() => { cargar(); cargarMetas(); cargarSubcats() }, [filtroMes, filtroP])
  
   const cargar = async () => {
     setLoading(true)
@@ -422,6 +423,16 @@ function Gastos() {
     if (data) setMetas(data)
   }
  
+  // Toma todas las subcategorías que ya se han escrito antes, para sugerirlas
+  // como autocompletado y evitar errores de tipeo (ej: "Netflix" vs "netflix").
+  const cargarSubcats = async () => {
+    const { data } = await supabase.from('my_space_gastos_v2').select('subcategoria').not('subcategoria','is',null)
+    if (data) {
+      const unicas = [...new Set(data.map(d => d.subcategoria).filter(Boolean))].sort()
+      setSubcatsExistentes(unicas)
+    }
+  }
+ 
   const guardar = async () => {
     if (!monto || !categoria) return
     await supabase.from('my_space_gastos_v2').insert({
@@ -433,11 +444,11 @@ function Gastos() {
       if (meta) await supabase.from('my_space_metas_v2').update({ valor_actual: meta.valor_actual + parseInt(monto) }).eq('id', metaId)
     }
     setCategoria(''); setSubcat(''); setDesc(''); setMonto(''); setRecur(false); setMetaId('')
-    setModal(false); cargar()
+    setModal(false); cargar(); cargarSubcats()
   }
  
   // Crea un gasto por cada línea pegada de la factura, usando persona/categoría/
-  // fecha elegidas una sola vez en el modal — esto es lo nuevo de esta versión.
+  // fecha elegidas una sola vez en el modal.
   const guardarLotePegado = async () => {
     const lineas = parsearTextoFactura(textoPegado)
     if (lineas.length === 0 || !categoria) return
@@ -456,7 +467,7 @@ function Gastos() {
     setResultadoLote({ ok:true, msg:`✅ Se crearon ${registros.length} gastos por un total de ${cop(totalLote)}.` })
     setTimeout(() => {
       setTextoPegado(''); setResultadoLote(null); setCategoria(''); setSubcat('')
-      setModal(false); cargar()
+      setModal(false); cargar(); cargarSubcats()
     }, 1800)
   }
  
@@ -586,7 +597,7 @@ function Gastos() {
               <>
                 <div style={{ marginBottom:12 }}>
                   <div style={{ fontSize:11, color:'var(--text3)' }}>Subcategoría / Detalle</div>
-                  <input type="text" value={subcat} onChange={e=>setSubcat(e.target.value)} placeholder="Ej: Netflix, Gasolina Full, D1..." style={iStyle} />
+                  <input type="text" list="subcats-existentes" value={subcat} onChange={e=>setSubcat(e.target.value)} placeholder="Ej: Netflix, Gasolina Full, D1..." style={iStyle} />
                 </div>
  
                 <div style={{ marginBottom:12 }}>
@@ -634,7 +645,7 @@ function Gastos() {
  
                 <div style={{ marginBottom:8 }}>
                   <div style={{ fontSize:11, color:'var(--text3)' }}>Subcategoría / Proveedor (opcional, se aplica a todas)</div>
-                  <input type="text" value={subcat} onChange={e=>setSubcat(e.target.value)} placeholder="Ej: D1, Air-e, AAA..." style={iStyle} />
+                  <input type="text" list="subcats-existentes" value={subcat} onChange={e=>setSubcat(e.target.value)} placeholder="Ej: D1, Air-e, AAA..." style={iStyle} />
                 </div>
  
                 <div style={{ marginBottom:8 }}>
@@ -670,6 +681,10 @@ function Gastos() {
           </div>
         </div>
       )}
+ 
+      <datalist id="subcats-existentes">
+        {subcatsExistentes.map(s => <option key={s} value={s} />)}
+      </datalist>
     </div>
   )
 }
