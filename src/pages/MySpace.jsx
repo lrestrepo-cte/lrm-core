@@ -405,6 +405,10 @@ function Gastos() {
   const [resultadoLote, setResultadoLote] = useState(null)
   const [subcatsExistentes, setSubcatsExistentes] = useState([])
   const [intentoSinClasificar, setIntentoSinClasificar] = useState(false)
+  const [proveedor,     setProveedor]     = useState('')
+  const [nit,            setNit]           = useState('')
+  const [numeroFactura,  setNumeroFactura] = useState('')
+  const [formaPago,      setFormaPago]     = useState('')
 
   useEffect(() => { cargar(); cargarMetas(); cargarSubcats() }, [filtroMes, filtroP])
 
@@ -451,18 +455,21 @@ function Gastos() {
     if (faltaClasificar || !monto) { setIntentoSinClasificar(true); return }
     await supabase.from('my_space_gastos_v2').insert({
       fecha, persona, categoria, subcategoria:subcat, descripcion:desc,
-      monto:parseInt(monto), recurrente:recur, meta_id:metaId||null
+      monto:parseInt(monto), recurrente:recur, meta_id:metaId||null,
+      proveedor:proveedor||null, nit:nit||null, numero_factura:numeroFactura||null, forma_pago:formaPago||null
     })
     if (metaId) {
       const { data:meta } = await supabase.from('my_space_metas_v2').select('valor_actual').eq('id',metaId).single()
       if (meta) await supabase.from('my_space_metas_v2').update({ valor_actual: meta.valor_actual + parseInt(monto) }).eq('id', metaId)
     }
     setCategoria(''); setSubcat(''); setDesc(''); setMonto(''); setRecur(false); setMetaId(''); setIntentoSinClasificar(false)
+    setProveedor(''); setNit(''); setNumeroFactura(''); setFormaPago('')
     setModal(false); cargar(); cargarSubcats()
   }
 
   // Crea un gasto por cada línea pegada de la factura, usando persona/categoría/
-  // fecha elegidas una sola vez en el modal — obligatorias antes de avanzar.
+  // fecha/proveedor/nit/numero de factura/forma de pago elegidas una sola vez
+  // en el modal — obligatorias antes de avanzar (persona y categoría).
   const guardarLotePegado = async () => {
     const lineas = parsearTextoFactura(textoPegado)
     if (faltaClasificar || lineas.length === 0) { setIntentoSinClasificar(true); return }
@@ -471,6 +478,7 @@ function Gastos() {
     const registros = lineas.map(l => ({
       fecha, persona, categoria, subcategoria: subcat, descripcion: l.descripcion,
       monto: l.monto, recurrente: false, meta_id: null,
+      proveedor: proveedor||null, nit: nit||null, numero_factura: numeroFactura||null, forma_pago: formaPago||null,
     }))
     const { error } = await supabase.from('my_space_gastos_v2').insert(registros)
 
@@ -481,6 +489,7 @@ function Gastos() {
     setResultadoLote({ ok:true, msg:`✅ Se crearon ${registros.length} gastos por un total de ${cop(totalLote)}.` })
     setTimeout(() => {
       setTextoPegado(''); setResultadoLote(null); setCategoria(''); setSubcat(''); setIntentoSinClasificar(false)
+      setProveedor(''); setNit(''); setNumeroFactura(''); setFormaPago('')
       setModal(false); cargar(); cargarSubcats()
     }, 1800)
   }
@@ -499,6 +508,7 @@ function Gastos() {
   const cerrarModal = () => {
     setModal(false); setModoCarga('manual'); setTextoPegado(''); setResultadoLote(null)
     setPersona(''); setCategoria(''); setIntentoSinClasificar(false)
+    setProveedor(''); setNit(''); setNumeroFactura(''); setFormaPago('')
   }
 
   return (
@@ -557,6 +567,7 @@ function Gastos() {
                 </div>
                 <div style={{ fontSize:11, color:'var(--text3)', marginTop:1 }}>
                   {item.persona} · {item.categoria} · {item.fecha}
+                  {item.proveedor && ` · ${item.proveedor}`}
                   {item.recurrente && <span style={{ marginLeft:6, fontSize:9, padding:'1px 6px', borderRadius:6, background:'rgba(55,138,221,0.1)', color:'var(--blue)' }}>Recurrente</span>}
                   {item.meta_id && <span style={{ marginLeft:4, fontSize:9, padding:'1px 6px', borderRadius:6, background:'var(--gold-dim)', color:'var(--gold)', border:'0.5px solid var(--gold-border)' }}>Meta</span>}
                 </div>
@@ -670,14 +681,38 @@ function Gastos() {
                 </div>
 
                 <div style={{ marginBottom:8 }}>
-                  <div style={{ fontSize:11, color:'var(--text3)' }}>Subcategoría / Proveedor (opcional, se aplica a todas)</div>
+                  <div style={{ fontSize:11, color:'var(--text3)' }}>Subcategoría / Proveedor corto (opcional, se aplica a todas)</div>
                   <input type="text" list="subcats-existentes" value={subcat} onChange={e=>setSubcat(e.target.value)} placeholder="Ej: D1, Air-e, AAA..." style={iStyle} />
                 </div>
 
+                <div style={{ padding:'12px 14px', background:'rgba(255,255,255,0.03)', border:'1px solid var(--border)', borderRadius:10, marginBottom:12 }}>
+                  <div style={{ fontSize:11, color:'var(--text3)', marginBottom:10, fontWeight:700 }}>Datos de la factura (opcional, se guardan en cada línea)</div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:8 }}>
+                    <div>
+                      <div style={{ fontSize:10, color:'var(--text4)' }}>Proveedor</div>
+                      <input type="text" value={proveedor} onChange={e=>setProveedor(e.target.value)} placeholder="Ej: D1 SAS" style={{ ...iStyle, fontSize:12 }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize:10, color:'var(--text4)' }}>NIT</div>
+                      <input type="text" value={nit} onChange={e=>setNit(e.target.value)} placeholder="Ej: 900276962-1" style={{ ...iStyle, fontSize:12 }} />
+                    </div>
+                  </div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                    <div>
+                      <div style={{ fontSize:10, color:'var(--text4)' }}>N° Factura/Recibo</div>
+                      <input type="text" value={numeroFactura} onChange={e=>setNumeroFactura(e.target.value)} placeholder="Ej: 141657" style={{ ...iStyle, fontSize:12 }} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize:10, color:'var(--text4)' }}>Forma de pago</div>
+                      <input type="text" value={formaPago} onChange={e=>setFormaPago(e.target.value)} placeholder="Ej: Contado, Tarjeta" style={{ ...iStyle, fontSize:12 }} />
+                    </div>
+                  </div>
+                </div>
+
                 <div style={{ marginBottom:8 }}>
-                  <div style={{ fontSize:11, color:'var(--text3)' }}>Pega aquí el texto que Claude te dio (formato: descripción|monto, una línea por producto)</div>
+                  <div style={{ fontSize:11, color:'var(--text3)' }}>Pega aquí el texto que Claude te dio (formato: descripción|monto, una línea por unidad)</div>
                   <textarea value={textoPegado} onChange={e=>setTextoPegado(e.target.value)}
-                    placeholder={"Toalla de cocina|3500\nCrema dental|10600\nTocineta ahumada|6600"}
+                    placeholder={"Toalla de cocina|1750\nCrema dental|5300\nTocineta ahumada|6600"}
                     style={{ ...iStyle, height:140, resize:'vertical', fontFamily:'monospace', fontSize:12 }} />
                 </div>
 
