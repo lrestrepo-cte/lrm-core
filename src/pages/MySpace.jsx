@@ -49,6 +49,22 @@ const FUENTES = [
   { id:'otro',      label:'➕ Otro',                  tipo:'variable'},
 ]
 
+function parsearTextoFactura(texto) {
+  return texto
+    .split('\n')
+    .map(l => l.trim())
+    .filter(l => l.length > 0)
+    .map(linea => {
+      const partes = linea.split('|').map(p => p.trim())
+      if (partes.length < 2) return null
+      const descripcion = partes[0]
+      const monto = parseInt(partes[1].replace(/[^\d]/g, ''))
+      if (!descripcion || !monto || isNaN(monto)) return null
+      return { descripcion, monto }
+    })
+    .filter(Boolean)
+}
+
 // ─── PIN LOCK ─────────────────────────────────────────────────────────────────
 function PinLock({ onUnlock }) {
   const [pin, setPin]   = useState('')
@@ -372,6 +388,7 @@ function Gastos() {
   const [items,     setItems]     = useState([])
   const [loading,   setLoading]   = useState(true)
   const [modal,     setModal]     = useState(false)
+  const [modoCarga, setModoCarga] = useState('manual') // 'manual' | 'pegar'
   const [persona,   setPersona]   = useState('Hogar')
   const [categoria, setCategoria] = useState('')
   const [subcat,    setSubcat]    = useState('')
@@ -383,9 +400,12 @@ function Gastos() {
   const [metas,     setMetas]     = useState([])
   const [filtroP,   setFiltroP]   = useState('Todos')
   const [filtroMes, setFiltroMes] = useState(new Date().toISOString().slice(0,7))
-
+  const [textoPegado, setTextoPegado]     = useState('')
+  const [guardandoLote, setGuardandoLote] = useState(false)
+  const [resultadoLote, setResultadoLote] = useState(null)
+ 
   useEffect(() => { cargar(); cargarMetas() }, [filtroMes, filtroP])
-
+ 
   const cargar = async () => {
     setLoading(true)
     let q = supabase.from('my_space_gastos_v2').select('*')
@@ -396,19 +416,18 @@ function Gastos() {
     if (data) setItems(data)
     setLoading(false)
   }
-
+ 
   const cargarMetas = async () => {
     const { data } = await supabase.from('my_space_metas_v2').select('id,nombre,emoji').eq('estado','activa')
     if (data) setMetas(data)
   }
-
+ 
   const guardar = async () => {
     if (!monto || !categoria) return
     await supabase.from('my_space_gastos_v2').insert({
       fecha, persona, categoria, subcategoria:subcat, descripcion:desc,
       monto:parseInt(monto), recurrente:recur, meta_id:metaId||null
     })
-    // Si tiene meta asociada, actualizar valor_actual
     if (metaId) {
       const { data:meta } = await supabase.from('my_space_metas_v2').select('valor_actual').eq('id',metaId).single()
       if (meta) await supabase.from('my_space_metas_v2').update({ valor_actual: meta.valor_actual + parseInt(monto) }).eq('id', metaId)
@@ -416,15 +435,46 @@ function Gastos() {
     setCategoria(''); setSubcat(''); setDesc(''); setMonto(''); setRecur(false); setMetaId('')
     setModal(false); cargar()
   }
-
+ 
+  // Crea un gasto por cada línea pegada de la factura, usando persona/categoría/
+  // fecha elegidas una sola vez en el modal — esto es lo nuevo de esta versión.
+  const guardarLotePegado = async () => {
+    const lineas = parsearTextoFactura(textoPegado)
+    if (lineas.length === 0 || !categoria) return
+    setGuardandoLote(true)
+ 
+    const registros = lineas.map(l => ({
+      fecha, persona, categoria, subcategoria: subcat, descripcion: l.descripcion,
+      monto: l.monto, recurrente: false, meta_id: null,
+    }))
+    const { error } = await supabase.from('my_space_gastos_v2').insert(registros)
+ 
+    setGuardandoLote(false)
+    if (error) { setResultadoLote({ ok:false, msg:'Error: '+error.message }); return }
+ 
+    const totalLote = registros.reduce((s,r)=>s+r.monto,0)
+    setResultadoLote({ ok:true, msg:`✅ Se crearon ${registros.length} gastos por un total de ${cop(totalLote)}.` })
+    setTimeout(() => {
+      setTextoPegado(''); setResultadoLote(null); setCategoria(''); setSubcat('')
+      setModal(false); cargar()
+    }, 1800)
+  }
+ 
   const eliminar = async (id) => {
     await supabase.from('my_space_gastos_v2').delete().eq('id', id)
     setItems(prev=>prev.filter(i=>i.id!==id))
   }
-
+ 
   const total = items.reduce((s,i)=>s+i.monto,0)
   const porPersona = PERSONAS.map(p => ({ p, val: items.filter(i=>i.persona===p).reduce((s,i)=>s+i.monto,0) }))
-
+ 
+  const lineasPreview = textoPegado ? parsearTextoFactura(textoPegado) : []
+  const totalPreview = lineasPreview.reduce((s,l)=>s+l.monto,0)
+ 
+  const cerrarModal = () => {
+    setModal(false); setModoCarga('manual'); setTextoPegado(''); setResultadoLote(null)
+  }
+ 
   return (
     <div>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
@@ -438,8 +488,7 @@ function Gastos() {
           <button onClick={() => setModal(true)} className="btn-gold" style={{ padding:'8px 16px', fontSize:12 }}>+ Registrar</button>
         </div>
       </div>
-
-      {/* Filtro persona */}
+ 
       <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
         {['Todos',...PERSONAS].map(p => (
           <div key={p} onClick={() => setFiltroP(p)} style={{
@@ -453,8 +502,7 @@ function Gastos() {
           </div>
         ))}
       </div>
-
-      {/* Resumen por persona */}
+ 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(120px,1fr))', gap:10, marginBottom:16 }}>
         {porPersona.map(({ p, val }) => (
           <div key={p} className="kpi-card" style={{ border:`1px solid ${P_COLOR[p]}33` }}>
@@ -463,7 +511,7 @@ function Gastos() {
           </div>
         ))}
       </div>
-
+ 
       <div className="panel">
         <div style={{ display:'flex', justifyContent:'space-between', marginBottom:12 }}>
           <span style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>Total: <span style={{ color:'var(--red)' }}>{cop(total)}</span></span>
@@ -495,13 +543,23 @@ function Gastos() {
           </div>
         ))}
       </div>
-
+ 
       {modal && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'flex-start', justifyContent:'center', zIndex:100, padding:20, overflowY:'auto' }}>
-          <div style={{ background:'var(--bg2)', borderRadius:16, padding:28, width:'100%', maxWidth:440, border:'1px solid var(--border)', margin:'auto' }}>
-            <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:20 }}>Registrar gasto</div>
-
-            {/* Persona */}
+          <div style={{ background:'var(--bg2)', borderRadius:16, padding:28, width:'100%', maxWidth:480, border:'1px solid var(--border)', margin:'auto' }}>
+            <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:16 }}>Registrar gasto</div>
+ 
+            <div style={{ display:'flex', gap:8, marginBottom:18 }}>
+              {[{id:'manual',label:'✍️ Manual'},{id:'pegar',label:'📋 Pegar de factura'}].map(m => (
+                <div key={m.id} onClick={() => setModoCarga(m.id)} style={{
+                  flex:1, padding:'9px', borderRadius:8, cursor:'pointer', textAlign:'center', fontSize:12, fontWeight:600,
+                  background: modoCarga===m.id?'var(--gold-dim)':'rgba(255,255,255,0.04)',
+                  border:`1px solid ${modoCarga===m.id?'var(--gold-border)':'var(--border)'}`,
+                  color: modoCarga===m.id?'var(--gold)':'var(--text3)',
+                }}>{m.label}</div>
+              ))}
+            </div>
+ 
             <div style={{ marginBottom:14 }}>
               <div style={{ fontSize:11, color:'var(--text3)', marginBottom:8 }}>¿Para quién?</div>
               <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
@@ -515,57 +573,100 @@ function Gastos() {
                 ))}
               </div>
             </div>
-
-            {/* Categoría */}
+ 
             <div style={{ marginBottom:12 }}>
-              <div style={{ fontSize:11, color:'var(--text3)' }}>Categoría</div>
+              <div style={{ fontSize:11, color:'var(--text3)' }}>Categoría {modoCarga==='pegar' && '(se aplica a todas las líneas pegadas)'}</div>
               <select value={categoria} onChange={e=>setCategoria(e.target.value)} style={iStyle}>
                 <option value="">Seleccionar...</option>
                 {(CATS_GASTO[persona]||[]).map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-
-            <div style={{ marginBottom:12 }}>
-              <div style={{ fontSize:11, color:'var(--text3)' }}>Subcategoría / Detalle</div>
-              <input type="text" value={subcat} onChange={e=>setSubcat(e.target.value)} placeholder="Ej: Netflix, Gasolina Full, D1..." style={iStyle} />
-            </div>
-
-            <div style={{ marginBottom:12 }}>
-              <div style={{ fontSize:11, color:'var(--text3)' }}>Descripción adicional</div>
-              <input type="text" value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Nota opcional" style={iStyle} />
-            </div>
-
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }}>
-              <div>
-                <div style={{ fontSize:11, color:'var(--text3)' }}>Monto (COP)</div>
-                <input type="number" value={monto} onChange={e=>setMonto(e.target.value)} placeholder="Ej: 150000" style={iStyle} />
-              </div>
-              <div>
-                <div style={{ fontSize:11, color:'var(--text3)' }}>Fecha</div>
-                <input type="date" value={fecha} onChange={e=>setFecha(e.target.value)} style={iStyle} />
-              </div>
-            </div>
-
-            {/* Correlación con meta */}
-            {metas.length > 0 && (
-              <div style={{ marginBottom:12 }}>
-                <div style={{ fontSize:11, color:'var(--text3)' }}>¿Asociar a una meta? (opcional)</div>
-                <select value={metaId} onChange={e=>setMetaId(e.target.value)} style={iStyle}>
-                  <option value="">Sin meta asociada</option>
-                  {metas.map(m => <option key={m.id} value={m.id}>{m.emoji} {m.nombre}</option>)}
-                </select>
-              </div>
+ 
+            {modoCarga === 'manual' ? (
+              <>
+                <div style={{ marginBottom:12 }}>
+                  <div style={{ fontSize:11, color:'var(--text3)' }}>Subcategoría / Detalle</div>
+                  <input type="text" value={subcat} onChange={e=>setSubcat(e.target.value)} placeholder="Ej: Netflix, Gasolina Full, D1..." style={iStyle} />
+                </div>
+ 
+                <div style={{ marginBottom:12 }}>
+                  <div style={{ fontSize:11, color:'var(--text3)' }}>Descripción adicional</div>
+                  <input type="text" value={desc} onChange={e=>setDesc(e.target.value)} placeholder="Nota opcional" style={iStyle} />
+                </div>
+ 
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }}>
+                  <div>
+                    <div style={{ fontSize:11, color:'var(--text3)' }}>Monto (COP)</div>
+                    <input type="number" value={monto} onChange={e=>setMonto(e.target.value)} placeholder="Ej: 150000" style={iStyle} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize:11, color:'var(--text3)' }}>Fecha</div>
+                    <input type="date" value={fecha} onChange={e=>setFecha(e.target.value)} style={iStyle} />
+                  </div>
+                </div>
+ 
+                {metas.length > 0 && (
+                  <div style={{ marginBottom:12 }}>
+                    <div style={{ fontSize:11, color:'var(--text3)' }}>¿Asociar a una meta? (opcional)</div>
+                    <select value={metaId} onChange={e=>setMetaId(e.target.value)} style={iStyle}>
+                      <option value="">Sin meta asociada</option>
+                      {metas.map(m => <option key={m.id} value={m.id}>{m.emoji} {m.nombre}</option>)}
+                    </select>
+                  </div>
+                )}
+ 
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:20, cursor:'pointer' }} onClick={()=>setRecur(p=>!p)}>
+                  <div style={{ width:18, height:18, borderRadius:5, border:'1px solid var(--border)', background:recur?'var(--gold-dim)':'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, color:'var(--gold)' }}>{recur&&'✓'}</div>
+                  <div style={{ fontSize:12, color:'var(--text3)' }}>Gasto recurrente mensual</div>
+                </div>
+ 
+                <div style={{ display:'flex', gap:10 }}>
+                  <button onClick={guardar} disabled={!monto||!categoria} className="btn-green" style={{ flex:1 }}>Guardar gasto</button>
+                  <button onClick={cerrarModal} className="btn">Cancelar</button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div style={{ marginBottom:12 }}>
+                  <div style={{ fontSize:11, color:'var(--text3)' }}>Fecha de la factura (se aplica a todas las líneas)</div>
+                  <input type="date" value={fecha} onChange={e=>setFecha(e.target.value)} style={iStyle} />
+                </div>
+ 
+                <div style={{ marginBottom:8 }}>
+                  <div style={{ fontSize:11, color:'var(--text3)' }}>Subcategoría / Proveedor (opcional, se aplica a todas)</div>
+                  <input type="text" value={subcat} onChange={e=>setSubcat(e.target.value)} placeholder="Ej: D1, Air-e, AAA..." style={iStyle} />
+                </div>
+ 
+                <div style={{ marginBottom:8 }}>
+                  <div style={{ fontSize:11, color:'var(--text3)' }}>Pega aquí el texto que Claude te dio (formato: descripción|monto, una línea por producto)</div>
+                  <textarea value={textoPegado} onChange={e=>setTextoPegado(e.target.value)}
+                    placeholder={"Toalla de cocina|3500\nCrema dental|10600\nTocineta ahumada|6600"}
+                    style={{ ...iStyle, height:140, resize:'vertical', fontFamily:'monospace', fontSize:12 }} />
+                </div>
+ 
+                {lineasPreview.length > 0 && (
+                  <div style={{ padding:'10px 14px', background:'rgba(55,138,221,0.06)', border:'1px solid rgba(55,138,221,0.2)', borderRadius:10, fontSize:12, color:'var(--blue)', marginBottom:14 }}>
+                    📋 Se detectaron {lineasPreview.length} línea(s) — total {cop(totalPreview)}
+                  </div>
+                )}
+ 
+                {resultadoLote && (
+                  <div style={{ padding:'12px 14px', borderRadius:10, fontSize:13, fontWeight:600, marginBottom:14,
+                    background: resultadoLote.ok?'var(--green-dim)':'var(--red-dim)',
+                    color: resultadoLote.ok?'var(--green)':'var(--red)',
+                    border:`1px solid ${resultadoLote.ok?'var(--green-border)':'rgba(224,82,82,0.3)'}` }}>
+                    {resultadoLote.msg}
+                  </div>
+                )}
+ 
+                <div style={{ display:'flex', gap:10 }}>
+                  <button onClick={guardarLotePegado} disabled={lineasPreview.length===0||!categoria||guardandoLote||resultadoLote?.ok} className="btn-green" style={{ flex:1 }}>
+                    {guardandoLote ? '⏳ Creando...' : `Crear ${lineasPreview.length||''} gasto(s)`}
+                  </button>
+                  <button onClick={cerrarModal} className="btn">Cancelar</button>
+                </div>
+              </>
             )}
-
-            <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:20, cursor:'pointer' }} onClick={()=>setRecur(p=>!p)}>
-              <div style={{ width:18, height:18, borderRadius:5, border:'1px solid var(--border)', background:recur?'var(--gold-dim)':'transparent', display:'flex', alignItems:'center', justifyContent:'center', fontSize:12, color:'var(--gold)' }}>{recur&&'✓'}</div>
-              <div style={{ fontSize:12, color:'var(--text3)' }}>Gasto recurrente mensual</div>
-            </div>
-
-            <div style={{ display:'flex', gap:10 }}>
-              <button onClick={guardar} disabled={!monto||!categoria} className="btn-green" style={{ flex:1 }}>Guardar gasto</button>
-              <button onClick={() => setModal(false)} className="btn">Cancelar</button>
-            </div>
           </div>
         </div>
       )}
