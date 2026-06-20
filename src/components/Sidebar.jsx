@@ -108,6 +108,7 @@ const NAV_RV = [
     items:[
       { id:'catalogo',   label:'Catálogo'   },
       { id:'inventario', label:'Inventario' },
+      { id:'importaciones', label:'Importaciones' },
     ]
   },
   {
