@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import RVDashboard      from './RVDashboard'
 import RVPOS            from './RVPOS'
 import RVPedidos        from './RVPedidos'
@@ -22,6 +22,15 @@ export default function RVApp({ navExterno, onNavChange, usuario }) {
   const [nav, setNav] = useState(navExterno || 'dashboard')
   const { isMobile, isTablet } = useBreakpoint()
   const mostrarSubNav = isMobile || isTablet
+
+  // El sidebar (en App.jsx, componente padre) controla la navegación real vía
+  // navExterno. Sin este efecto, el estado interno "nav" se queda congelado en
+  // su valor inicial la primera vez que se monta el componente, y un clic en
+  // el sidebar (ej. "Importaciones") nunca se refleja aquí — por eso no pasaba
+  // nada al hacer clic. Este efecto sincroniza nav cada vez que navExterno cambia.
+  useEffect(() => {
+    if (navExterno && navExterno !== nav) setNav(navExterno)
+  }, [navExterno])
 
   const cambiarNav = (id) => {
     setNav(id)
@@ -48,9 +57,6 @@ export default function RVApp({ navExterno, onNavChange, usuario }) {
 
   return (
     <>
-      {/* El sub-nav solo se muestra en móvil/tablet, donde el sidebar está oculto
-          por defecto (menú deslizable). En escritorio la navegación vive solo
-          en el sidebar izquierdo, sin duplicarla aquí. */}
       {mostrarSubNav && (
         <div className="sub-nav">
           {NAV.map(n => (
