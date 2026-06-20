@@ -6,6 +6,7 @@ import RVCatalogo       from './RVCatalogo'
 import RVInventario     from './RVInventario'
 import RVClientes       from './RVClientes'
 import RVImportaciones  from './RVImportaciones'
+import { useBreakpoint } from '../../hooks/useBreakpoint'
 
 const NAV = [
   { id:'dashboard',      label:'Dashboard'       },
@@ -19,6 +20,8 @@ const NAV = [
 
 export default function RVApp({ navExterno, onNavChange, usuario }) {
   const [nav, setNav] = useState(navExterno || 'dashboard')
+  const { isMobile, isTablet } = useBreakpoint()
+  const mostrarSubNav = isMobile || isTablet
 
   const cambiarNav = (id) => {
     setNav(id)
@@ -45,13 +48,18 @@ export default function RVApp({ navExterno, onNavChange, usuario }) {
 
   return (
     <>
-      <div className="sub-nav">
-        {NAV.map(n => (
-          <div key={n.id} className={`sub-nav-item${nav===n.id?' active':''}`} onClick={() => cambiarNav(n.id)}>
-            {n.label}
-          </div>
-        ))}
-      </div>
+      {/* El sub-nav solo se muestra en móvil/tablet, donde el sidebar está oculto
+          por defecto (menú deslizable). En escritorio la navegación vive solo
+          en el sidebar izquierdo, sin duplicarla aquí. */}
+      {mostrarSubNav && (
+        <div className="sub-nav">
+          {NAV.map(n => (
+            <div key={n.id} className={`sub-nav-item${nav===n.id?' active':''}`} onClick={() => cambiarNav(n.id)}>
+              {n.label}
+            </div>
+          ))}
+        </div>
+      )}
       {renderModulo()}
     </>
   )
