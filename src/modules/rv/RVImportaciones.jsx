@@ -31,6 +31,23 @@ function calcularLinea(item, trmManual, tarifaFleteCbm, monedaFlete) {
   return { volumenCajaM3, cbmTotal, costoFleteTotal, totalPares, costoFletePorPar, costoMercanciaPorPar, costoTotalPorPar }
 }
 
+// Busca el producto por referencia en rv_productos. Si no existe, lo crea
+// automáticamente — así no hay que pasar primero por el módulo Catálogo.
+async function obtenerOcrearProducto(referencia, productosCache) {
+  let prod = productosCache.find(p => p.referencia === referencia)
+  if (prod) return prod
+
+  const { data: existente } = await supabase.from('rv_productos').select('*').eq('referencia', referencia).maybeSingle()
+  if (existente) { productosCache.push(existente); return existente }
+
+  const { data: creado, error } = await supabase.from('rv_productos').insert({
+    referencia, nombre: referencia, activo: true,
+  }).select().single()
+  if (error) { console.error('Error creando producto automático:', error); return null }
+  productosCache.push(creado)
+  return creado
+}
+
 function ModalNuevaOrden({ onClose, onCreada, productos }) {
   const [proveedor, setProveedor]   = useState('')
   const [fecha, setFecha]           = useState(new Date().toISOString().split('T')[0])
@@ -69,6 +86,13 @@ function ModalNuevaOrden({ onClose, onCreada, productos }) {
   const guardar = async () => {
     if (!puedeGuardar) return
     setGuardando(true)
+
+    // Crea automáticamente en Catálogo cualquier referencia nueva que no exista todavía.
+    const cache = [...productos]
+    for (const it of items) {
+      await obtenerOcrearProducto(it.referencia, cache)
+    }
+
     const { data: orden, error } = await supabase.from('rv_importaciones').insert({
       proveedor, fecha_pedido: fecha, trm_manual: trmNum, tarifa_flete_cbm: tarifaNum,
       moneda_flete: monedaFlete, estado: 'pedido', notas,
@@ -94,6 +118,10 @@ function ModalNuevaOrden({ onClose, onCreada, productos }) {
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'flex-start', justifyContent:'center', zIndex:100, padding:20, overflowY:'auto' }}>
       <div style={{ background:'var(--bg2)', borderRadius:16, padding:28, width:'100%', maxWidth:760, border:'1px solid var(--border)', margin:'auto' }}>
         <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:16 }}>Nueva orden de importación</div>
+
+        <div style={{ padding:'10px 14px', background:'rgba(55,138,221,0.06)', border:'1px solid rgba(55,138,221,0.2)', borderRadius:10, fontSize:11, color:'var(--blue)', marginBottom:16 }}>
+          📦 Si la referencia que escribas no existe aún en el Catálogo, se crea automáticamente al guardar.
+        </div>
 
         <div className="grid-2" style={{ gap:10, marginBottom:12 }}>
           <div>
@@ -241,18 +269,20 @@ export default function RVImportaciones() {
     setOrdenes(prev => prev.map(o => o.id===id ? { ...o, estado: nuevoEstado } : o))
   }
 
-  // Al marcar como Recibido, suma las cantidades al inventario real (rv_inventario),
-  // buscando coincidencia por referencia+talla. Si no existe el registro, lo crea.
+  // Al marcar como Recibido, suma las cantidades al inventario real (rv_inventario).
+  // Si la referencia no existe todavía en Catálogo, se crea automáticamente —
+  // así nunca se pierde mercancía recibida por falta de un paso manual previo.
   const recibirYSumarInventario = async (orden) => {
     const items = itemsPorOrden[orden.id] || []
     if (items.length === 0) return
 
     const { data: invActual } = await supabase.from('rv_inventario').select('*')
+    const cacheProductos = [...productos]
 
     for (const item of items) {
       const totalPares = item.num_cajas * item.pares_por_caja
-      const prod = productos.find(p => p.referencia === item.referencia)
-      if (!prod) continue // si la referencia no existe en catálogo, se omite (debe crearse ahí primero)
+      const prod = await obtenerOcrearProducto(item.referencia, cacheProductos)
+      if (!prod) continue
 
       const existente = invActual?.find(i => i.producto_id===prod.id && i.talla===item.talla)
       if (existente) {
@@ -261,6 +291,7 @@ export default function RVImportaciones() {
         await supabase.from('rv_inventario').insert({ producto_id: prod.id, talla: item.talla, stock: totalPares })
       }
     }
+    setProductos(cacheProductos)
     await cambiarEstado(orden.id, 'recibido')
     alert('✅ Mercancía sumada al inventario correctamente.')
   }
@@ -298,7 +329,6 @@ export default function RVImportaciones() {
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
           {ordenes.map(orden => {
             const { cbmTotal, costoTotal, paresTotal } = calcularTotalesOrden(orden)
-            const estadoInfo = ESTADOS.find(e=>e.id===orden.estado)
             const expandido = expandida === orden.id
             return (
               <div key={orden.id} className="panel">
