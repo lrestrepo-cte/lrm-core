@@ -55,10 +55,91 @@ function nuevoItem() {
   return { id: Date.now(), producto:null, salchicha:null, tipo:null, bebida:null, extras:[], bebidaSuelta:null, paso:1 }
 }
 
+// Item de venta rápida — producto suelto (bebida o extra) sin pasar por el
+// flujo de armado del hot dog. Se trata como un item ya "completo" (paso:5)
+// desde el momento en que se agrega, porque no necesita configuración.
+function nuevoItemSuelto(producto, tipo) {
+  return { id: Date.now()+Math.random(), suelto:true, productoSuelto:producto, tipoSuelto:tipo, paso:5 }
+}
+
 function precioItem(item) {
+  if (item.suelto) return item.productoSuelto?.precio || 0
   if (!item.producto || !item.tipo) return 0
   const base = item.tipo === 'solo' ? item.producto.precioSolo : item.producto.precioCombo
   return base + item.extras.reduce((s,e) => s+e.precio, 0) + (item.bebidaSuelta?.precio || 0)
+}
+
+// Resta el cambio del/los pago(s) en efectivo, para que lo que se registra
+// como "recibido" sea el monto NETO que realmente se queda en caja — nunca
+// el monto bruto que el cliente entregó antes de recibir su cambio.
+function ajustarPagosNetos(pagos, cambio) {
+  let cambioRestante = cambio
+  return pagos.map(p => {
+    if (p.metodo === 'efectivo' && cambioRestante > 0) {
+      const montoActual = parseFloat(p.monto) || 0
+      const descuento = Math.min(montoActual, cambioRestante)
+      cambioRestante -= descuento
+      return { ...p, monto: montoActual - descuento }
+    }
+    return { ...p, monto: parseFloat(p.monto) || 0 }
+  })
+}
+
+function VentaRapida({ onAgregar, onCerrar, isMobile }) {
+  return (
+    <div style={{ background:'var(--bg3)', borderRadius:14, border:'1px solid var(--gold-border)', overflow:'hidden', marginBottom:12 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderBottom:'1px solid var(--border)', background:'var(--gold-dim)' }}>
+        <div style={{ fontSize:13, fontWeight:700, color:'var(--gold)' }}>⚡ Venta rápida — solo bebidas y extras</div>
+        <div onClick={onCerrar} style={{ width:26, height:26, borderRadius:7, background:'rgba(255,255,255,0.06)', border:'0.5px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', fontSize:14, color:'var(--text3)' }}>×</div>
+      </div>
+      <div style={{ padding:'12px 14px' }}>
+        <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>BEBIDAS</div>
+        <div style={{ display:'grid', gridTemplateColumns:`repeat(${isMobile?3:4},1fr)`, gap:8, marginBottom:14 }}>
+          {BEBIDAS.map(b => (
+            <div key={b.id} onClick={() => onAgregar(b, 'bebida')} style={{
+              padding:isMobile?8:10, borderRadius:10, cursor:'pointer', textAlign:'center',
+              border:`1px solid ${b.color}33`, background:b.color+'11', display:'flex', flexDirection:'column', alignItems:'center', gap:4,
+            }}>
+              <div style={{ fontSize:isMobile?18:22 }}>{b.emoji}</div>
+              <div style={{ fontSize:10, fontWeight:600, color:'var(--text)', lineHeight:1.2 }}>{b.nombre}</div>
+              <div style={{ fontSize:10, color:b.color, fontWeight:700 }}>{cop(b.precio)}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>EXTRAS SUELTOS</div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8 }}>
+          {EXTRAS.map(e => (
+            <div key={e.id} onClick={() => onAgregar(e, 'extra')} style={{
+              padding:isMobile?8:10, borderRadius:10, cursor:'pointer', textAlign:'center',
+              border:'1px solid var(--border)', background:'rgba(255,255,255,0.03)', display:'flex', flexDirection:'column', alignItems:'center', gap:4,
+            }}>
+              <div style={{ fontSize:isMobile?20:24 }}>{e.emoji}</div>
+              <div style={{ fontSize:11, fontWeight:600, color:'var(--text)' }}>{e.nombre}</div>
+              <div style={{ fontSize:10, color:'var(--gold)', fontWeight:700 }}>{cop(e.precio)}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ItemSueltoCard({ item, onEliminar }) {
+  return (
+    <div style={{ background:'var(--bg3)', borderRadius:14, border:'1px solid var(--border)', overflow:'hidden', marginBottom:12, padding:'12px 14px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+        <span style={{ fontSize:20 }}>{item.productoSuelto.emoji}</span>
+        <div>
+          <div style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{item.productoSuelto.nombre}</div>
+          <div style={{ fontSize:11, color:'var(--text3)' }}>Venta suelta</div>
+        </div>
+      </div>
+      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+        <span style={{ fontSize:14, fontWeight:800, color:'var(--gold)' }}>{cop(precioItem(item))}</span>
+        <div onClick={onEliminar} style={{ width:26, height:26, borderRadius:7, background:'rgba(224,82,82,0.1)', border:'0.5px solid rgba(224,82,82,0.3)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', fontSize:14, color:'var(--red)' }}>×</div>
+      </div>
+    </div>
+  )
 }
 
 function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMobile }) {
@@ -251,24 +332,31 @@ function PantallaCliente({ items, totalPrecio, confirmado, orden }) {
         <div style={{ fontSize:10, color:'var(--text3)' }}>HOT DOGS DE VERDAD</div>
       </div>
       <div style={{ flex:1, overflowY:'auto', padding:'12px' }}>
-        {items.length === 0 || !items[0].producto ? (
+        {items.length === 0 || (!items[0].producto && !items[0].suelto) ? (
           <div style={{ textAlign:'center', paddingTop:40 }}>
             <div style={{ fontSize:36, marginBottom:10 }}>👋</div>
             <div style={{ fontSize:14, fontWeight:700, color:'var(--text)' }}>Bienvenido a ZABÚ</div>
             <div style={{ fontSize:11, color:'var(--text3)', marginTop:4 }}>Tu orden aparecerá aquí</div>
           </div>
-        ) : items.filter(i=>i.producto).map((item) => (
+        ) : items.filter(i=>i.producto || i.suelto).map((item) => (
           <div key={item.id} style={{ background:'var(--bg3)', borderRadius:10, border:'1px solid var(--border)', padding:'10px 12px', marginBottom:8 }}>
-            <div style={{ display:'flex', justifyContent:'space-between' }}>
-              <div>
-                <div style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{item.producto.emoji} {item.producto.nombre}</div>
-                {item.salchicha && <div style={{ fontSize:11, color:'var(--text3)' }}>🥩 {item.salchicha.nombre}</div>}
-                {item.tipo && <div style={{ fontSize:11, color:'var(--text3)' }}>{item.tipo==='solo'?'🌭 Solo':'🥤 Combo'}{item.bebida?` · ${item.bebida.nombre}`:''}</div>}
-                {item.extras.map(e=><div key={e.id} style={{ fontSize:10, color:'var(--text3)' }}>+ {e.nombre}</div>)}
-                {item.bebidaSuelta && <div style={{ fontSize:10, color:'var(--text3)' }}>🥤 {item.bebidaSuelta.nombre}</div>}
+            {item.suelto ? (
+              <div style={{ display:'flex', justifyContent:'space-between' }}>
+                <div style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{item.productoSuelto.emoji} {item.productoSuelto.nombre}</div>
+                <div style={{ fontSize:13, fontWeight:800, color:'var(--gold)' }}>{cop(precioItem(item))}</div>
               </div>
-              {precioItem(item)>0 && <div style={{ fontSize:13, fontWeight:800, color:'var(--gold)' }}>{cop(precioItem(item))}</div>}
-            </div>
+            ) : (
+              <div style={{ display:'flex', justifyContent:'space-between' }}>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{item.producto.emoji} {item.producto.nombre}</div>
+                  {item.salchicha && <div style={{ fontSize:11, color:'var(--text3)' }}>🥩 {item.salchicha.nombre}</div>}
+                  {item.tipo && <div style={{ fontSize:11, color:'var(--text3)' }}>{item.tipo==='solo'?'🌭 Solo':'🥤 Combo'}{item.bebida?` · ${item.bebida.nombre}`:''}</div>}
+                  {item.extras.map(e=><div key={e.id} style={{ fontSize:10, color:'var(--text3)' }}>+ {e.nombre}</div>)}
+                  {item.bebidaSuelta && <div style={{ fontSize:10, color:'var(--text3)' }}>🥤 {item.bebidaSuelta.nombre}</div>}
+                </div>
+                {precioItem(item)>0 && <div style={{ fontSize:13, fontWeight:800, color:'var(--gold)' }}>{cop(precioItem(item))}</div>}
+              </div>
+            )}
           </div>
         ))}
       </div>
@@ -288,10 +376,13 @@ function Ticket({ orden, onCerrar }) {
   const [telInput, setTelInput] = useState('')
   const [enviado,  setEnviado]  = useState(false)
 
+  const lineaItem = (item) => {
+    if (item.suelto) return `▸ ${item.productoSuelto.nombre} (suelto) — ${cop(precioItem(item))}`
+    return `▸ ${item.producto.nombre} · ${item.salchicha.nombre} · ${item.tipo==='solo'?'Solo':'Combo'}${item.bebida?` (${item.bebida.nombre})`:''}${item.extras.length>0?'\n  + '+item.extras.map(e=>e.nombre).join(', '):''}${item.bebidaSuelta?`\n  🥤 ${item.bebidaSuelta.nombre}`:''} — ${cop(precioItem(item))}`
+  }
+
   const textoWsp = `🌭 *ZABÚ* — Orden ${getOrdenNum(orden.num)}
-${orden.nombreCliente ? `Cliente: ${orden.nombreCliente}\n` : ''}${orden.items.map(item =>
-    `▸ ${item.producto.nombre} · ${item.salchicha.nombre} · ${item.tipo==='solo'?'Solo':'Combo'}${item.bebida?` (${item.bebida.nombre})`:''}${item.extras.length>0?'\n  + '+item.extras.map(e=>e.nombre).join(', '):''}${item.bebidaSuelta?`\n  🥤 ${item.bebidaSuelta.nombre}`:''} — ${cop(precioItem(item))}`
-  ).join('\n')}
+${orden.nombreCliente ? `Cliente: ${orden.nombreCliente}\n` : ''}${orden.items.map(lineaItem).join('\n')}
 
 💰 *Total: ${cop(orden.total)}*
 ${orden.pagos.map(p=>`${p.metodo==='efectivo'?'💵 Efectivo':p.metodo==='qr'?'📲 QR':'💳 Tarjeta'}: ${cop(p.monto)}`).join('\n')}${orden.cambio>0?`\nCambio: ${cop(orden.cambio)}`:''}
@@ -338,15 +429,24 @@ ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para 
         <div style={{ borderTop:'1px dashed #ccc', paddingTop:8, marginBottom:8 }}>
           {orden.items.map((item,i) => (
             <div key={i} style={{ marginBottom:6 }}>
-              <div style={{ display:'flex', justifyContent:'space-between', fontWeight:700 }}>
-                <span>{item.producto.nombre} · {item.salchicha.nombre}</span>
-                <span>{cop(precioItem(item))}</span>
-              </div>
-              <div style={{ color:'#555', paddingLeft:6, fontSize:10 }}>
-                {item.tipo==='solo'?'Solo':'Combo'}{item.bebida?` · ${item.bebida.nombre}`:''}
-                {item.extras.map(e=><div key={e.id}>+ {e.nombre} {cop(e.precio)}</div>)}
-                {item.bebidaSuelta && <div>🥤 {item.bebidaSuelta.nombre} {cop(item.bebidaSuelta.precio)}</div>}
-              </div>
+              {item.suelto ? (
+                <div style={{ display:'flex', justifyContent:'space-between', fontWeight:700 }}>
+                  <span>{item.productoSuelto.nombre} (suelto)</span>
+                  <span>{cop(precioItem(item))}</span>
+                </div>
+              ) : (
+                <>
+                  <div style={{ display:'flex', justifyContent:'space-between', fontWeight:700 }}>
+                    <span>{item.producto.nombre} · {item.salchicha.nombre}</span>
+                    <span>{cop(precioItem(item))}</span>
+                  </div>
+                  <div style={{ color:'#555', paddingLeft:6, fontSize:10 }}>
+                    {item.tipo==='solo'?'Solo':'Combo'}{item.bebida?` · ${item.bebida.nombre}`:''}
+                    {item.extras.map(e=><div key={e.id}>+ {e.nombre} {cop(e.precio)}</div>)}
+                    {item.bebidaSuelta && <div>🥤 {item.bebidaSuelta.nombre} {cop(item.bebidaSuelta.precio)}</div>}
+                  </div>
+                </>
+              )}
             </div>
           ))}
         </div>
@@ -380,11 +480,17 @@ ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para 
         </div>
         {orden.items.map((item,i) => (
           <div key={i} style={{ marginBottom:10, paddingBottom:10, borderBottom:'1px dashed #333' }}>
-            <div style={{ fontSize:15, fontWeight:800, color:'#C9A84C' }}>{item.producto.emoji} {item.producto.nombre}</div>
-            <div style={{ fontSize:13, fontWeight:700, color:'#fff', marginTop:2 }}>🥩 {item.salchicha.nombre}</div>
-            <div style={{ fontSize:11, color:'#888' }}>{item.tipo==='solo'?'🌭 Solo':'🥤 Combo'}{item.bebida?` · ${item.bebida.nombre}`:''}</div>
-            {item.extras.map(e=><div key={e.id} style={{ fontSize:12, color:'#fff' }}>+ {e.nombre}</div>)}
-            {item.bebidaSuelta && <div style={{ fontSize:11, color:'#888' }}>🥤 {item.bebidaSuelta.nombre}</div>}
+            {item.suelto ? (
+              <div style={{ fontSize:15, fontWeight:800, color:'#C9A84C' }}>{item.productoSuelto.emoji} {item.productoSuelto.nombre} (suelto)</div>
+            ) : (
+              <>
+                <div style={{ fontSize:15, fontWeight:800, color:'#C9A84C' }}>{item.producto.emoji} {item.producto.nombre}</div>
+                <div style={{ fontSize:13, fontWeight:700, color:'#fff', marginTop:2 }}>🥩 {item.salchicha.nombre}</div>
+                <div style={{ fontSize:11, color:'#888' }}>{item.tipo==='solo'?'🌭 Solo':'🥤 Combo'}{item.bebida?` · ${item.bebida.nombre}`:''}</div>
+                {item.extras.map(e=><div key={e.id} style={{ fontSize:12, color:'#fff' }}>+ {e.nombre}</div>)}
+                {item.bebidaSuelta && <div style={{ fontSize:11, color:'#888' }}>🥤 {item.bebidaSuelta.nombre}</div>}
+              </>
+            )}
           </div>
         ))}
         <div style={{ fontSize:12, fontWeight:700, marginTop:6, color: orden.entrega==='aqui'?'#4caf50':orden.entrega==='llevar'?'#C9A84C':'#378ADD' }}>
@@ -447,6 +553,7 @@ export default function ZabuPOS({ usuario }) {
   const [ordenActual,     setOrdenActual]     = useState(null)
   const [confirmado,      setConfirmado]      = useState(false)
   const [ordenConfirmada, setOrdenConfirmada] = useState(null)
+  const [ventaRapida,     setVentaRapida]     = useState(false)
 
   const isMobile       = window.innerWidth < 768
   const totalPrecio    = items.reduce((s,i) => s+precioItem(i), 0)
@@ -461,6 +568,17 @@ export default function ZabuPOS({ usuario }) {
   const agregarItem  = () => setItems(prev => [...prev, nuevoItem()])
   const eliminarItem = (id) => setItems(prev => prev.length > 1 ? prev.filter(i=>i.id!==id) : prev)
   const updatePago   = (i, f, v) => setPagos(prev => prev.map((p,j) => j===i ? {...p,[f]:v} : p))
+
+  // Agrega un producto suelto (bebida/extra) directo al carrito, sin pasar
+  // por el flujo de armado del hot dog. Si el primer item del carrito está
+  // vacío (sin producto ni suelto), lo reemplaza; si no, lo agrega aparte.
+  const agregarItemSuelto = (producto, tipo) => {
+    const nuevo = nuevoItemSuelto(producto, tipo)
+    setItems(prev => {
+      const primerVacio = prev.length === 1 && !prev[0].producto && !prev[0].suelto
+      return primerVacio ? [nuevo] : [...prev, nuevo]
+    })
+  }
 
   const CARRITO_ID = usuario?.carrito || 'C01'
 
@@ -477,21 +595,25 @@ export default function ZabuPOS({ usuario }) {
 
   const confirmar = async () => {
     const { num, codigo } = await getNextConsecutivo()
+    // Los pagos se guardan NETOS (después de restar el cambio) — así lo que
+    // queda registrado siempre coincide con lo que realmente entra a caja,
+    // sin importar con cuánto haya pagado el cliente físicamente.
+    const pagosNetos = ajustarPagosNetos(pagos, cambio)
     const orden = {
-      num, codigo, items: itemsCompletos, total: totalPrecio,
-      entrega, nombreCliente, direccion, telefono, pagos, cambio,
+      num, codigo, items: itemsCompletos.length?itemsCompletos:items, total: totalPrecio,
+      entrega, nombreCliente, direccion, telefono, pagos: pagosNetos, cambio,
       utensilios: UTENSILIOS[entrega]||[],
       hora: new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}),
     }
     await supabase.from('ordenes').insert({
-      num, carrito_id: CARRITO_ID, items: itemsCompletos,
+      num, carrito_id: CARRITO_ID, items: orden.items,
       entrega, nombre_cliente: nombreCliente, direccion, telefono,
-      pagos, total: totalPrecio, cambio, estado:'pendiente',
+      pagos: pagosNetos, total: totalPrecio, cambio, estado:'pendiente',
       hora: orden.hora, fecha: new Date().toISOString().split('T')[0],
     })
     await supabase.from('movimientos').insert({
       fecha: new Date().toISOString().split('T')[0],
-      descripcion: `Venta ${codigo} — ${itemsCompletos.length} item(s)`,
+      descripcion: `Venta ${codigo} — ${orden.items.length} item(s)`,
       tipo:'ingreso', categoria:'Ventas', monto: totalPrecio,
       carrito: CARRITO_ID, carrito_id: CARRITO_ID,
     })
@@ -507,6 +629,7 @@ export default function ZabuPOS({ usuario }) {
     setNombreCliente(''); setDireccion(''); setTelefono('')
     setPagos([{metodo:'efectivo',monto:''}])
     setConfirmado(false); setOrdenConfirmada(null); setOrdenActual(null)
+    setVentaRapida(false)
   }
 
   const cardBase = {
@@ -548,14 +671,27 @@ export default function ZabuPOS({ usuario }) {
         <div style={{ overflowY:'auto', padding:isMobile?'12px':'16px 20px', borderRight:isMobile?'none':'1px solid var(--border)', background:'var(--bg)', borderBottom:isMobile?'1px solid var(--border)':'none' }}>
           {!fasePago ? (
             <>
+              {!ventaRapida && (
+                <div onClick={() => setVentaRapida(true)} style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'10px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'var(--gold-dim)', border:'1px solid var(--gold-border)', color:'var(--gold)', marginBottom:12 }}>
+                  ⚡ Venta rápida — solo bebida o extra suelto
+                </div>
+              )}
+              {ventaRapida && (
+                <VentaRapida isMobile={isMobile} onCerrar={() => setVentaRapida(false)}
+                  onAgregar={(producto, tipo) => agregarItemSuelto(producto, tipo)} />
+              )}
               {items.map((item, i) => (
-                <ItemConstructor key={item.id} item={item}
-                  onChange={(newItem) => updateItem(item.id, newItem)}
-                  onAgregar={agregarItem}
-                  onEliminar={() => eliminarItem(item.id)}
-                  esUltimo={i === items.length-1}
-                  isMobile={isMobile}
-                />
+                item.suelto ? (
+                  <ItemSueltoCard key={item.id} item={item} onEliminar={() => eliminarItem(item.id)} />
+                ) : (
+                  <ItemConstructor key={item.id} item={item}
+                    onChange={(newItem) => updateItem(item.id, newItem)}
+                    onAgregar={agregarItem}
+                    onEliminar={() => eliminarItem(item.id)}
+                    esUltimo={i === items.length-1}
+                    isMobile={isMobile}
+                  />
+                )
               ))}
               {todosCompletos && (
                 <div style={{ display:'flex', gap:10, marginTop:4 }}>
@@ -574,8 +710,8 @@ export default function ZabuPOS({ usuario }) {
                 {itemsCompletos.map((item,i) => (
                   <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'5px 0', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
                     <span style={{ fontSize:12, color:'var(--text2)' }}>
-                      {item.producto.nombre} · {item.salchicha.nombre} · {item.tipo==='solo'?'Solo':'Combo'}
-                      {item.extras.length>0?` + ${item.extras.map(e=>e.nombre).join(', ')}` : ''}
+                      {item.suelto ? `${item.productoSuelto.nombre} (suelto)` :
+                        `${item.producto.nombre} · ${item.salchicha.nombre} · ${item.tipo==='solo'?'Solo':'Combo'}${item.extras.length>0?` + ${item.extras.map(e=>e.nombre).join(', ')}` : ''}`}
                     </span>
                     <span style={{ fontSize:13, fontWeight:700, color:'var(--gold)' }}>{cop(precioItem(item))}</span>
                   </div>
@@ -657,6 +793,9 @@ export default function ZabuPOS({ usuario }) {
                       <span style={{ fontSize:18, fontWeight:800, color:'var(--green)' }}>{cop(cambio)}</span>
                     </div>
                   )}
+                  <div style={{ fontSize:10, color:'var(--text4)', marginTop:6, textAlign:'center' }}>
+                    El cambio nunca se cuenta como efectivo recibido — solo se registra lo que realmente queda en caja.
+                  </div>
                 </div>
               )}
               {entrega && pagoCompleto && (
