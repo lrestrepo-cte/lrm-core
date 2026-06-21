@@ -23,69 +23,90 @@ const FREC_PRESETS = [
 // ════════════════════════════════════════════════════════════════════════════
 // MOTOR DE AMORTIZACIÓN — Francés, Alemán, Gota a Gota
 // ════════════════════════════════════════════════════════════════════════════
-function generarTablaAmortizacion({ capital, tasaInteres, plazoCuotas, frecuenciaDias, metodo, fechaDesembolso }) {
+// Genera la lista de fechas de corte: [desembolso, cuota1, cuota2, ..., límite]
+function generarFechasPeriodos(fechaDesembolso, fechaLimite, frecuenciaDias) {
+  const d1 = new Date(fechaDesembolso)
+  const dLimite = new Date(fechaLimite)
+  const fechas = [new Date(d1)]
+  let actual = new Date(d1)
+  while (true) {
+    const siguiente = new Date(actual)
+    siguiente.setDate(siguiente.getDate() + frecuenciaDias)
+    if (siguiente >= dLimite) { fechas.push(new Date(dLimite)); break }
+    fechas.push(new Date(siguiente))
+    actual = siguiente
+  }
+  return fechas
+}
+
+function diasEntre(a, b) { return Math.round((b - a) / 86400000) }
+function tasaPeriodo(tasaMensual, diasPeriodo) { return (tasaMensual/100) * (diasPeriodo/30) }
+
+// MOTOR DE AMORTIZACIÓN POR FECHAS — Francés, Alemán, Americano, Gota a Gota.
+// No se ingresa número de cuotas: se da fecha de desembolso + fecha límite +
+// frecuencia, y el sistema genera las fechas de cada cuota automáticamente.
+// La tasa siempre es % MENSUAL; el interés de cada cuota es proporcional a
+// los días reales de su período (la última cuota se ajusta para cerrar
+// exacto en la fecha límite, sin importar si ese período quedó más corto
+// o más largo que los anteriores).
+function generarTablaAmortizacion({ capital, tasaInteres, fechaDesembolso, fechaLimite, frecuenciaDias, metodo }) {
+  const fechas = generarFechasPeriodos(fechaDesembolso, fechaLimite, frecuenciaDias)
+  const n = fechas.length - 1
   const cuotas = []
-  const fechaBase = new Date(fechaDesembolso)
-  // La tasa SIEMPRE se interpreta como % MENSUAL. Se convierte a tasa por
-  // período de cobro según la frecuencia real (frecuenciaDias/30), de modo que
-  // el interés total dependa de la duración real del préstamo, no solo del
-  // número de cuotas en que se fraccione.
-  const tasaPeriodo = (tasaInteres / 100) * (frecuenciaDias / 30)
 
   if (metodo === 'frances') {
-    const cuotaFija = tasaPeriodo === 0
-      ? capital / plazoCuotas
-      : capital * (tasaPeriodo * Math.pow(1+tasaPeriodo, plazoCuotas)) / (Math.pow(1+tasaPeriodo, plazoCuotas) - 1)
+    const tasas = []
+    for (let i = 1; i < fechas.length; i++) tasas.push(tasaPeriodo(tasaInteres, diasEntre(fechas[i-1], fechas[i])))
+    let acumulado = 1
+    const factores = tasas.map(r => { acumulado *= (1+r); return acumulado })
+    const sumaInversos = factores.reduce((s,f) => s + 1/f, 0)
+    const cuotaFija = capital / sumaInversos
+
     let saldo = capital
-    for (let i = 1; i <= plazoCuotas; i++) {
-      const interes = Math.round(saldo * tasaPeriodo)
-      const capitalCuota = Math.round(cuotaFija - interes)
+    for (let i = 0; i < n; i++) {
+      const interes = Math.round(saldo * tasas[i])
+      const esUltima = i === n-1
+      let capitalCuota = esUltima ? saldo : Math.round(cuotaFija - interes)
       saldo = Math.max(0, saldo - capitalCuota)
-      const fecha = new Date(fechaBase); fecha.setDate(fecha.getDate() + frecuenciaDias * i)
-      cuotas.push({ numero:i, fecha_vencimiento:fecha.toISOString().split('T')[0], capital:capitalCuota, interes, cuota_total:capitalCuota+interes, saldo_restante:saldo, estado:'pendiente' })
+      cuotas.push({ numero:i+1, fecha_vencimiento:fechas[i+1].toISOString().split('T')[0], capital:capitalCuota, interes, cuota_total:capitalCuota+interes, saldo_restante:saldo, estado:'pendiente' })
     }
 
   } else if (metodo === 'aleman') {
-    const capitalFijo = Math.round(capital / plazoCuotas)
+    const capitalFijo = Math.round(capital / n)
     let saldo = capital
-    for (let i = 1; i <= plazoCuotas; i++) {
-      const interes = Math.round(saldo * tasaPeriodo)
-      const capitalCuota = (i === plazoCuotas) ? saldo : capitalFijo
+    for (let i = 0; i < n; i++) {
+      const diasPeriodo = diasEntre(fechas[i], fechas[i+1])
+      const interes = Math.round(saldo * tasaPeriodo(tasaInteres, diasPeriodo))
+      const esUltima = i === n-1
+      const capitalCuota = esUltima ? saldo : capitalFijo
       saldo = Math.max(0, saldo - capitalCuota)
-      const fecha = new Date(fechaBase); fecha.setDate(fecha.getDate() + frecuenciaDias * i)
-      cuotas.push({ numero:i, fecha_vencimiento:fecha.toISOString().split('T')[0], capital:capitalCuota, interes, cuota_total:capitalCuota+interes, saldo_restante:saldo, estado:'pendiente' })
+      cuotas.push({ numero:i+1, fecha_vencimiento:fechas[i+1].toISOString().split('T')[0], capital:capitalCuota, interes, cuota_total:capitalCuota+interes, saldo_restante:saldo, estado:'pendiente' })
     }
 
   } else if (metodo === 'americano') {
-    // Método Americano: solo interés en cada cuota intermedia; el capital
-    // completo se paga junto con el último interés, en la cuota final.
-    const interesPorCuota = Math.round(capital * tasaPeriodo)
-    for (let i = 1; i <= plazoCuotas; i++) {
-      const esUltima = i === plazoCuotas
+    for (let i = 0; i < n; i++) {
+      const diasPeriodo = diasEntre(fechas[i], fechas[i+1])
+      const interes = Math.round(capital * tasaPeriodo(tasaInteres, diasPeriodo))
+      const esUltima = i === n-1
       const capitalCuota = esUltima ? capital : 0
       const saldo = esUltima ? 0 : capital
-      const fecha = new Date(fechaBase); fecha.setDate(fecha.getDate() + frecuenciaDias * i)
-      cuotas.push({ numero:i, fecha_vencimiento:fecha.toISOString().split('T')[0], capital:capitalCuota, interes:interesPorCuota, cuota_total:capitalCuota+interesPorCuota, saldo_restante:saldo, estado:'pendiente' })
+      cuotas.push({ numero:i+1, fecha_vencimiento:fechas[i+1].toISOString().split('T')[0], capital:capitalCuota, interes, cuota_total:capitalCuota+interes, saldo_restante:saldo, estado:'pendiente' })
     }
 
   } else {
-    // Gota a gota: interés simple sobre el capital, calculado con la tasa
-    // mensual multiplicada por la duración REAL del préstamo en meses
-    // (plazoCuotas × frecuenciaDias ÷ 30) — ya no es un % fijo desconectado
-    // del tiempo. Interés y capital se reparten en partes iguales por cuota.
-    const duracionMeses = (plazoCuotas * frecuenciaDias) / 30
-    const interesTotal = Math.round(capital * (tasaInteres/100) * duracionMeses)
-    const totalAPagar = capital + interesTotal
-    const cuotaFija = Math.round(totalAPagar / plazoCuotas)
-    const capitalPorCuota = Math.round(capital / plazoCuotas)
-    const interesPorCuota = Math.round(interesTotal / plazoCuotas)
+    const diasTotal = diasEntre(fechas[0], fechas[n])
+    const interesTotal = Math.round(capital * (tasaInteres/100) * (diasTotal/30))
+    const capitalPorCuota = Math.round(capital / n)
     let saldo = capital
-    for (let i = 1; i <= plazoCuotas; i++) {
-      const esUltima = i === plazoCuotas
+    let interesAcumulado = 0
+    for (let i = 0; i < n; i++) {
+      const diasPeriodo = diasEntre(fechas[i], fechas[i+1])
+      const esUltima = i === n-1
       const capitalCuota = esUltima ? saldo : capitalPorCuota
+      const interes = esUltima ? (interesTotal - interesAcumulado) : Math.round(interesTotal * (diasPeriodo/diasTotal))
+      interesAcumulado += interes
       saldo = Math.max(0, saldo - capitalCuota)
-      const fecha = new Date(fechaBase); fecha.setDate(fecha.getDate() + frecuenciaDias * i)
-      cuotas.push({ numero:i, fecha_vencimiento:fecha.toISOString().split('T')[0], capital:capitalCuota, interes:interesPorCuota, cuota_total: esUltima ? (totalAPagar - (cuotaFija*(plazoCuotas-1))) : cuotaFija, saldo_restante:saldo, estado:'pendiente' })
+      cuotas.push({ numero:i+1, fecha_vencimiento:fechas[i+1].toISOString().split('T')[0], capital:capitalCuota, interes, cuota_total:capitalCuota+interes, saldo_restante:saldo, estado:'pendiente' })
     }
   }
   return cuotas
@@ -172,8 +193,9 @@ function TabPrestamos() {
 
   const [form, setForm] = useState({
     cliente_nombre:'', cliente_telefono:'', cliente_cedula:'', cliente_direccion:'',
-    capital:'', metodo:'gota_a_gota', tasa_interes:'20', plazo_cuotas:'20', frecuencia_dias:1,
-    fecha_desembolso: new Date().toISOString().split('T')[0], notas:'',
+    capital:'', metodo:'gota_a_gota', tasa_interes:'20', frecuencia_dias:1,
+    fecha_desembolso: new Date().toISOString().split('T')[0],
+    fecha_limite: '', notas:'',
   })
 
   useEffect(() => { cargar() }, [])
@@ -197,27 +219,27 @@ function TabPrestamos() {
   }
 
   const crearPrestamo = async () => {
-    if (!form.cliente_nombre || !form.capital) return
+    if (!form.cliente_nombre || !form.capital || !form.fecha_limite) return
     const capital = parseInt(form.capital)
     const tasa = parseFloat(form.tasa_interes)
-    const plazo = parseInt(form.plazo_cuotas)
     const frecDias = parseInt(form.frecuencia_dias)
+
+    const tabla = generarTablaAmortizacion({ capital, tasaInteres:tasa, fechaDesembolso:form.fecha_desembolso, fechaLimite:form.fecha_limite, frecuenciaDias:frecDias, metodo:form.metodo })
 
     const { data: prestamo, error } = await supabase.from('inv_prestamos').insert({
       cliente_nombre: form.cliente_nombre, cliente_telefono: form.cliente_telefono,
       cliente_cedula: form.cliente_cedula, cliente_direccion: form.cliente_direccion,
-      capital, metodo: form.metodo, tasa_interes: tasa, plazo_cuotas: plazo,
-      frecuencia_dias: frecDias, fecha_desembolso: form.fecha_desembolso,
+      capital, metodo: form.metodo, tasa_interes: tasa, plazo_cuotas: tabla.length,
+      frecuencia_dias: frecDias, fecha_desembolso: form.fecha_desembolso, fecha_limite: form.fecha_limite,
       saldo_capital: capital, notas: form.notas, estado:'activo',
     }).select().single()
 
     if (error || !prestamo) { alert('Error: '+(error?.message||'desconocido')); return }
 
-    const tabla = generarTablaAmortizacion({ capital, tasaInteres:tasa, plazoCuotas:plazo, frecuenciaDias:frecDias, metodo:form.metodo, fechaDesembolso:form.fecha_desembolso })
     const cuotasInsert = tabla.map(c => ({ ...c, prestamo_id: prestamo.id }))
     await supabase.from('inv_cuotas').insert(cuotasInsert)
 
-    setForm({ cliente_nombre:'', cliente_telefono:'', cliente_cedula:'', cliente_direccion:'', capital:'', metodo:'gota_a_gota', tasa_interes:'20', plazo_cuotas:'20', frecuencia_dias:1, fecha_desembolso:new Date().toISOString().split('T')[0], notas:'' })
+    setForm({ cliente_nombre:'', cliente_telefono:'', cliente_cedula:'', cliente_direccion:'', capital:'', metodo:'gota_a_gota', tasa_interes:'20', frecuencia_dias:1, fecha_desembolso:new Date().toISOString().split('T')[0], fecha_limite:'', notas:'' })
     setModal(false); cargar()
   }
 
@@ -408,8 +430,8 @@ function TabPrestamos() {
             <div className="grid-2" style={{ gap:10, marginBottom:12 }}>
               <div><div style={{ fontSize:11, color:'var(--text3)' }}>Capital (COP)</div><input type="number" value={form.capital} onChange={e=>setForm(p=>({...p,capital:e.target.value}))} placeholder="Ej: 500000" style={iStyle} /></div>
               <div><div style={{ fontSize:11, color:'var(--text3)' }}>Tasa de interés MENSUAL (%)</div><input type="number" value={form.tasa_interes} onChange={e=>setForm(p=>({...p,tasa_interes:e.target.value}))} style={iStyle} /></div>
-              <div><div style={{ fontSize:11, color:'var(--text3)' }}>Número de cuotas</div><input type="number" value={form.plazo_cuotas} onChange={e=>setForm(p=>({...p,plazo_cuotas:e.target.value}))} style={iStyle} /></div>
               <div><div style={{ fontSize:11, color:'var(--text3)' }}>Fecha desembolso</div><input type="date" value={form.fecha_desembolso} onChange={e=>setForm(p=>({...p,fecha_desembolso:e.target.value}))} style={iStyle} /></div>
+              <div><div style={{ fontSize:11, color:'var(--text3)' }}>Fecha límite de pago</div><input type="date" value={form.fecha_limite} onChange={e=>setForm(p=>({...p,fecha_limite:e.target.value}))} style={iStyle} /></div>
             </div>
 
             <div style={{ marginBottom:12 }}>
@@ -430,7 +452,7 @@ function TabPrestamos() {
             </div>
 
             <div style={{ display:'flex', gap:10 }}>
-              <button onClick={crearPrestamo} disabled={!form.cliente_nombre||!form.capital} className="btn-green" style={{ flex:1 }}>Crear préstamo</button>
+              <button onClick={crearPrestamo} disabled={!form.cliente_nombre||!form.capital||!form.fecha_limite} className="btn-green" style={{ flex:1 }}>Crear préstamo</button>
               <button onClick={()=>setModal(false)} className="btn">Cancelar</button>
             </div>
           </div>
@@ -446,8 +468,9 @@ function TabPrestamos() {
 function TabSimulador() {
   const [form, setForm] = useState({
     cliente_nombre:'', cliente_telefono:'', capital:'', metodo:'gota_a_gota',
-    tasa_interes:'20', plazo_cuotas:'20', frecuencia_dias:1,
+    tasa_interes:'20', frecuencia_dias:1,
     fecha_simulacion: new Date().toISOString().split('T')[0],
+    fecha_limite: '',
   })
   const [cuotas, setCuotas] = useState([])
   const [simulado, setSimulado] = useState(false)
@@ -458,10 +481,11 @@ function TabSimulador() {
 
   const simular = () => {
     const capital = parseInt(form.capital) || 0
-    if (!capital) return
+    if (!capital || !form.fecha_limite) return
     const tabla = generarTablaAmortizacion({
-      capital, tasaInteres: parseFloat(form.tasa_interes), plazoCuotas: parseInt(form.plazo_cuotas),
-      frecuenciaDias: parseInt(form.frecuencia_dias), metodo: form.metodo, fechaDesembolso: form.fecha_simulacion,
+      capital, tasaInteres: parseFloat(form.tasa_interes),
+      fechaDesembolso: form.fecha_simulacion, fechaLimite: form.fecha_limite,
+      frecuenciaDias: parseInt(form.frecuencia_dias), metodo: form.metodo,
     })
     setCuotas(tabla)
     setSimulado(true)
@@ -476,8 +500,8 @@ function TabSimulador() {
     const { data, error } = await supabase.from('inv_simulaciones').insert({
       cliente_nombre: form.cliente_nombre || 'Sin nombre', cliente_telefono: form.cliente_telefono,
       capital: parseInt(form.capital), metodo: form.metodo, tasa_interes: parseFloat(form.tasa_interes),
-      plazo_cuotas: parseInt(form.plazo_cuotas), frecuencia_dias: parseInt(form.frecuencia_dias),
-      fecha_simulacion: form.fecha_simulacion, estado: 'simulada',
+      plazo_cuotas: cuotas.length, frecuencia_dias: parseInt(form.frecuencia_dias),
+      fecha_simulacion: form.fecha_simulacion, fecha_limite: form.fecha_limite, estado: 'simulada',
     }).select().single()
     if (!error && data) setSimulacionGuardadaId(data.id)
   }
@@ -499,9 +523,9 @@ function TabSimulador() {
     const { data: prestamo, error } = await supabase.from('inv_prestamos').insert({
       cliente_nombre: form.cliente_nombre, cliente_telefono: form.cliente_telefono,
       cliente_id: clienteId, capital: parseInt(form.capital), metodo: form.metodo,
-      tasa_interes: parseFloat(form.tasa_interes), plazo_cuotas: parseInt(form.plazo_cuotas),
+      tasa_interes: parseFloat(form.tasa_interes), plazo_cuotas: cuotas.length,
       frecuencia_dias: parseInt(form.frecuencia_dias), fecha_desembolso: form.fecha_simulacion,
-      saldo_capital: parseInt(form.capital), estado:'activo',
+      fecha_limite: form.fecha_limite, saldo_capital: parseInt(form.capital), estado:'activo',
     }).select().single()
 
     if (error || !prestamo) { setConvirtiendo(false); alert('Error: '+(error?.message||'desconocido')); return }
@@ -560,12 +584,12 @@ function TabSimulador() {
             <input type="number" value={form.tasa_interes} onChange={e=>setForm(p=>({...p,tasa_interes:e.target.value}))} style={iStyle} />
           </div>
           <div>
-            <div style={{ fontSize:11, color:'var(--text3)' }}>Número de cuotas</div>
-            <input type="number" value={form.plazo_cuotas} onChange={e=>setForm(p=>({...p,plazo_cuotas:e.target.value}))} style={iStyle} />
-          </div>
-          <div>
             <div style={{ fontSize:11, color:'var(--text3)' }}>Fecha de desembolso (si se aprueba)</div>
             <input type="date" value={form.fecha_simulacion} onChange={e=>setForm(p=>({...p,fecha_simulacion:e.target.value}))} style={iStyle} />
+          </div>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Fecha límite de pago</div>
+            <input type="date" value={form.fecha_limite} onChange={e=>setForm(p=>({...p,fecha_limite:e.target.value}))} style={iStyle} />
           </div>
         </div>
 
@@ -580,7 +604,7 @@ function TabSimulador() {
           </div>
         </div>
 
-        <button onClick={simular} disabled={!form.capital} className="btn-gold" style={{ width:'100%' }}>📊 Simular</button>
+        <button onClick={simular} disabled={!form.capital||!form.fecha_limite} className="btn-gold" style={{ width:'100%' }}>📊 Simular</button>
       </div>
 
       {simulado && (
@@ -633,7 +657,7 @@ function TabSimulador() {
               <div style={{ padding:'12px 14px', background:'var(--green-dim)', borderRadius:10, fontSize:13, color:'var(--green)', fontWeight:600, marginBottom:12, textAlign:'center' }}>
                 ✅ Préstamo creado correctamente. Ahora puedes enviarle el calendario y la confirmación al cliente.
               </div>
-              <button onClick={()=>abrirWhatsApp(form.cliente_telefono, form.cliente_nombre, parseInt(form.capital), cuotas, form.plazo_cuotas, form.frecuencia_dias, urlCalendario)} className="btn-green" style={{ width:'100%' }}>
+              <button onClick={()=>abrirWhatsApp(form.cliente_telefono, form.cliente_nombre, parseInt(form.capital), cuotas, cuotas.length, form.frecuencia_dias, urlCalendario)} className="btn-green" style={{ width:'100%' }}>
                 💬 Abrir WhatsApp con calendario y tabla de pagos
               </button>
               <div style={{ fontSize:10, color:'var(--text4)', marginTop:8, textAlign:'center' }}>
