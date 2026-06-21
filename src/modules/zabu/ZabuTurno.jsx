@@ -39,6 +39,10 @@ export function AperturaTurno({ usuario, onTurnoAbierto }) {
     else setCargando(false)
   }
 
+  // La base de caja es un fondo rotativo operativo del punto de venta
+  // (dinero para dar cambio), NO un movimiento contable real — por eso
+  // no genera ningún asiento. Solo se registra en la tabla "turnos"
+  // para controlar el arqueo de caja del día.
   const abrirTurno = async () => {
     if (!efectivoIni) return
     setProcesando(true)
@@ -50,21 +54,7 @@ export function AperturaTurno({ usuario, onTurnoAbierto }) {
       efectivo_inicial: parseInt(efectivoIni),
       estado: 'abierto',
     }).select().single()
-    if (data) {
-      // Asiento apertura
-      const { data: asiento } = await supabase.from('asientos').insert({
-        fecha: hoy,
-        descripcion: `Apertura turno ${carrito} — ${usuario?.nombre} — Base: ${cop(parseInt(efectivoIni))}`,
-        carrito_id: carrito,
-      }).select().single()
-      if (asiento && parseInt(efectivoIni) > 0) {
-        await supabase.from('partidas').insert([
-          { asiento_id:asiento.id, codigo:'1105', nombre:'Caja general', debe:parseInt(efectivoIni), haber:0 },
-          { asiento_id:asiento.id, codigo:'3105', nombre:'Capital invertido', debe:0, haber:parseInt(efectivoIni) },
-        ])
-      }
-      onTurnoAbierto(data)
-    }
+    if (data) onTurnoAbierto(data)
     setProcesando(false)
   }
 
@@ -168,6 +158,10 @@ export function PanelTurno({ turno, usuario, onCerrar, onTurnoCerrado }) {
   const difTa = tFis  - totalTarjeta
   const arqueoCompleto = efectivoFis !== '' && qrFis !== '' && tarjetaFis !== ''
 
+  // El cierre de turno es control operativo de caja (arqueo, inventario,
+  // diferencias) — no genera asiento contable. Las ventas reales ya
+  // quedaron contabilizadas individualmente cuando se confirmó cada
+  // orden en el POS, así que no se duplican aquí.
   const cerrarTurno = async () => {
     if (!arqueoCompleto) return
     setProcesando(true)
@@ -185,22 +179,6 @@ export function PanelTurno({ turno, usuario, onCerrar, onTurnoCerrado }) {
       observaciones: obs,
       inventario_cierre: inventario,
     }).eq('id', turno.id)
-
-    // Asiento contable
-    const { data: asiento } = await supabase.from('asientos').insert({
-      fecha: hoy,
-      descripcion: `Cierre turno ${turno.carrito_id} — ${usuario?.nombre} — ${ordenes.length} órdenes`,
-      carrito_id: turno.carrito_id,
-    }).select().single()
-
-    if (asiento) {
-      const partidas = []
-      if (totalEfectivo > 0) partidas.push({ asiento_id:asiento.id, codigo:'1105', nombre:'Caja general', debe:totalEfectivo, haber:0 })
-      if (totalQR > 0)       partidas.push({ asiento_id:asiento.id, codigo:'1112', nombre:'Nequi/Daviplata', debe:totalQR, haber:0 })
-      if (totalTarjeta > 0)  partidas.push({ asiento_id:asiento.id, codigo:'1110', nombre:'Bancos', debe:totalTarjeta, haber:0 })
-      if (totalVentas > 0)   partidas.push({ asiento_id:asiento.id, codigo:'4106', nombre:'Ventas ZABÚ', debe:0, haber:totalVentas })
-      if (partidas.length > 0) await supabase.from('partidas').insert(partidas)
-    }
 
     setCerrado(true)
     setProcesando(false)
@@ -452,7 +430,7 @@ export function PanelTurno({ turno, usuario, onCerrar, onTurnoCerrado }) {
               <div style={{ textAlign:'center', padding:'40px 0' }}>
                 <div style={{ fontSize:52, marginBottom:14 }}>✅</div>
                 <div style={{ fontSize:22, fontWeight:800, color:'var(--text)', marginBottom:4 }}>Turno cerrado</div>
-                <div style={{ fontSize:13, color:'var(--text3)', marginBottom:24 }}>Asiento contable generado automáticamente</div>
+                <div style={{ fontSize:13, color:'var(--text3)', marginBottom:24 }}>Arqueo de caja registrado — esto no afecta la contabilidad</div>
                 <div className="panel" style={{ textAlign:'left' }}>
                   {[
                     { label:'Ventas totales',  val:cop(totalVentas),         color:'var(--gold)'  },
