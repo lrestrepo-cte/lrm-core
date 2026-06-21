@@ -28,7 +28,6 @@ function generarTablaAmortizacion({ capital, tasaInteres, plazoCuotas, frecuenci
   const fechaBase = new Date(fechaDesembolso)
 
   if (metodo === 'frances') {
-    // Cuota fija, interés decreciente sobre saldo. Tasa = % por periodo de cobro.
     const tasaPeriodo = tasaInteres / 100
     const cuotaFija = tasaPeriodo === 0
       ? capital / plazoCuotas
@@ -42,7 +41,6 @@ function generarTablaAmortizacion({ capital, tasaInteres, plazoCuotas, frecuenci
       cuotas.push({ numero:i, fecha_vencimiento:fecha.toISOString().split('T')[0], capital:capitalCuota, interes, cuota_total:capitalCuota+interes, saldo_restante:saldo, estado:'pendiente' })
     }
   } else if (metodo === 'aleman') {
-    // Capital fijo, interés decreciente sobre saldo → cuota decreciente
     const tasaPeriodo = tasaInteres / 100
     const capitalFijo = Math.round(capital / plazoCuotas)
     let saldo = capital
@@ -54,7 +52,6 @@ function generarTablaAmortizacion({ capital, tasaInteres, plazoCuotas, frecuenci
       cuotas.push({ numero:i, fecha_vencimiento:fecha.toISOString().split('T')[0], capital:capitalCuota, interes, cuota_total:capitalCuota+interes, saldo_restante:saldo, estado:'pendiente' })
     }
   } else {
-    // Gota a gota: interés simple sobre el capital total, fijo, repartido en cuotas iguales + capital igual
     const interesTotal = Math.round(capital * (tasaInteres/100))
     const totalAPagar = capital + interesTotal
     const cuotaFija = Math.round(totalAPagar / plazoCuotas)
@@ -79,6 +76,53 @@ function resumenPrestamo(prestamo, cuotas) {
   const hoy           = new Date()
   const vencidas      = cuotas.filter(c=>c.estado==='pendiente' && new Date(c.fecha_vencimiento) < hoy).length
   return { totalCuotas, pagado, pendiente, vencidas }
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// .ICS / WHATSAPP — utilidades compartidas para el simulador
+// ════════════════════════════════════════════════════════════════════════════
+function generarICS(cuotas) {
+  const pad = n => String(n).padStart(2,'0')
+  const formatoFecha = (fechaStr) => {
+    const f = new Date(fechaStr + 'T09:00:00')
+    return `${f.getFullYear()}${pad(f.getMonth()+1)}${pad(f.getDate())}T${pad(f.getHours())}${pad(f.getMinutes())}00`
+  }
+  const ahora = formatoFecha(new Date().toISOString().split('T')[0])
+  let ics = 'BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//LRM Inversiones//Calendario de Pagos//ES\r\n'
+  cuotas.forEach(c => {
+    const fechaInicio = formatoFecha(c.fecha_vencimiento)
+    ics += 'BEGIN:VEVENT\r\n'
+    ics += `UID:${c.numero}-${c.fecha_vencimiento}-${Date.now()}@lrminversiones\r\n`
+    ics += `DTSTAMP:${ahora}\r\n`
+    ics += `DTSTART:${fechaInicio}\r\n`
+    ics += `SUMMARY:💰 Pago cuota ${c.numero} - ${cop(c.cuota_total)}\r\n`
+    ics += `DESCRIPTION:Recordatorio de pago. Cuota ${c.numero}. Capital: ${cop(c.capital)}. Interés: ${cop(c.interes)}. Total: ${cop(c.cuota_total)}.\r\n`
+    ics += 'BEGIN:VALARM\r\nTRIGGER:-PT2H\r\nACTION:DISPLAY\r\nDESCRIPTION:Recordatorio de pago\r\nEND:VALARM\r\n'
+    ics += 'END:VEVENT\r\n'
+  })
+  ics += 'END:VCALENDAR\r\n'
+  return ics
+}
+
+function descargarICS(cuotas, clienteNombre) {
+  const contenido = generarICS(cuotas)
+  const blob = new Blob([contenido], { type: 'text/calendar;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `Calendario_Pagos_${clienteNombre.replace(/\s+/g,'_')}.ics`
+  document.body.appendChild(a)
+  a.click()
+  document.body.removeChild(a)
+  URL.revokeObjectURL(url)
+}
+
+function abrirWhatsApp(telefono, clienteNombre, capital, cuotaTotal, plazoCuotas, frecuenciaDias) {
+  const telLimpio = (telefono||'').replace(/\D/g,'')
+  const frecTexto = frecuenciaDias===1?'diaria':frecuenciaDias===7?'semanal':frecuenciaDias===15?'quincenal':frecuenciaDias===30?'mensual':`cada ${frecuenciaDias} días`
+  const mensaje = `Hola ${clienteNombre}! 👋 Tu crédito por ${cop(capital)} fue aprobado.\n\nResumen:\n• Cuota ${frecTexto}: ${cop(cuotaTotal)}\n• Número de cuotas: ${plazoCuotas}\n\nTe adjunto el calendario con todas las fechas de pago para que lo agregues a tu celular y no se te olvide ninguna. ¡Gracias por confiar en nosotros! 🙌`
+  const url = `https://wa.me/${telLimpio}?text=${encodeURIComponent(mensaje)}`
+  window.open(url, '_blank')
 }
 
 // ════════════════════════════════════════════════════════════════════════════
@@ -149,7 +193,6 @@ function TabPrestamos() {
     const pagadaCompleta = monto >= cuota.cuota_total
     await supabase.from('inv_cuotas').update({ estado: pagadaCompleta?'pagada':'parcial', fecha_pago: new Date().toISOString().split('T')[0], monto_pagado: monto }).eq('id', cuota.id)
 
-    // Actualizar saldo_capital del préstamo
     const { data: cuotasActuales } = await supabase.from('inv_cuotas').select('*').eq('prestamo_id', prestamoId)
     const todasPagadas = cuotasActuales.every(c => c.id===cuota.id ? pagadaCompleta : c.estado==='pagada')
     const saldoCapitalRestante = cuotasActuales.reduce((s,c) => s + (c.id===cuota.id && pagadaCompleta ? 0 : (c.estado==='pagada' ? 0 : c.capital)), 0)
@@ -243,9 +286,13 @@ function TabPrestamos() {
                       <div className="kpi-card" style={{ flex:1, padding:'10px 12px' }}><div className="kpi-label" style={{ fontSize:9 }}>Pendiente</div><div style={{ fontSize:15, fontWeight:800, color:'var(--gold)' }}>{cop(pendiente)}</div></div>
                     </div>
 
-                    {p.estado === 'activo' && (
-                      <div onClick={()=>marcarMora(p.id)} style={{ display:'inline-block', marginBottom:10, padding:'5px 12px', borderRadius:8, cursor:'pointer', fontSize:11, background:'rgba(224,82,82,0.08)', border:'0.5px solid rgba(224,82,82,0.25)', color:'var(--red)' }}>⚠️ Marcar en mora</div>
-                    )}
+                    <div style={{ display:'flex', gap:8, marginBottom:10, flexWrap:'wrap' }}>
+                      {p.estado === 'activo' && (
+                        <div onClick={()=>marcarMora(p.id)} style={{ display:'inline-block', padding:'5px 12px', borderRadius:8, cursor:'pointer', fontSize:11, background:'rgba(224,82,82,0.08)', border:'0.5px solid rgba(224,82,82,0.25)', color:'var(--red)' }}>⚠️ Marcar en mora</div>
+                      )}
+                      <div onClick={()=>descargarICS(cuotas.length?cuotas:[], p.cliente_nombre)} style={{ display:'inline-block', padding:'5px 12px', borderRadius:8, cursor:'pointer', fontSize:11, background:'var(--gold-dim)', border:'0.5px solid var(--gold-border)', color:'var(--gold)' }}>📅 Descargar calendario (.ics)</div>
+                      <div onClick={()=>abrirWhatsApp(p.cliente_telefono, p.cliente_nombre, p.capital, cuotas[0]?.cuota_total||0, p.plazo_cuotas, p.frecuencia_dias)} style={{ display:'inline-block', padding:'5px 12px', borderRadius:8, cursor:'pointer', fontSize:11, background:'var(--green-dim)', border:'0.5px solid var(--green-border)', color:'var(--green)' }}>💬 WhatsApp</div>
+                    </div>
 
                     <div style={{ fontSize:12, fontWeight:700, color:'var(--text)', marginBottom:8 }}>Tabla de cuotas</div>
                     <div style={{ maxHeight:320, overflowY:'auto', border:'1px solid var(--border)', borderRadius:8 }}>
@@ -351,6 +398,212 @@ function TabPrestamos() {
               <button onClick={()=>setModal(false)} className="btn">Cancelar</button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// SIMULADOR DE CRÉDITO — simula libre, convierte a préstamo real si se acepta
+// ════════════════════════════════════════════════════════════════════════════
+function TabSimulador() {
+  const [form, setForm] = useState({
+    cliente_nombre:'', cliente_telefono:'', capital:'', metodo:'gota_a_gota',
+    tasa_interes:'20', plazo_cuotas:'20', frecuencia_dias:1,
+    fecha_simulacion: new Date().toISOString().split('T')[0],
+  })
+  const [cuotas, setCuotas] = useState([])
+  const [simulado, setSimulado] = useState(false)
+  const [simulacionGuardadaId, setSimulacionGuardadaId] = useState(null)
+  const [convirtiendo, setConvirtiendo] = useState(false)
+  const [convertido, setConvertido] = useState(false)
+
+  const simular = () => {
+    const capital = parseInt(form.capital) || 0
+    if (!capital) return
+    const tabla = generarTablaAmortizacion({
+      capital, tasaInteres: parseFloat(form.tasa_interes), plazoCuotas: parseInt(form.plazo_cuotas),
+      frecuenciaDias: parseInt(form.frecuencia_dias), metodo: form.metodo, fechaDesembolso: form.fecha_simulacion,
+    })
+    setCuotas(tabla)
+    setSimulado(true)
+    setSimulacionGuardadaId(null)
+    setConvertido(false)
+  }
+
+  const totalCuotas = cuotas.reduce((s,c)=>s+c.cuota_total,0)
+  const totalInteres = cuotas.reduce((s,c)=>s+c.interes,0)
+
+  const guardarSimulacion = async () => {
+    const { data, error } = await supabase.from('inv_simulaciones').insert({
+      cliente_nombre: form.cliente_nombre || 'Sin nombre', cliente_telefono: form.cliente_telefono,
+      capital: parseInt(form.capital), metodo: form.metodo, tasa_interes: parseFloat(form.tasa_interes),
+      plazo_cuotas: parseInt(form.plazo_cuotas), frecuencia_dias: parseInt(form.frecuencia_dias),
+      fecha_simulacion: form.fecha_simulacion, estado: 'simulada',
+    }).select().single()
+    if (!error && data) setSimulacionGuardadaId(data.id)
+  }
+
+  const convertirEnPrestamo = async () => {
+    setConvirtiendo(true)
+
+    let clienteId = null
+    const { data: clienteExistente } = await supabase.from('inv_clientes').select('id').eq('nombre', form.cliente_nombre).maybeSingle()
+    if (clienteExistente) {
+      clienteId = clienteExistente.id
+    } else {
+      const { data: clienteNuevo } = await supabase.from('inv_clientes').insert({
+        nombre: form.cliente_nombre, telefono: form.cliente_telefono,
+      }).select().single()
+      clienteId = clienteNuevo?.id
+    }
+
+    const { data: prestamo, error } = await supabase.from('inv_prestamos').insert({
+      cliente_nombre: form.cliente_nombre, cliente_telefono: form.cliente_telefono,
+      cliente_id: clienteId, capital: parseInt(form.capital), metodo: form.metodo,
+      tasa_interes: parseFloat(form.tasa_interes), plazo_cuotas: parseInt(form.plazo_cuotas),
+      frecuencia_dias: parseInt(form.frecuencia_dias), fecha_desembolso: form.fecha_simulacion,
+      saldo_capital: parseInt(form.capital), estado:'activo',
+    }).select().single()
+
+    if (error || !prestamo) { setConvirtiendo(false); alert('Error: '+(error?.message||'desconocido')); return }
+
+    const cuotasInsert = cuotas.map(c => ({ ...c, prestamo_id: prestamo.id }))
+    await supabase.from('inv_cuotas').insert(cuotasInsert)
+
+    if (simulacionGuardadaId) {
+      await supabase.from('inv_simulaciones').update({ estado:'convertida', prestamo_id: prestamo.id }).eq('id', simulacionGuardadaId)
+    }
+
+    setConvirtiendo(false)
+    setConvertido(true)
+  }
+
+  return (
+    <div>
+      <div style={{ marginBottom:16 }}>
+        <div style={{ fontSize:16, fontWeight:800, color:'var(--text)' }}>Simulador de crédito</div>
+        <div style={{ fontSize:12, color:'var(--text3)', marginTop:2 }}>Simula libremente — solo se convierte en préstamo real si el cliente acepta</div>
+      </div>
+
+      <div className="panel" style={{ marginBottom:16 }}>
+        <div className="grid-2" style={{ gap:10, marginBottom:12 }}>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Nombre del cliente</div>
+            <input type="text" value={form.cliente_nombre} onChange={e=>setForm(p=>({...p,cliente_nombre:e.target.value}))} style={iStyle} />
+          </div>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>WhatsApp del cliente</div>
+            <input type="text" value={form.cliente_telefono} onChange={e=>setForm(p=>({...p,cliente_telefono:e.target.value}))} placeholder="Ej: 3001234567" style={iStyle} />
+          </div>
+        </div>
+
+        <div style={{ marginBottom:12 }}>
+          <div style={{ fontSize:11, color:'var(--text3)', marginBottom:6 }}>Método de amortización</div>
+          <div style={{ display:'flex', gap:8 }}>
+            {[{id:'gota_a_gota',label:'Gota a gota'},{id:'frances',label:'Francés'},{id:'aleman',label:'Alemán'}].map(m => (
+              <div key={m.id} onClick={()=>setForm(p=>({...p,metodo:m.id}))} style={{ flex:1, padding:'8px', borderRadius:8, cursor:'pointer', textAlign:'center', fontSize:11, fontWeight:600,
+                background: form.metodo===m.id?'var(--gold-dim)':'rgba(255,255,255,0.04)', border:`1px solid ${form.metodo===m.id?'var(--gold-border)':'var(--border)'}`,
+                color: form.metodo===m.id?'var(--gold)':'var(--text3)' }}>{m.label}</div>
+            ))}
+          </div>
+        </div>
+
+        <div className="grid-2" style={{ gap:10, marginBottom:12 }}>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Capital (COP)</div>
+            <input type="number" value={form.capital} onChange={e=>setForm(p=>({...p,capital:e.target.value}))} placeholder="Ej: 500000" style={iStyle} />
+          </div>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Tasa de interés (%)</div>
+            <input type="number" value={form.tasa_interes} onChange={e=>setForm(p=>({...p,tasa_interes:e.target.value}))} style={iStyle} />
+          </div>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Número de cuotas</div>
+            <input type="number" value={form.plazo_cuotas} onChange={e=>setForm(p=>({...p,plazo_cuotas:e.target.value}))} style={iStyle} />
+          </div>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Fecha de desembolso (si se aprueba)</div>
+            <input type="date" value={form.fecha_simulacion} onChange={e=>setForm(p=>({...p,fecha_simulacion:e.target.value}))} style={iStyle} />
+          </div>
+        </div>
+
+        <div style={{ marginBottom:16 }}>
+          <div style={{ fontSize:11, color:'var(--text3)', marginBottom:6 }}>Frecuencia de cobro</div>
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+            {FREC_PRESETS.map(f => (
+              <div key={f.dias} onClick={()=>setForm(p=>({...p,frecuencia_dias:f.dias}))} style={{ padding:'5px 10px', borderRadius:7, cursor:'pointer', fontSize:10, fontWeight:600,
+                background: form.frecuencia_dias===f.dias?'var(--blue)':'rgba(255,255,255,0.04)', border:`1px solid ${form.frecuencia_dias===f.dias?'var(--blue)':'var(--border)'}`,
+                color: form.frecuencia_dias===f.dias?'white':'var(--text3)' }}>{f.label}</div>
+            ))}
+          </div>
+        </div>
+
+        <button onClick={simular} disabled={!form.capital} className="btn-gold" style={{ width:'100%' }}>📊 Simular</button>
+      </div>
+
+      {simulado && (
+        <div className="panel" style={{ border:'1px solid var(--gold-border)', marginBottom:16 }}>
+          <div className="grid-3" style={{ gap:10, marginBottom:14 }}>
+            <div className="kpi-card" style={{ padding:'10px 12px' }}><div className="kpi-label" style={{ fontSize:9 }}>Total a pagar</div><div style={{ fontSize:16, fontWeight:800, color:'var(--text)' }}>{cop(totalCuotas)}</div></div>
+            <div className="kpi-card" style={{ padding:'10px 12px' }}><div className="kpi-label" style={{ fontSize:9 }}>Interés total</div><div style={{ fontSize:16, fontWeight:800, color:'var(--gold)' }}>{cop(totalInteres)}</div></div>
+            <div className="kpi-card" style={{ padding:'10px 12px' }}><div className="kpi-label" style={{ fontSize:9 }}>Cuota por pago</div><div style={{ fontSize:16, fontWeight:800, color:'var(--blue)' }}>{cop(cuotas[0]?.cuota_total||0)}</div></div>
+          </div>
+
+          <div style={{ maxHeight:280, overflowY:'auto', border:'1px solid var(--border)', borderRadius:8, marginBottom:14 }}>
+            <table style={{ width:'100%', fontSize:11, borderCollapse:'collapse' }}>
+              <thead style={{ position:'sticky', top:0, background:'var(--bg3)' }}>
+                <tr>
+                  <th style={{ padding:'6px 8px', textAlign:'left', color:'var(--text3)' }}>#</th>
+                  <th style={{ padding:'6px 8px', textAlign:'left', color:'var(--text3)' }}>Fecha</th>
+                  <th style={{ padding:'6px 8px', textAlign:'right', color:'var(--text3)' }}>Capital</th>
+                  <th style={{ padding:'6px 8px', textAlign:'right', color:'var(--text3)' }}>Interés</th>
+                  <th style={{ padding:'6px 8px', textAlign:'right', color:'var(--text3)' }}>Cuota</th>
+                </tr>
+              </thead>
+              <tbody>
+                {cuotas.map(c => (
+                  <tr key={c.numero} style={{ borderTop:'1px solid var(--border)' }}>
+                    <td style={{ padding:'6px 8px' }}>{c.numero}</td>
+                    <td style={{ padding:'6px 8px' }}>{c.fecha_vencimiento}</td>
+                    <td style={{ padding:'6px 8px', textAlign:'right' }}>{cop(c.capital)}</td>
+                    <td style={{ padding:'6px 8px', textAlign:'right', color:'var(--gold)' }}>{cop(c.interes)}</td>
+                    <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:700 }}>{cop(c.cuota_total)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {!convertido ? (
+            <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+              {!simulacionGuardadaId && (
+                <button onClick={guardarSimulacion} className="btn" style={{ flex:1 }}>💾 Guardar simulación</button>
+              )}
+              {simulacionGuardadaId && (
+                <div style={{ flex:1, padding:'10px', textAlign:'center', fontSize:12, color:'var(--green)', background:'var(--green-dim)', borderRadius:8 }}>✅ Simulación guardada</div>
+              )}
+              <button onClick={convertirEnPrestamo} disabled={!form.cliente_nombre||convirtiendo} className="btn-green" style={{ flex:1 }}>
+                {convirtiendo ? 'Convirtiendo...' : '✅ Cliente acepta — convertir en préstamo'}
+              </button>
+            </div>
+          ) : (
+            <div>
+              <div style={{ padding:'12px 14px', background:'var(--green-dim)', borderRadius:10, fontSize:13, color:'var(--green)', fontWeight:600, marginBottom:12, textAlign:'center' }}>
+                ✅ Préstamo creado correctamente. Ahora puedes enviarle el calendario y la confirmación al cliente.
+              </div>
+              <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
+                <button onClick={()=>descargarICS(cuotas, form.cliente_nombre)} className="btn-gold" style={{ flex:1 }}>📅 Descargar calendario (.ics)</button>
+                <button onClick={()=>abrirWhatsApp(form.cliente_telefono, form.cliente_nombre, parseInt(form.capital), cuotas[0]?.cuota_total||0, form.plazo_cuotas, form.frecuencia_dias)} className="btn-green" style={{ flex:1 }}>
+                  💬 Abrir WhatsApp con mensaje listo
+                </button>
+              </div>
+              <div style={{ fontSize:10, color:'var(--text4)', marginTop:8, textAlign:'center' }}>
+                Descarga el calendario primero, luego en WhatsApp adjúntalo manualmente al mensaje que se abrió.
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -615,6 +868,7 @@ export default function LRMInversiones() {
 
   const TABS = [
     { id:'prestamos',  label:'💧 Gota a gota'  },
+    { id:'simulador',  label:'🧮 Simulador'    },
     { id:'empenos',    label:'💎 Empeños'      },
     { id:'libranzas',  label:'📋 Libranzas'    },
     { id:'portafolio', label:'📈 Portafolio'   },
@@ -637,6 +891,7 @@ export default function LRMInversiones() {
       </div>
 
       {tab==='prestamos'  && <TabPrestamos />}
+      {tab==='simulador'  && <TabSimulador />}
       {tab==='empenos'    && <TabEmpenos />}
       {tab==='libranzas'  && <TabLibranzas />}
       {tab==='portafolio' && <TabPortafolio />}
