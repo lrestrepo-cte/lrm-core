@@ -126,23 +126,35 @@ function generarICS(cuotas) {
   return ics
 }
 
-function descargarICS(cuotas, clienteNombre) {
+async function subirICSysObtenerURL(cuotas, clienteNombre, prestamoId) {
   const contenido = generarICS(cuotas)
   const blob = new Blob([contenido], { type: 'text/calendar;charset=utf-8' })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = `Calendario_Pagos_${clienteNombre.replace(/\s+/g,'_')}.ics`
-  document.body.appendChild(a)
-  a.click()
-  document.body.removeChild(a)
-  URL.revokeObjectURL(url)
+  const nombreArchivo = `calendario_${prestamoId}_${Date.now()}.ics`
+
+  const { error } = await supabase.storage
+    .from('calendarios-pagos')
+    .upload(nombreArchivo, blob, { contentType: 'text/calendar', upsert: true })
+
+  if (error) { console.error('Error subiendo calendario:', error); return null }
+
+  const { data } = supabase.storage.from('calendarios-pagos').getPublicUrl(nombreArchivo)
+  return data?.publicUrl || null
 }
 
-function abrirWhatsApp(telefono, clienteNombre, capital, cuotaTotal, plazoCuotas, frecuenciaDias) {
+function abrirWhatsApp(telefono, clienteNombre, capital, cuotas, plazoCuotas, frecuenciaDias, urlCalendario) {
   const telLimpio = (telefono||'').replace(/\D/g,'')
   const frecTexto = frecuenciaDias===1?'diaria':frecuenciaDias===7?'semanal':frecuenciaDias===15?'quincenal':frecuenciaDias===30?'mensual':`cada ${frecuenciaDias} días`
-  const mensaje = `Hola ${clienteNombre}! 👋 Tu crédito por ${cop(capital)} fue aprobado.\n\nResumen:\n• Cuota ${frecTexto}: ${cop(cuotaTotal)}\n• Número de cuotas: ${plazoCuotas}\n\nTe adjunto el calendario con todas las fechas de pago para que lo agregues a tu celular y no se te olvide ninguna. ¡Gracias por confiar en nosotros! 🙌`
+
+  const tablaPagos = cuotas.map(c => `${c.numero}. ${c.fecha_vencimiento} — ${cop(c.cuota_total)}`).join('\n')
+
+  let mensaje = `Hola ${clienteNombre}! 👋 Tu crédito por ${cop(capital)} fue aprobado.\n\n`
+  mensaje += `📋 *Resumen*\n• Cuota ${frecTexto}: ${cop(cuotas[0]?.cuota_total||0)}\n• Número de cuotas: ${plazoCuotas}\n\n`
+  mensaje += `📅 *Tus fechas de pago*\n${tablaPagos}\n\n`
+  if (urlCalendario) {
+    mensaje += `📲 Agrega todas estas fechas a tu calendario con un solo toque:\n${urlCalendario}\n\n`
+  }
+  mensaje += `Por favor cumple cada fecha para mantener tu crédito al día. ¡Gracias por confiar en nosotros! 🙌`
+
   const url = `https://wa.me/${telLimpio}?text=${encodeURIComponent(mensaje)}`
   window.open(url, '_blank')
 }
@@ -312,8 +324,10 @@ function TabPrestamos() {
                       {p.estado === 'activo' && (
                         <div onClick={()=>marcarMora(p.id)} style={{ display:'inline-block', padding:'5px 12px', borderRadius:8, cursor:'pointer', fontSize:11, background:'rgba(224,82,82,0.08)', border:'0.5px solid rgba(224,82,82,0.25)', color:'var(--red)' }}>⚠️ Marcar en mora</div>
                       )}
-                      <div onClick={()=>descargarICS(cuotas.length?cuotas:[], p.cliente_nombre)} style={{ display:'inline-block', padding:'5px 12px', borderRadius:8, cursor:'pointer', fontSize:11, background:'var(--gold-dim)', border:'0.5px solid var(--gold-border)', color:'var(--gold)' }}>📅 Descargar calendario (.ics)</div>
-                      <div onClick={()=>abrirWhatsApp(p.cliente_telefono, p.cliente_nombre, p.capital, cuotas[0]?.cuota_total||0, p.plazo_cuotas, p.frecuencia_dias)} style={{ display:'inline-block', padding:'5px 12px', borderRadius:8, cursor:'pointer', fontSize:11, background:'var(--green-dim)', border:'0.5px solid var(--green-border)', color:'var(--green)' }}>💬 WhatsApp</div>
+                      <div onClick={async ()=>{
+                        const url = await subirICSysObtenerURL(cuotas, p.cliente_nombre, p.id)
+                        abrirWhatsApp(p.cliente_telefono, p.cliente_nombre, p.capital, cuotas, p.plazo_cuotas, p.frecuencia_dias, url)
+                      }} style={{ display:'inline-block', padding:'5px 12px', borderRadius:8, cursor:'pointer', fontSize:11, background:'var(--green-dim)', border:'0.5px solid var(--green-border)', color:'var(--green)' }}>💬 Enviar calendario y tabla por WhatsApp</div>
                     </div>
 
                     <div style={{ fontSize:12, fontWeight:700, color:'var(--text)', marginBottom:8 }}>Tabla de cuotas</div>
@@ -440,6 +454,7 @@ function TabSimulador() {
   const [simulacionGuardadaId, setSimulacionGuardadaId] = useState(null)
   const [convirtiendo, setConvirtiendo] = useState(false)
   const [convertido, setConvertido] = useState(false)
+  const [urlCalendario, setUrlCalendario] = useState(null)
 
   const simular = () => {
     const capital = parseInt(form.capital) || 0
@@ -497,6 +512,9 @@ function TabSimulador() {
     if (simulacionGuardadaId) {
       await supabase.from('inv_simulaciones').update({ estado:'convertida', prestamo_id: prestamo.id }).eq('id', simulacionGuardadaId)
     }
+
+    const urlCal = await subirICSysObtenerURL(cuotas, form.cliente_nombre, prestamo.id)
+    setUrlCalendario(urlCal)
 
     setConvirtiendo(false)
     setConvertido(true)
@@ -615,14 +633,11 @@ function TabSimulador() {
               <div style={{ padding:'12px 14px', background:'var(--green-dim)', borderRadius:10, fontSize:13, color:'var(--green)', fontWeight:600, marginBottom:12, textAlign:'center' }}>
                 ✅ Préstamo creado correctamente. Ahora puedes enviarle el calendario y la confirmación al cliente.
               </div>
-              <div style={{ display:'flex', gap:10, flexWrap:'wrap' }}>
-                <button onClick={()=>descargarICS(cuotas, form.cliente_nombre)} className="btn-gold" style={{ flex:1 }}>📅 Descargar calendario (.ics)</button>
-                <button onClick={()=>abrirWhatsApp(form.cliente_telefono, form.cliente_nombre, parseInt(form.capital), cuotas[0]?.cuota_total||0, form.plazo_cuotas, form.frecuencia_dias)} className="btn-green" style={{ flex:1 }}>
-                  💬 Abrir WhatsApp con mensaje listo
-                </button>
-              </div>
+              <button onClick={()=>abrirWhatsApp(form.cliente_telefono, form.cliente_nombre, parseInt(form.capital), cuotas, form.plazo_cuotas, form.frecuencia_dias, urlCalendario)} className="btn-green" style={{ width:'100%' }}>
+                💬 Abrir WhatsApp con calendario y tabla de pagos
+              </button>
               <div style={{ fontSize:10, color:'var(--text4)', marginTop:8, textAlign:'center' }}>
-                Descarga el calendario primero, luego en WhatsApp adjúntalo manualmente al mensaje que se abrió.
+                {urlCalendario ? '✅ Calendario listo — el mensaje ya incluye el link y la tabla completa de pagos.' : '⏳ Subiendo calendario...'}
               </div>
             </div>
           )}
