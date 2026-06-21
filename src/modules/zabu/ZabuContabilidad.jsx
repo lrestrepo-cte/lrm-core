@@ -22,8 +22,8 @@ const TIPO_LABEL = {
   activo:'Activo', pasivo:'Pasivo', patrimonio:'Patrimonio', ingreso:'Ingreso',
   costo:'Costo de ventas', gasto:'Gasto', orden_deudora:'Cuentas de orden deudoras', orden_acreedora:'Cuentas de orden acreedoras',
 }
-// Tipos que afectan el balance/estado de resultados real (las de orden son solo de control)
 const TIPOS_BALANCE = ['activo','pasivo','patrimonio','ingreso','costo','gasto']
+const CARRITOS = ['C01','C02','C03']
 
 export default function ZabuContabilidad() {
   const [tab, setTab]             = useState('diario')
@@ -36,9 +36,13 @@ export default function ZabuContabilidad() {
   const [cuentaSel, setCuentaSel] = useState(null)
   const [filtroTipo, setFiltroTipo] = useState('todos')
   const [verInactivas, setVerInactivas] = useState(false)
+  // Centro de costo: 'todos' muestra el consolidado de ZABÚ completo,
+  // o un carrito específico (C01/C02/C03) para ver solo ese punto.
+  const [filtroCarrito, setFiltroCarrito] = useState('todos')
 
   const [nFecha,    setNFecha]    = useState(new Date().toISOString().split('T')[0])
   const [nDesc,     setNDesc]     = useState('')
+  const [nCarrito,  setNCarrito]  = useState('C01')
   const [nPartidas, setNPartidas] = useState([
     { codigo:'', nombre:'', debe:0, haber:0 },
     { codigo:'', nombre:'', debe:0, haber:0 },
@@ -66,19 +70,26 @@ export default function ZabuContabilidad() {
     setLoading(false)
   }
 
-  // Solo cuentas activas para tu régimen actual participan en cálculos y selects de asiento
   const planActivo = plan.filter(c => c.activo)
   const planInactivo = plan.filter(c => !c.activo)
-  // Para cálculos contables reales, excluimos las cuentas de orden (no afectan balance)
   const planContable = planActivo.filter(c => TIPOS_BALANCE.includes(c.tipo))
 
-  // ─── CÁLCULOS ──────────────────────────────────────────────────────────────
+  // Filtra las partidas de un asiento según el carrito seleccionado. Si el
+  // filtro es "todos", se devuelven todas las partidas sin importar el
+  // carrito_id que tengan (consolidado de ZABÚ completo).
+  const partidasFiltradas = (asiento) => {
+    const todas = asiento.partidas || []
+    if (filtroCarrito === 'todos') return todas
+    return todas.filter(p => p.carrito_id === filtroCarrito)
+  }
+
+  // ─── CÁLCULOS (respetan el filtro de carrito activo) ───────────────────────
 
   const saldoPorCuenta = () => {
     const saldos = {}
     planContable.forEach(c => { saldos[c.codigo] = { ...c, debe:0, haber:0, saldo:0 } })
     asientos.forEach(a => {
-      (a.partidas || []).forEach(p => {
+      partidasFiltradas(a).forEach(p => {
         if (saldos[p.codigo]) {
           saldos[p.codigo].debe  += p.debe  || 0
           saldos[p.codigo].haber += p.haber || 0
@@ -106,9 +117,18 @@ export default function ZabuContabilidad() {
   const totalPasivos  = Object.values(saldos).filter(c=>c.tipo==='pasivo').reduce((s,c)=>s+c.saldo,0)
   const totalPatrimonio = Object.values(saldos).filter(c=>c.tipo==='patrimonio').reduce((s,c)=>s+c.saldo,0) + utilidadNeta
 
-  const totalMovIngresos = movimientos.filter(m=>m.tipo==='ingreso').reduce((s,m)=>s+m.monto,0)
-  const totalMovEgresos  = movimientos.filter(m=>m.tipo==='egreso').reduce((s,m)=>s+m.monto,0)
+  // Movimientos simples ya tenían columna "carrito" — se filtra igual.
+  const movimientosFiltrados = filtroCarrito === 'todos' ? movimientos : movimientos.filter(m => m.carrito === filtroCarrito)
+  const totalMovIngresos = movimientosFiltrados.filter(m=>m.tipo==='ingreso').reduce((s,m)=>s+m.monto,0)
+  const totalMovEgresos  = movimientosFiltrados.filter(m=>m.tipo==='egreso').reduce((s,m)=>s+m.monto,0)
   const saldoMov         = totalMovIngresos - totalMovEgresos
+
+  // Asientos visibles según el filtro: si es "todos" se muestran todos;
+  // si es un carrito específico, solo los asientos que tengan AL MENOS una
+  // partida de ese carrito (para no esconder asientos mixtos por completo).
+  const asientosVisibles = filtroCarrito === 'todos'
+    ? asientos
+    : asientos.filter(a => (a.partidas||[]).some(p => p.carrito_id === filtroCarrito))
 
   // ─── NUEVO ASIENTO ─────────────────────────────────────────────────────────
 
@@ -132,13 +152,13 @@ export default function ZabuContabilidad() {
   const registrarAsiento = async () => {
     if (!nDesc.trim() || !cuadraN) return
     const { data: asiento, error } = await supabase.from('asientos').insert({
-      fecha: nFecha, descripcion: nDesc
+      fecha: nFecha, descripcion: nDesc, carrito_id: nCarrito,
     }).select().single()
     if (error || !asiento) return
 
     const partidas = nPartidas
       .filter(p => p.codigo && (p.debe>0||p.haber>0))
-      .map(p => ({ asiento_id:asiento.id, codigo:p.codigo, nombre:p.nombre, debe:Number(p.debe)||0, haber:Number(p.haber)||0 }))
+      .map(p => ({ asiento_id:asiento.id, codigo:p.codigo, nombre:p.nombre, debe:Number(p.debe)||0, haber:Number(p.haber)||0, carrito_id:nCarrito }))
 
     await supabase.from('partidas').insert(partidas)
     setNDesc(''); setNPartidas([{codigo:'',nombre:'',debe:0,haber:0},{codigo:'',nombre:'',debe:0,haber:0}])
@@ -170,12 +190,31 @@ export default function ZabuContabilidad() {
     </div>
   )
 
-  const movsFiltrados = filtroTipo === 'todos' ? movimientos : movimientos.filter(m=>m.tipo===filtroTipo)
+  const movsFiltrados = (filtroTipo === 'todos' ? movimientosFiltrados : movimientosFiltrados.filter(m=>m.tipo===filtroTipo))
 
   return (
     <>
       <div style={{ padding:'8px 14px', background:'rgba(55,138,221,0.06)', border:'1px solid rgba(55,138,221,0.2)', borderRadius:8, fontSize:11, color:'var(--blue)', marginBottom:14 }}>
         📋 Régimen actual: Persona Natural — Régimen Simple de Tributación. {planInactivo.length} cuentas adicionales del PUC están disponibles e inactivas para cuando avances a Régimen Ordinario (ver pestaña Plan de cuentas).
+      </div>
+
+      {/* Selector de centro de costo — visible siempre, afecta todas las vistas */}
+      <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16, flexWrap:'wrap' }}>
+        <span style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, fontWeight:600 }}>CENTRO DE COSTO:</span>
+        <div onClick={() => setFiltroCarrito('todos')} style={{
+          padding:'6px 14px', borderRadius:8, fontSize:12, cursor:'pointer', fontWeight:700,
+          background: filtroCarrito==='todos' ? 'var(--gold-dim)' : 'rgba(255,255,255,0.04)',
+          border:`1px solid ${filtroCarrito==='todos' ? 'var(--gold-border)' : 'var(--border)'}`,
+          color: filtroCarrito==='todos' ? 'var(--gold)' : 'var(--text3)',
+        }}>🏢 Consolidado ZABÚ</div>
+        {CARRITOS.map(c => (
+          <div key={c} onClick={() => setFiltroCarrito(c)} style={{
+            padding:'6px 14px', borderRadius:8, fontSize:12, cursor:'pointer', fontWeight:700,
+            background: filtroCarrito===c ? 'rgba(55,138,221,0.15)' : 'rgba(255,255,255,0.04)',
+            border:`1px solid ${filtroCarrito===c ? 'rgba(55,138,221,0.4)' : 'var(--border)'}`,
+            color: filtroCarrito===c ? 'var(--blue)' : 'var(--text3)',
+          }}>{c}</div>
+        ))}
       </div>
 
       <div className="grid-4" style={{ marginBottom:20 }}>
@@ -219,21 +258,25 @@ export default function ZabuContabilidad() {
       {/* ── DIARIO ── */}
       {tab === 'diario' && (
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-          {asientos.length === 0 && (
+          {asientosVisibles.length === 0 && (
             <div className="panel" style={{ textAlign:'center', padding:'40px 0', color:'var(--text4)' }}>
-              Sin asientos registrados. Crea el primero con el botón + Asiento.
+              Sin asientos registrados {filtroCarrito!=='todos' ? `para ${filtroCarrito}` : ''}. Crea el primero con el botón + Asiento.
             </div>
           )}
-          {asientos.map(a => {
-            const td = (a.partidas||[]).reduce((s,p)=>s+p.debe,0)
-            const th = (a.partidas||[]).reduce((s,p)=>s+p.haber,0)
+          {asientosVisibles.map(a => {
+            const partidasMostrar = partidasFiltradas(a)
+            const td = partidasMostrar.reduce((s,p)=>s+p.debe,0)
+            const th = partidasMostrar.reduce((s,p)=>s+p.haber,0)
             const ok = Math.abs(td-th)<1
             return (
               <div key={a.id} className="panel">
                 <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:10 }}>
                   <div>
-                    <div style={{ fontSize:14, fontWeight:700, color:'var(--text)', marginBottom:2 }}>{a.descripcion}</div>
-                    <div style={{ fontSize:11, color:'var(--text3)' }}>{a.fecha}</div>
+                    <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                      <div style={{ fontSize:14, fontWeight:700, color:'var(--text)' }}>{a.descripcion}</div>
+                      {a.carrito_id && <span style={{ fontSize:9, padding:'2px 8px', borderRadius:6, background:'rgba(55,138,221,0.1)', color:'var(--blue)', border:'0.5px solid rgba(55,138,221,0.3)', fontWeight:700 }}>{a.carrito_id}</span>}
+                    </div>
+                    <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>{a.fecha}</div>
                   </div>
                   <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                     <span style={{ fontSize:13, fontWeight:700, color:'var(--gold)' }}>{cop(td)}</span>
@@ -249,7 +292,7 @@ export default function ZabuContabilidad() {
                     <div key={h} style={{ fontSize:9, color:'var(--text4)', padding:'0 8px 4px', letterSpacing:0.5, fontWeight:600 }}>{h}</div>
                   ))}
                 </div>
-                {(a.partidas||[]).map((p,i) => {
+                {partidasMostrar.map((p,i) => {
                   const tc = TIPO_COLORS[plan.find(c=>c.codigo===p.codigo)?.tipo] || TIPO_COLORS.gasto
                   return (
                     <div key={i} style={{ display:'grid', gridTemplateColumns:'1fr 3fr 1fr 1fr', background:i%2===0?'transparent':'rgba(255,255,255,0.02)' }}>
@@ -349,9 +392,9 @@ export default function ZabuContabilidad() {
               .map(cuenta => {
                 const s = saldos[cuenta.codigo]
                 const tc = TIPO_COLORS[cuenta.tipo]
-                const movs = asientos.flatMap(a => (a.partidas||[])
+                const movs = asientos.flatMap(a => partidasFiltradas(a)
                   .filter(p=>p.codigo===cuenta.codigo)
-                  .map(p=>({...p, fecha:a.fecha, desc:a.descripcion}))
+                  .map(p=>({...p, fecha:a.fecha, desc:a.descripcion, carritoAsiento:a.carrito_id}))
                 )
                 let acum = 0
                 return (
@@ -390,7 +433,7 @@ export default function ZabuContabilidad() {
                 )
               })}
             {planContable.filter(c => (!cuentaSel || c.tipo===cuentaSel) && (saldos[c.codigo]?.debe>0 || saldos[c.codigo]?.haber>0)).length === 0 && (
-              <div className="panel" style={{ textAlign:'center', padding:'30px 0', color:'var(--text4)' }}>Sin movimientos en esta categoría todavía</div>
+              <div className="panel" style={{ textAlign:'center', padding:'30px 0', color:'var(--text4)' }}>Sin movimientos en esta categoría {filtroCarrito!=='todos'?`para ${filtroCarrito}`:''} todavía</div>
             )}
           </div>
         </div>
@@ -400,7 +443,7 @@ export default function ZabuContabilidad() {
       {tab === 'balance' && (
         <div className="panel">
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-            <div className="panel-title" style={{ marginBottom:0 }}>Balance de prueba — sumas y saldos</div>
+            <div className="panel-title" style={{ marginBottom:0 }}>Balance de prueba — sumas y saldos {filtroCarrito!=='todos'?`· ${filtroCarrito}`:'· Consolidado'}</div>
             <div style={{ fontSize:11, padding:'4px 14px', borderRadius:20,
               background:cuadra?'var(--green-dim)':'var(--red-dim)',
               color:cuadra?'var(--green)':'var(--red)',
@@ -430,7 +473,7 @@ export default function ZabuContabilidad() {
             )
           })}
           {planContable.filter(c=>saldos[c.codigo]?.debe>0||saldos[c.codigo]?.haber>0).length === 0 && (
-            <div style={{ textAlign:'center', padding:'30px 0', color:'var(--text4)', fontSize:13 }}>Sin movimientos registrados todavía</div>
+            <div style={{ textAlign:'center', padding:'30px 0', color:'var(--text4)', fontSize:13 }}>Sin movimientos registrados {filtroCarrito!=='todos'?`para ${filtroCarrito}`:''} todavía</div>
           )}
           <div style={{ display:'grid', gridTemplateColumns:'1fr 3fr 1fr 1fr 1fr 1fr', background:'var(--bg4)', marginTop:6, borderRadius:8 }}>
             <div style={{ padding:'10px', gridColumn:'1/3' }}><span style={{ fontSize:13, color:'var(--text)', fontWeight:800 }}>TOTALES</span></div>
@@ -449,7 +492,7 @@ export default function ZabuContabilidad() {
             <div style={{ textAlign:'center', marginBottom:20, paddingBottom:16, borderBottom:'1px solid var(--border)' }}>
               <div style={{ fontSize:11, color:'var(--gold)', letterSpacing:2, fontWeight:600, marginBottom:4 }}>ZABÚ — HOT DOGS DE VERDAD</div>
               <div style={{ fontSize:18, fontWeight:800, color:'var(--text)' }}>Estado de Resultados</div>
-              <div style={{ fontSize:12, color:'var(--text3)', marginTop:4 }}>Período acumulado · {new Date().toLocaleDateString('es-CO')}</div>
+              <div style={{ fontSize:12, color:'var(--text3)', marginTop:4 }}>{filtroCarrito!=='todos'?`Carrito ${filtroCarrito}`:'Consolidado'} · Período acumulado · {new Date().toLocaleDateString('es-CO')}</div>
             </div>
 
             {[
@@ -514,7 +557,7 @@ export default function ZabuContabilidad() {
             <div style={{ textAlign:'center', marginBottom:14, paddingBottom:12, borderBottom:'1px solid var(--border)' }}>
               <div style={{ fontSize:11, color:'var(--gold)', letterSpacing:2, fontWeight:600, marginBottom:2 }}>ZABÚ</div>
               <div style={{ fontSize:16, fontWeight:800, color:'var(--text)' }}>Balance General</div>
-              <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>{new Date().toLocaleDateString('es-CO')}</div>
+              <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>{filtroCarrito!=='todos'?`Carrito ${filtroCarrito}`:'Consolidado'} · {new Date().toLocaleDateString('es-CO')}</div>
             </div>
             <div style={{ fontSize:11, color:'var(--blue)', letterSpacing:1, fontWeight:700, marginBottom:10 }}>ACTIVOS</div>
             {[...new Set(planContable.filter(c=>c.tipo==='activo').map(c=>c.grupo))].map(grp => {
@@ -657,10 +700,16 @@ export default function ZabuContabilidad() {
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.9)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:20 }}>
           <div style={{ background:'var(--bg2)', borderRadius:16, padding:28, width:'100%', maxWidth:600, border:'1px solid var(--border)', maxHeight:'90vh', overflowY:'auto' }}>
             <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:20 }}>Nuevo asiento contable</div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 2fr', gap:12, marginBottom:20 }}>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 2fr', gap:12, marginBottom:20 }}>
               <div>
                 <div style={{ fontSize:11, color:'var(--text3)', marginBottom:5 }}>Fecha</div>
                 <input type="date" value={nFecha} onChange={e=>setNFecha(e.target.value)} style={inputStyle} />
+              </div>
+              <div>
+                <div style={{ fontSize:11, color:'var(--text3)', marginBottom:5 }}>Carrito</div>
+                <select value={nCarrito} onChange={e=>setNCarrito(e.target.value)} style={inputStyle}>
+                  {CARRITOS.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
               </div>
               <div>
                 <div style={{ fontSize:11, color:'var(--text3)', marginBottom:5 }}>Descripción</div>
@@ -753,7 +802,7 @@ export default function ZabuContabilidad() {
             <div style={{ marginBottom:20 }}>
               <div style={{ fontSize:11, color:'var(--text3)' }}>Carrito</div>
               <select value={mCarrito} onChange={e=>setMCarrito(e.target.value)} style={inputStyle}>
-                {['C01','C02','C03'].map(c=><option key={c} value={c}>{c}</option>)}
+                {CARRITOS.map(c=><option key={c} value={c}>{c}</option>)}
               </select>
             </div>
 

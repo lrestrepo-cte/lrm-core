@@ -617,6 +617,37 @@ export default function ZabuPOS({ usuario }) {
       tipo:'ingreso', categoria:'Ventas', monto: totalPrecio,
       carrito: CARRITO_ID, carrito_id: CARRITO_ID,
     })
+
+    // Genera también el asiento contable real de partida doble, para que la
+    // venta se refleje en Libro Mayor / Balance General / Estado de Resultados,
+    // no solo en el registro simple de "movimientos". Un débito por cada
+    // método de pago usado (ya neto, sin el cambio) y un crédito total a
+    // Ventas ZABÚ.
+    const CODIGO_METODO = { efectivo:'1105', qr:'1112', tarjeta:'1110' }
+    const NOMBRE_METODO  = { efectivo:'Caja general', qr:'Nequi/Daviplata', tarjeta:'Bancos' }
+
+    const { data: asientoVenta } = await supabase.from('asientos').insert({
+      fecha: new Date().toISOString().split('T')[0],
+      descripcion: `Venta ${codigo} — ${orden.items.length} item(s)`,
+      carrito_id: CARRITO_ID,
+    }).select().single()
+
+    if (asientoVenta) {
+      const partidasVenta = pagosNetos
+        .filter(p => p.monto > 0)
+        .map(p => ({
+          asiento_id: asientoVenta.id,
+          codigo: CODIGO_METODO[p.metodo] || '1105',
+          nombre: NOMBRE_METODO[p.metodo] || 'Caja general',
+          debe: p.monto, haber: 0, carrito_id: CARRITO_ID,
+        }))
+      partidasVenta.push({
+        asiento_id: asientoVenta.id, codigo:'4106', nombre:'Ventas ZABÚ',
+        debe: 0, haber: totalPrecio, carrito_id: CARRITO_ID,
+      })
+      await supabase.from('partidas').insert(partidasVenta)
+    }
+
     setVentas(prev => [orden, ...prev])
     setOrdenConfirmada(orden)
     setOrdenActual(orden)
