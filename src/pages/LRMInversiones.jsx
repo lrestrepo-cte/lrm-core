@@ -26,9 +26,13 @@ const FREC_PRESETS = [
 function generarTablaAmortizacion({ capital, tasaInteres, plazoCuotas, frecuenciaDias, metodo, fechaDesembolso }) {
   const cuotas = []
   const fechaBase = new Date(fechaDesembolso)
+  // La tasa SIEMPRE se interpreta como % MENSUAL. Se convierte a tasa por
+  // período de cobro según la frecuencia real (frecuenciaDias/30), de modo que
+  // el interés total dependa de la duración real del préstamo, no solo del
+  // número de cuotas en que se fraccione.
+  const tasaPeriodo = (tasaInteres / 100) * (frecuenciaDias / 30)
 
   if (metodo === 'frances') {
-    const tasaPeriodo = tasaInteres / 100
     const cuotaFija = tasaPeriodo === 0
       ? capital / plazoCuotas
       : capital * (tasaPeriodo * Math.pow(1+tasaPeriodo, plazoCuotas)) / (Math.pow(1+tasaPeriodo, plazoCuotas) - 1)
@@ -40,8 +44,8 @@ function generarTablaAmortizacion({ capital, tasaInteres, plazoCuotas, frecuenci
       const fecha = new Date(fechaBase); fecha.setDate(fecha.getDate() + frecuenciaDias * i)
       cuotas.push({ numero:i, fecha_vencimiento:fecha.toISOString().split('T')[0], capital:capitalCuota, interes, cuota_total:capitalCuota+interes, saldo_restante:saldo, estado:'pendiente' })
     }
+
   } else if (metodo === 'aleman') {
-    const tasaPeriodo = tasaInteres / 100
     const capitalFijo = Math.round(capital / plazoCuotas)
     let saldo = capital
     for (let i = 1; i <= plazoCuotas; i++) {
@@ -51,8 +55,26 @@ function generarTablaAmortizacion({ capital, tasaInteres, plazoCuotas, frecuenci
       const fecha = new Date(fechaBase); fecha.setDate(fecha.getDate() + frecuenciaDias * i)
       cuotas.push({ numero:i, fecha_vencimiento:fecha.toISOString().split('T')[0], capital:capitalCuota, interes, cuota_total:capitalCuota+interes, saldo_restante:saldo, estado:'pendiente' })
     }
+
+  } else if (metodo === 'americano') {
+    // Método Americano: solo interés en cada cuota intermedia; el capital
+    // completo se paga junto con el último interés, en la cuota final.
+    const interesPorCuota = Math.round(capital * tasaPeriodo)
+    for (let i = 1; i <= plazoCuotas; i++) {
+      const esUltima = i === plazoCuotas
+      const capitalCuota = esUltima ? capital : 0
+      const saldo = esUltima ? 0 : capital
+      const fecha = new Date(fechaBase); fecha.setDate(fecha.getDate() + frecuenciaDias * i)
+      cuotas.push({ numero:i, fecha_vencimiento:fecha.toISOString().split('T')[0], capital:capitalCuota, interes:interesPorCuota, cuota_total:capitalCuota+interesPorCuota, saldo_restante:saldo, estado:'pendiente' })
+    }
+
   } else {
-    const interesTotal = Math.round(capital * (tasaInteres/100))
+    // Gota a gota: interés simple sobre el capital, calculado con la tasa
+    // mensual multiplicada por la duración REAL del préstamo en meses
+    // (plazoCuotas × frecuenciaDias ÷ 30) — ya no es un % fijo desconectado
+    // del tiempo. Interés y capital se reparten en partes iguales por cuota.
+    const duracionMeses = (plazoCuotas * frecuenciaDias) / 30
+    const interesTotal = Math.round(capital * (tasaInteres/100) * duracionMeses)
     const totalAPagar = capital + interesTotal
     const cuotaFija = Math.round(totalAPagar / plazoCuotas)
     const capitalPorCuota = Math.round(capital / plazoCuotas)
@@ -212,7 +234,7 @@ function TabPrestamos() {
   }
 
   const ESTADO_COLOR = { activo:'var(--blue)', pagado:'var(--green)', mora:'var(--red)', castigado:'#666' }
-  const METODO_LABEL = { frances:'Francés', aleman:'Alemán', gota_a_gota:'Gota a gota' }
+  const METODO_LABEL = { frances:'Francés', aleman:'Alemán', americano:'Americano', gota_a_gota:'Gota a gota' }
 
   const prestamosFiltrados = filtroEstado==='todos' ? prestamos : prestamos.filter(p=>p.estado===filtroEstado)
 
@@ -262,7 +284,7 @@ function TabPrestamos() {
                     </div>
                     <div>
                       <div style={{ fontSize:14, fontWeight:700, color:'var(--text)' }}>{p.cliente_nombre}</div>
-                      <div style={{ fontSize:11, color:'var(--text3)' }}>{METODO_LABEL[p.metodo]} · {cop(p.capital)} · {p.tasa_interes}% · cada {p.frecuencia_dias}d · {p.plazo_cuotas} cuotas</div>
+                      <div style={{ fontSize:11, color:'var(--text3)' }}>{METODO_LABEL[p.metodo]} · {cop(p.capital)} · {p.tasa_interes}%/mes · cada {p.frecuencia_dias}d · {p.plazo_cuotas} cuotas</div>
                     </div>
                   </div>
                   <div style={{ display:'flex', alignItems:'center', gap:10 }}>
@@ -361,7 +383,7 @@ function TabPrestamos() {
             <div style={{ marginBottom:12 }}>
               <div style={{ fontSize:11, color:'var(--text3)', marginBottom:6 }}>Método de amortización</div>
               <div style={{ display:'flex', gap:8 }}>
-                {[{id:'gota_a_gota',label:'Gota a gota'},{id:'frances',label:'Francés'},{id:'aleman',label:'Alemán'}].map(m => (
+                {[{id:'gota_a_gota',label:'Gota a gota'},{id:'frances',label:'Francés'},{id:'aleman',label:'Alemán'},{id:'americano',label:'Americano'}].map(m => (
                   <div key={m.id} onClick={()=>setForm(p=>({...p,metodo:m.id}))} style={{ flex:1, padding:'8px', borderRadius:8, cursor:'pointer', textAlign:'center', fontSize:11, fontWeight:600,
                     background: form.metodo===m.id?'var(--gold-dim)':'rgba(255,255,255,0.04)', border:`1px solid ${form.metodo===m.id?'var(--gold-border)':'var(--border)'}`,
                     color: form.metodo===m.id?'var(--gold)':'var(--text3)' }}>{m.label}</div>
@@ -371,7 +393,7 @@ function TabPrestamos() {
 
             <div className="grid-2" style={{ gap:10, marginBottom:12 }}>
               <div><div style={{ fontSize:11, color:'var(--text3)' }}>Capital (COP)</div><input type="number" value={form.capital} onChange={e=>setForm(p=>({...p,capital:e.target.value}))} placeholder="Ej: 500000" style={iStyle} /></div>
-              <div><div style={{ fontSize:11, color:'var(--text3)' }}>Tasa de interés (%)</div><input type="number" value={form.tasa_interes} onChange={e=>setForm(p=>({...p,tasa_interes:e.target.value}))} style={iStyle} /></div>
+              <div><div style={{ fontSize:11, color:'var(--text3)' }}>Tasa de interés MENSUAL (%)</div><input type="number" value={form.tasa_interes} onChange={e=>setForm(p=>({...p,tasa_interes:e.target.value}))} style={iStyle} /></div>
               <div><div style={{ fontSize:11, color:'var(--text3)' }}>Número de cuotas</div><input type="number" value={form.plazo_cuotas} onChange={e=>setForm(p=>({...p,plazo_cuotas:e.target.value}))} style={iStyle} /></div>
               <div><div style={{ fontSize:11, color:'var(--text3)' }}>Fecha desembolso</div><input type="date" value={form.fecha_desembolso} onChange={e=>setForm(p=>({...p,fecha_desembolso:e.target.value}))} style={iStyle} /></div>
             </div>
@@ -502,7 +524,7 @@ function TabSimulador() {
         <div style={{ marginBottom:12 }}>
           <div style={{ fontSize:11, color:'var(--text3)', marginBottom:6 }}>Método de amortización</div>
           <div style={{ display:'flex', gap:8 }}>
-            {[{id:'gota_a_gota',label:'Gota a gota'},{id:'frances',label:'Francés'},{id:'aleman',label:'Alemán'}].map(m => (
+            {[{id:'gota_a_gota',label:'Gota a gota'},{id:'frances',label:'Francés'},{id:'aleman',label:'Alemán'},{id:'americano',label:'Americano'}].map(m => (
               <div key={m.id} onClick={()=>setForm(p=>({...p,metodo:m.id}))} style={{ flex:1, padding:'8px', borderRadius:8, cursor:'pointer', textAlign:'center', fontSize:11, fontWeight:600,
                 background: form.metodo===m.id?'var(--gold-dim)':'rgba(255,255,255,0.04)', border:`1px solid ${form.metodo===m.id?'var(--gold-border)':'var(--border)'}`,
                 color: form.metodo===m.id?'var(--gold)':'var(--text3)' }}>{m.label}</div>
@@ -516,7 +538,7 @@ function TabSimulador() {
             <input type="number" value={form.capital} onChange={e=>setForm(p=>({...p,capital:e.target.value}))} placeholder="Ej: 500000" style={iStyle} />
           </div>
           <div>
-            <div style={{ fontSize:11, color:'var(--text3)' }}>Tasa de interés (%)</div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Tasa de interés MENSUAL (%)</div>
             <input type="number" value={form.tasa_interes} onChange={e=>setForm(p=>({...p,tasa_interes:e.target.value}))} style={iStyle} />
           </div>
           <div>
