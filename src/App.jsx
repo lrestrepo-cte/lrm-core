@@ -139,8 +139,15 @@ export default function App() {
     : (TITULOS[navActivo] || 'LRM Trade')
 
   const renderContenido = () => {
-    if (navActivo === 'myspace')       return <MySpace />
-    if (navActivo === 'configuracion') return <LRMConfiguracion />
+    // "configuracion" y "myspace" son rutas de LRM Trade general — solo se
+    // muestran cuando NO estás dentro de un negocio (ZABÚ/RV/Inversiones).
+    // Antes esta condición se evaluaba SIEMPRE, así que el clic en
+    // "Configuración" dentro de ZABÚ también caía aquí y mostraba el panel
+    // de LRM en vez de abrir ZabuApp con su propio case 'configuracion'.
+    if (!isZabu && !isRV && !isInversiones) {
+      if (navActivo === 'myspace')       return <MySpace />
+      if (navActivo === 'configuracion') return <LRMConfiguracion />
+    }
     if (isZabu)        return <ZabuApp navExterno={negNav} onNavChange={(id)=>{setNegNav(id);setNavActivo(id)}} usuario={usuario} />
     if (isRV)          return <RVApp   navExterno={negNav} onNavChange={(id)=>{setNegNav(id);setNavActivo(id)}} usuario={usuario} />
     if (isInversiones) return <LRMInversiones />

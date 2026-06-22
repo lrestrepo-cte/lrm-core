@@ -1,11 +1,5 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
-
-const CARRITOS_INIT = [
-  { id:'c01', nombre:'Carrito 01', ubicacion:'Por definir', activo:true,  operador:'Operador C01', color:'#C9A84C' },
-  { id:'c02', nombre:'Carrito 02', ubicacion:'Por definir', activo:false, operador:'—',            color:'#4caf50' },
-  { id:'c03', nombre:'Carrito 03', ubicacion:'Por definir', activo:false, operador:'—',            color:'#378ADD' },
-]
 
 const USUARIOS_INIT = [
   { id:1, nombre:'Luis Restrepo',  email:'luis@zabu.co',   rol:'ceo',      pin:null,   carrito:'—',  activo:true  },
@@ -79,7 +73,6 @@ function SistemaTab() {
     setBorrandoNuclear(true)
     try {
       await Promise.all([
-        // ZABÚ
         supabase.from('ordenes').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
         supabase.from('movimientos').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
         supabase.from('turnos').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
@@ -87,11 +80,9 @@ function SistemaTab() {
         supabase.from('partidas').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
         supabase.from('consecutivos').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
         supabase.from('cierres_contables').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-        // RV Sports
         supabase.from('rv_ordenes').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
         supabase.from('rv_clientes').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
         supabase.from('rv_inventario').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
-        // My Space
         supabase.from('my_space_metas').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
         supabase.from('my_space_finanzas').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
         supabase.from('my_space_presupuesto').delete().neq('id', '00000000-0000-0000-0000-000000000000'),
@@ -119,8 +110,6 @@ function SistemaTab() {
 
   return (
     <div style={{ maxWidth:640 }}>
-
-      {/* Reset My Space */}
       <div className="panel" style={{ marginBottom:16, border:'1px solid rgba(201,168,76,0.2)' }}>
         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12 }}>
           <div style={{ fontSize:28 }}>🧹</div>
@@ -132,33 +121,17 @@ function SistemaTab() {
         <div style={{ padding:'12px 14px', background:'rgba(201,168,76,0.08)', border:'1px solid rgba(201,168,76,0.2)', borderRadius:10, fontSize:12, color:'var(--gold)', marginBottom:14 }}>
           ⚠️ Esta acción no se puede deshacer. Escribe <strong>BORRAR MYSPACE</strong> para confirmar.
         </div>
-        <input
-          type="text" value={confirmMySpace}
-          onChange={e => setConfirmMySpace(e.target.value)}
-          placeholder="Escribe: BORRAR MYSPACE"
-          style={inputStyle}
-        />
-        <button
-          onClick={borrarMySpace}
-          disabled={confirmMySpace !== 'BORRAR MYSPACE' || borrandoMS}
-          style={{
-            width:'100%', marginTop:10, padding:'12px', borderRadius:10, cursor:'pointer',
-            background: confirmMySpace==='BORRAR MYSPACE' ? 'rgba(201,168,76,0.15)' : 'rgba(255,255,255,0.04)',
-            border:`1px solid ${confirmMySpace==='BORRAR MYSPACE' ? 'rgba(201,168,76,0.4)' : 'var(--border)'}`,
-            color: confirmMySpace==='BORRAR MYSPACE' ? 'var(--gold)' : 'var(--text4)',
-            fontSize:13, fontWeight:700, fontFamily:'inherit', transition:'all .15s',
-          }}
-        >
-          {borrandoMS ? 'Borrando...' : '🧹 Borrar My Space'}
-        </button>
-        {resultadoMS && (
-          <div style={{ marginTop:10, padding:'10px 14px', background:'rgba(255,255,255,0.04)', borderRadius:8, fontSize:12, color:'var(--text3)' }}>
-            {resultadoMS}
-          </div>
-        )}
+        <input type="text" value={confirmMySpace} onChange={e => setConfirmMySpace(e.target.value)} placeholder="Escribe: BORRAR MYSPACE" style={inputStyle} />
+        <button onClick={borrarMySpace} disabled={confirmMySpace !== 'BORRAR MYSPACE' || borrandoMS} style={{
+          width:'100%', marginTop:10, padding:'12px', borderRadius:10, cursor:'pointer',
+          background: confirmMySpace==='BORRAR MYSPACE' ? 'rgba(201,168,76,0.15)' : 'rgba(255,255,255,0.04)',
+          border:`1px solid ${confirmMySpace==='BORRAR MYSPACE' ? 'rgba(201,168,76,0.4)' : 'var(--border)'}`,
+          color: confirmMySpace==='BORRAR MYSPACE' ? 'var(--gold)' : 'var(--text4)',
+          fontSize:13, fontWeight:700, fontFamily:'inherit', transition:'all .15s',
+        }}>{borrandoMS ? 'Borrando...' : '🧹 Borrar My Space'}</button>
+        {resultadoMS && <div style={{ marginTop:10, padding:'10px 14px', background:'rgba(255,255,255,0.04)', borderRadius:8, fontSize:12, color:'var(--text3)' }}>{resultadoMS}</div>}
       </div>
 
-      {/* BOTÓN NUCLEAR */}
       <div className="panel" style={{ border:'2px solid rgba(224,82,82,0.4)', background:'rgba(224,82,82,0.03)' }}>
         <div style={{ display:'flex', alignItems:'center', gap:12, marginBottom:12 }}>
           <div style={{ fontSize:36 }}>☢️</div>
@@ -170,7 +143,6 @@ function SistemaTab() {
             </div>
           </div>
         </div>
-
         <div style={{ padding:'14px 16px', background:'rgba(224,82,82,0.1)', border:'1px solid rgba(224,82,82,0.3)', borderRadius:10, marginBottom:14 }}>
           <div style={{ fontSize:13, fontWeight:700, color:'var(--red)', marginBottom:6 }}>⛔ ADVERTENCIA CRÍTICA</div>
           <div style={{ fontSize:12, color:'var(--text3)', lineHeight:1.7 }}>
@@ -179,35 +151,17 @@ function SistemaTab() {
             Solo ejecutar cuando estés 100% seguro de salir a producción real.
           </div>
         </div>
-
         <div style={{ fontSize:11, color:'var(--text3)', marginBottom:6 }}>Escribe exactamente: <strong style={{ color:'var(--red)' }}>BORRAR TODO</strong></div>
-        <input
-          type="text" value={confirmNuclear}
-          onChange={e => setConfirmNuclear(e.target.value)}
-          placeholder="Escribe: BORRAR TODO"
-          style={{ ...inputStyle, border:`1px solid ${confirmNuclear==='BORRAR TODO'?'rgba(224,82,82,0.5)':'var(--border)'}`, marginTop:0 }}
-        />
-
-        <button
-          onClick={borrarTodo}
-          disabled={confirmNuclear !== 'BORRAR TODO' || borrandoNuclear}
-          style={{
-            width:'100%', marginTop:12, padding:'14px', borderRadius:10, cursor:'pointer',
-            background: confirmNuclear==='BORRAR TODO' ? 'rgba(224,82,82,0.2)' : 'rgba(255,255,255,0.04)',
-            border:`2px solid ${confirmNuclear==='BORRAR TODO' ? 'rgba(224,82,82,0.6)' : 'var(--border)'}`,
-            color: confirmNuclear==='BORRAR TODO' ? 'var(--red)' : 'var(--text4)',
-            fontSize:14, fontWeight:800, fontFamily:'inherit', transition:'all .15s',
-            letterSpacing: confirmNuclear==='BORRAR TODO' ? 1 : 0,
-          }}
-        >
-          {borrandoNuclear ? '💥 Ejecutando borrado nuclear...' : '☢️ EJECUTAR BORRADO NUCLEAR'}
-        </button>
-
-        {resultadoN && (
-          <div style={{ marginTop:12, padding:'12px 14px', background:'rgba(255,255,255,0.04)', borderRadius:8, fontSize:13, color: resultadoN.startsWith('✅')?'var(--green)':'var(--red)', fontWeight:600 }}>
-            {resultadoN}
-          </div>
-        )}
+        <input type="text" value={confirmNuclear} onChange={e => setConfirmNuclear(e.target.value)} placeholder="Escribe: BORRAR TODO" style={{ ...inputStyle, border:`1px solid ${confirmNuclear==='BORRAR TODO'?'rgba(224,82,82,0.5)':'var(--border)'}`, marginTop:0 }} />
+        <button onClick={borrarTodo} disabled={confirmNuclear !== 'BORRAR TODO' || borrandoNuclear} style={{
+          width:'100%', marginTop:12, padding:'14px', borderRadius:10, cursor:'pointer',
+          background: confirmNuclear==='BORRAR TODO' ? 'rgba(224,82,82,0.2)' : 'rgba(255,255,255,0.04)',
+          border:`2px solid ${confirmNuclear==='BORRAR TODO' ? 'rgba(224,82,82,0.6)' : 'var(--border)'}`,
+          color: confirmNuclear==='BORRAR TODO' ? 'var(--red)' : 'var(--text4)',
+          fontSize:14, fontWeight:800, fontFamily:'inherit', transition:'all .15s',
+          letterSpacing: confirmNuclear==='BORRAR TODO' ? 1 : 0,
+        }}>{borrandoNuclear ? '💥 Ejecutando borrado nuclear...' : '☢️ EJECUTAR BORRADO NUCLEAR'}</button>
+        {resultadoN && <div style={{ marginTop:12, padding:'12px 14px', background:'rgba(255,255,255,0.04)', borderRadius:8, fontSize:13, color: resultadoN.startsWith('✅')?'var(--green)':'var(--red)', fontWeight:600 }}>{resultadoN}</div>}
       </div>
     </div>
   )
@@ -215,12 +169,10 @@ function SistemaTab() {
 
 export default function ZabuConfiguracion() {
   const [tab, setTab]               = useState('carritos')
-  const [carritos, setCarritos]     = useState(CARRITOS_INIT)
   const [usuarios, setUsuarios]     = useState(USUARIOS_INIT)
   const [menu, setMenu]             = useState(MENU_INIT)
   const [extras, setExtras]         = useState(EXTRAS_INIT)
   const [salchichas, setSalchichas] = useState(SALCHICHAS_INIT)
-  const [modalCarrito, setModalCarrito] = useState(null)
   const [modalUsuario, setModalUsuario] = useState(null)
   const [modalMenu,    setModalMenu]    = useState(null)
   const [modalExtra,   setModalExtra]   = useState(null)
@@ -232,51 +184,157 @@ export default function ZabuConfiguracion() {
     color:'var(--text)', fontSize:13, fontFamily:'inherit', outline:'none', marginTop:6,
   }
 
+  // ─── CARRITOS — conectado a Supabase (tabla zabu_carritos) ─────────────────
   const CarritosTab = () => {
-    const [form, setForm] = useState(modalCarrito || { id:'', nombre:'', ubicacion:'', activo:true, operador:'', color:'#C9A84C' })
-    const guardar = () => {
-      if (!form.nombre.trim()) return
-      if (form.id) setCarritos(prev=>prev.map(c=>c.id===form.id?form:c))
-      else setCarritos(prev=>[...prev,{...form,id:'c'+Date.now()}])
-      setModalCarrito(null)
+    const [carritosDB, setCarritosDB] = useState([])
+    const [loadingCarritos, setLoadingCarritos] = useState(true)
+    const [form, setForm] = useState(null)
+    const [guardando, setGuardando] = useState(false)
+
+    useEffect(() => { cargarCarritos() }, [])
+
+    const cargarCarritos = async () => {
+      setLoadingCarritos(true)
+      const { data } = await supabase.from('zabu_carritos').select('*').order('id')
+      if (data) setCarritosDB(data)
+      setLoadingCarritos(false)
     }
+
+    const abrirModal = (carrito) => {
+      setForm(carrito || {
+        id: '', nombre: '', ubicacion: '', direccion: '', activo: true, operador: '',
+        color: '#C9A84C', datafono_banco: '', datafono_terminal: '', cuenta_banco: '',
+        cuenta_numero: '', horario_apertura: '', horario_cierre: '', whatsapp: '',
+        fecha_inicio: '', notas: '',
+      })
+    }
+
+    const guardar = async () => {
+      if (!form.nombre.trim()) return
+      setGuardando(true)
+      if (form.id && carritosDB.find(c => c.id === form.id)) {
+        await supabase.from('zabu_carritos').update(form).eq('id', form.id)
+      } else {
+        const nuevoId = form.id || 'c' + Date.now()
+        await supabase.from('zabu_carritos').insert({ ...form, id: nuevoId })
+      }
+      setGuardando(false)
+      setForm(null)
+      cargarCarritos()
+    }
+
+    const toggleActivo = async (carrito) => {
+      await supabase.from('zabu_carritos').update({ activo: !carrito.activo }).eq('id', carrito.id)
+      setCarritosDB(prev => prev.map(c => c.id===carrito.id ? {...c, activo:!c.activo} : c))
+    }
+
+    if (loadingCarritos) return <div style={{ textAlign:'center', padding:'40px 0', color:'var(--text3)' }}>Cargando carritos...</div>
+
     return (
       <>
         <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
-          <div style={{ fontSize:13, color:'var(--text3)' }}>{carritos.length} carritos · {carritos.filter(c=>c.activo).length} activos</div>
-          <button className="btn-gold" onClick={() => setModalCarrito({})}>+ Agregar carrito</button>
+          <div style={{ fontSize:13, color:'var(--text3)' }}>{carritosDB.length} carritos · {carritosDB.filter(c=>c.activo).length} activos</div>
+          <button className="btn-gold" onClick={() => abrirModal(null)}>+ Agregar carrito</button>
         </div>
         <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
-          {carritos.map(c => (
+          {carritosDB.map(c => (
             <div key={c.id} style={{ background:'var(--bg3)', borderRadius:14, border:`1px solid ${c.activo?c.color+'33':'var(--border)'}`, padding:'16px 20px', display:'flex', alignItems:'center', gap:16 }}>
               <div style={{ width:44, height:44, borderRadius:12, background:c.color+'15', border:`1px solid ${c.color}33`, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                 <div style={{ width:14, height:14, borderRadius:'50%', background:c.activo?c.color:'#333' }} />
               </div>
               <div style={{ flex:1 }}>
                 <div style={{ fontSize:15, fontWeight:700, color:'var(--text)', marginBottom:3 }}>{c.nombre}</div>
-                <div style={{ fontSize:12, color:'var(--text3)' }}>📍 {c.ubicacion||'Sin ubicación'} · 👤 {c.operador||'—'}</div>
+                <div style={{ fontSize:12, color:'var(--text3)' }}>📍 {c.ubicacion||c.direccion||'Sin ubicación'} · 👤 {c.operador||'—'}</div>
+                {(c.cuenta_banco || c.datafono_banco) && (
+                  <div style={{ fontSize:11, color:'var(--text4)', marginTop:2 }}>
+                    {c.cuenta_banco && `🏦 ${c.cuenta_banco} ${c.cuenta_numero||''}`}
+                    {c.cuenta_banco && c.datafono_banco && ' · '}
+                    {c.datafono_banco && `💳 ${c.datafono_banco} ${c.datafono_terminal||''}`}
+                  </div>
+                )}
               </div>
               <div style={{ display:'flex', gap:8 }}>
-                <div onClick={() => setCarritos(prev=>prev.map(x=>x.id===c.id?{...x,activo:!x.activo}:x))} style={{ padding:'5px 14px', borderRadius:20, cursor:'pointer', fontSize:11, fontWeight:700, background:c.activo?'var(--green-dim)':'rgba(255,255,255,0.04)', color:c.activo?'var(--green)':'var(--text4)', border:`0.5px solid ${c.activo?'var(--green-border)':'var(--border)'}` }}>{c.activo?'Activo':'Inactivo'}</div>
-                <button className="btn" style={{ fontSize:11, padding:'5px 12px' }} onClick={() => setModalCarrito(c)}>Editar</button>
+                <div onClick={() => toggleActivo(c)} style={{ padding:'5px 14px', borderRadius:20, cursor:'pointer', fontSize:11, fontWeight:700, background:c.activo?'var(--green-dim)':'rgba(255,255,255,0.04)', color:c.activo?'var(--green)':'var(--text4)', border:`0.5px solid ${c.activo?'var(--green-border)':'var(--border)'}` }}>{c.activo?'Activo':'Inactivo'}</div>
+                <button className="btn" style={{ fontSize:11, padding:'5px 12px' }} onClick={() => abrirModal(c)}>Editar</button>
               </div>
             </div>
           ))}
         </div>
-        {modalCarrito!==null && (
-          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100 }}>
-            <div style={{ background:'var(--bg2)', borderRadius:16, padding:28, width:400, border:'1px solid var(--border)' }}>
+
+        {form !== null && (
+          <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'flex-start', justifyContent:'center', zIndex:100, padding:20, overflowY:'auto' }}>
+            <div style={{ background:'var(--bg2)', borderRadius:16, padding:28, width:'100%', maxWidth:480, border:'1px solid var(--border)', margin:'auto' }}>
               <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:20 }}>{form.id?'Editar carrito':'Nuevo carrito'}</div>
-              {[
-                {label:'Nombre',   key:'nombre',   ph:'Ej: Villa Carolina'},
-                {label:'Ubicación',key:'ubicacion',ph:'Ej: CC Villa del Río'},
-                {label:'Operador', key:'operador', ph:'Nombre del operador'},
-              ].map(f => (
-                <div key={f.key} style={{ marginBottom:14 }}>
-                  <div style={{ fontSize:11, color:'var(--text3)' }}>{f.label}</div>
-                  <input type="text" value={form[f.key]||''} onChange={e=>setForm(p=>({...p,[f.key]:e.target.value}))} placeholder={f.ph} style={inputStyle} />
+
+              <div style={{ fontSize:11, color:'var(--gold)', letterSpacing:1, fontWeight:700, marginBottom:10 }}>DATOS BÁSICOS</div>
+              <div className="grid-2" style={{ gap:10, marginBottom:14 }}>
+                <div>
+                  <div style={{ fontSize:11, color:'var(--text3)' }}>Nombre</div>
+                  <input type="text" value={form.nombre||''} onChange={e=>setForm(p=>({...p,nombre:e.target.value}))} placeholder="Ej: Carrito 01" style={inputStyle} />
                 </div>
-              ))}
+                <div>
+                  <div style={{ fontSize:11, color:'var(--text3)' }}>Operador asignado</div>
+                  <input type="text" value={form.operador||''} onChange={e=>setForm(p=>({...p,operador:e.target.value}))} placeholder="Nombre del operador" style={inputStyle} />
+                </div>
+              </div>
+              <div style={{ marginBottom:14 }}>
+                <div style={{ fontSize:11, color:'var(--text3)' }}>Ubicación (zona/referencia)</div>
+                <input type="text" value={form.ubicacion||''} onChange={e=>setForm(p=>({...p,ubicacion:e.target.value}))} placeholder="Ej: Norte de Barranquilla" style={inputStyle} />
+              </div>
+              <div style={{ marginBottom:14 }}>
+                <div style={{ fontSize:11, color:'var(--text3)' }}>Dirección exacta</div>
+                <input type="text" value={form.direccion||''} onChange={e=>setForm(p=>({...p,direccion:e.target.value}))} placeholder="Dirección completa" style={inputStyle} />
+              </div>
+
+              <div style={{ fontSize:11, color:'var(--gold)', letterSpacing:1, fontWeight:700, marginBottom:10, marginTop:16 }}>DATÁFONO</div>
+              <div className="grid-2" style={{ gap:10, marginBottom:14 }}>
+                <div>
+                  <div style={{ fontSize:11, color:'var(--text3)' }}>Banco / Proveedor</div>
+                  <input type="text" value={form.datafono_banco||''} onChange={e=>setForm(p=>({...p,datafono_banco:e.target.value}))} placeholder="Ej: Bancolombia" style={inputStyle} />
+                </div>
+                <div>
+                  <div style={{ fontSize:11, color:'var(--text3)' }}>N° Terminal</div>
+                  <input type="text" value={form.datafono_terminal||''} onChange={e=>setForm(p=>({...p,datafono_terminal:e.target.value}))} placeholder="Ej: TPV-001234" style={inputStyle} />
+                </div>
+              </div>
+
+              <div style={{ fontSize:11, color:'var(--gold)', letterSpacing:1, fontWeight:700, marginBottom:10, marginTop:16 }}>CUENTA BANCARIA ASOCIADA</div>
+              <div className="grid-2" style={{ gap:10, marginBottom:14 }}>
+                <div>
+                  <div style={{ fontSize:11, color:'var(--text3)' }}>Banco</div>
+                  <input type="text" value={form.cuenta_banco||''} onChange={e=>setForm(p=>({...p,cuenta_banco:e.target.value}))} placeholder="Ej: Bancolombia" style={inputStyle} />
+                </div>
+                <div>
+                  <div style={{ fontSize:11, color:'var(--text3)' }}>N° de cuenta</div>
+                  <input type="text" value={form.cuenta_numero||''} onChange={e=>setForm(p=>({...p,cuenta_numero:e.target.value}))} placeholder="Ej: 123-456789-00" style={inputStyle} />
+                </div>
+              </div>
+
+              <div style={{ fontSize:11, color:'var(--gold)', letterSpacing:1, fontWeight:700, marginBottom:10, marginTop:16 }}>OPERACIÓN</div>
+              <div className="grid-2" style={{ gap:10, marginBottom:14 }}>
+                <div>
+                  <div style={{ fontSize:11, color:'var(--text3)' }}>Horario apertura</div>
+                  <input type="time" value={form.horario_apertura||''} onChange={e=>setForm(p=>({...p,horario_apertura:e.target.value}))} style={inputStyle} />
+                </div>
+                <div>
+                  <div style={{ fontSize:11, color:'var(--text3)' }}>Horario cierre</div>
+                  <input type="time" value={form.horario_cierre||''} onChange={e=>setForm(p=>({...p,horario_cierre:e.target.value}))} style={inputStyle} />
+                </div>
+                <div>
+                  <div style={{ fontSize:11, color:'var(--text3)' }}>WhatsApp del punto</div>
+                  <input type="text" value={form.whatsapp||''} onChange={e=>setForm(p=>({...p,whatsapp:e.target.value}))} placeholder="Ej: 3001234567" style={inputStyle} />
+                </div>
+                <div>
+                  <div style={{ fontSize:11, color:'var(--text3)' }}>Fecha de inicio</div>
+                  <input type="date" value={form.fecha_inicio||''} onChange={e=>setForm(p=>({...p,fecha_inicio:e.target.value}))} style={inputStyle} />
+                </div>
+              </div>
+
+              <div style={{ marginBottom:14 }}>
+                <div style={{ fontSize:11, color:'var(--text3)' }}>Notas</div>
+                <textarea value={form.notas||''} onChange={e=>setForm(p=>({...p,notas:e.target.value}))} style={{...inputStyle,height:60,resize:'none'}} />
+              </div>
+
               <div style={{ marginBottom:20 }}>
                 <div style={{ fontSize:11, color:'var(--text3)', marginBottom:8 }}>Color</div>
                 <div style={{ display:'flex', gap:10 }}>
@@ -285,9 +343,10 @@ export default function ZabuConfiguracion() {
                   ))}
                 </div>
               </div>
+
               <div style={{ display:'flex', gap:10 }}>
-                <button className="btn-green" style={{ flex:1 }} onClick={guardar}>Guardar</button>
-                <button className="btn" onClick={() => setModalCarrito(null)}>Cancelar</button>
+                <button className="btn-green" style={{ flex:1 }} onClick={guardar} disabled={guardando}>{guardando?'Guardando...':'Guardar'}</button>
+                <button className="btn" onClick={() => setForm(null)}>Cancelar</button>
               </div>
             </div>
           </div>
@@ -358,7 +417,9 @@ export default function ZabuConfiguracion() {
               <div style={{ marginBottom:20 }}>
                 <div style={{ fontSize:11, color:'var(--text3)' }}>Carrito</div>
                 <select value={form.carrito} onChange={e=>setForm(p=>({...p,carrito:e.target.value}))} style={inputStyle}>
-                  {carritos.map(c=><option key={c.id} value={c.id}>{c.nombre}</option>)}
+                  <option value="C01">C01</option>
+                  <option value="C02">C02</option>
+                  <option value="C03">C03</option>
                 </select>
               </div>
               <div style={{ display:'flex', gap:10 }}>
