@@ -112,6 +112,40 @@ const DEFAULTS = {
     { nombre:'Normal', rango:'40–50 perros/día', valor:45 },
     { nombre:'Fuerte', rango:'70+ perros/día', valor:75 },
   ],
+  proyeccion: {
+    precioVenta: 18000,
+    promedioDiario: 80,
+    diasOperacionMes: 30,
+    numeroCarritos: 1,
+    distribucionDias: [
+      { dia:'Lunes',     pct:8  },
+      { dia:'Martes',    pct:8  },
+      { dia:'Miércoles', pct:9  },
+      { dia:'Jueves',    pct:15 },
+      { dia:'Viernes',   pct:20 },
+      { dia:'Sábado',    pct:22 },
+      { dia:'Domingo',   pct:18 },
+    ],
+    distribucionHoras: [
+      { hora:'4:00pm',  pct:6  },
+      { hora:'5:00pm',  pct:9  },
+      { hora:'6:00pm',  pct:12 },
+      { hora:'7:00pm',  pct:20 },
+      { hora:'8:00pm',  pct:22 },
+      { hora:'9:00pm',  pct:16 },
+      { hora:'10:00pm', pct:10 },
+      { hora:'11:00pm', pct:5  },
+    ],
+    costoVariablePorUnidad: 10375,
+    costosFijosPorCarrito: [
+      { concepto:'Renta',                                monto:2000000 },
+      { concepto:'Insumos indirectos',                   monto:1600000 },
+      { concepto:'Nómina operativa (cocinero+ayudante)', monto:4500000 },
+      { concepto:'Pago Luis (socio)',                    monto:2000000 },
+      { concepto:'Pago Emelyn (socia)',                  monto:2000000 },
+    ],
+    marketingGlobal: 3000000,
+  },
   indicadores: { ticketPromedioMeta: 20000, conversionComboMeta: 60, metaArmadoSeg: 90 },
   escalamiento: [
     { etapa:'Etapa 1', titulo:'Primer carrito', desc:'Validación del modelo, receta y operación.' },
@@ -151,6 +185,53 @@ function calcFinanciero(financiero) {
   const utilidadMensual = ingresoMensual - totalCostosOp
   const mesesROI = utilidadMensual > 0 ? Math.ceil(totalInversion / utilidadMensual) : '—'
   return { totalInversion, totalCostosOp, ingresoMensual, utilidadMensual, mesesROI }
+}
+
+// Calcula la proyección completa: meta mensual/semanal/diaria, distribución
+// por día y hora en pesos y en unidades, costos fijos (que se duplican por
+// carrito) vs costos globales (marketing, que NO se duplica), y el resultado
+// final de utilidad o pérdida del negocio completo.
+function calcProyeccion(proyeccion) {
+  const { precioVenta, promedioDiario, diasOperacionMes, numeroCarritos, distribucionDias, distribucionHoras, costoVariablePorUnidad, costosFijosPorCarrito, marketingGlobal } = proyeccion
+
+  const ventaMensualPorCarrito = precioVenta * promedioDiario * diasOperacionMes
+  const ventaSemanalPorCarrito = ventaMensualPorCarrito / diasOperacionMes * 7
+
+  // Distribución día x hora — unidades y pesos para UN carrito
+  const tablaDistribucion = distribucionDias.map(d => {
+    const ventaDia = ventaSemanalPorCarrito * (d.pct/100)
+    const unidadesDia = ventaDia / precioVenta
+    const horas = distribucionHoras.map(h => {
+      const unidadesHora = unidadesDia * (h.pct/100)
+      return { hora:h.hora, pctHora:h.pct, unidades: unidadesHora }
+    })
+    return { dia:d.dia, pctDia:d.pct, ventaDia, unidadesDia, horas }
+  })
+
+  const totalSemanaUnidades = tablaDistribucion.reduce((s,d)=>s+d.unidadesDia, 0)
+
+  // Costos fijos — por carrito y total según número de carritos
+  const totalCostosFijosPorCarrito = costosFijosPorCarrito.reduce((s,c)=>s+c.monto, 0)
+  const totalCostosFijos = (totalCostosFijosPorCarrito * numeroCarritos) + marketingGlobal
+
+  // Resultado financiero con el número de carritos actual
+  const unidadesMesTotal = promedioDiario * diasOperacionMes * numeroCarritos
+  const ingresoMensualTotal = unidadesMesTotal * precioVenta
+  const costoVariableTotal = unidadesMesTotal * costoVariablePorUnidad
+  const margenContribucionTotal = ingresoMensualTotal - costoVariableTotal
+  const resultadoMensual = margenContribucionTotal - totalCostosFijos
+
+  // Punto de equilibrio en unidades/día (considerando todos los carritos)
+  const margenContribucionPorUnidad = precioVenta - costoVariablePorUnidad
+  const puntoEquilibrioUnidadesMes = margenContribucionPorUnidad > 0 ? totalCostosFijos / margenContribucionPorUnidad : 0
+  const puntoEquilibrioUnidadesDia = puntoEquilibrioUnidadesMes / diasOperacionMes
+
+  return {
+    ventaMensualPorCarrito, ventaSemanalPorCarrito, tablaDistribucion, totalSemanaUnidades,
+    totalCostosFijosPorCarrito, totalCostosFijos, unidadesMesTotal, ingresoMensualTotal,
+    costoVariableTotal, margenContribucionTotal, resultadoMensual,
+    margenContribucionPorUnidad, puntoEquilibrioUnidadesMes, puntoEquilibrioUnidadesDia,
+  }
 }
 
 // ─── Botón de guardado con feedback visual ───────────────────────────────────
@@ -434,11 +515,13 @@ export default function ZabuPlanNegocio() {
   if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--text3)' }}>Cargando plan desde Supabase...</div>
 
   const { totalInversion, totalCostosOp, ingresoMensual, utilidadMensual, mesesROI } = calcFinanciero(datos.financiero)
+  const proy = calcProyeccion(datos.proyeccion)
 
   const TABS = [
     { id:'resumen', label:'📋 Resumen' }, { id:'mercado', label:'📊 Mercado' }, { id:'dofa', label:'⚖️ DOFA' },
     { id:'diferencial', label:'💎 Diferencial' }, { id:'menu', label:'🌭 Menú' }, { id:'marketing', label:'📱 Marketing' },
     { id:'visual', label:'🎨 Visual' }, { id:'operativo', label:'⚙️ Operativo' }, { id:'financiero', label:'💰 Financiero' },
+    { id:'proyeccion', label:'📈 Proyección' },
     { id:'riesgos', label:'⚠️ Riesgos' }, { id:'criticas', label:'❓ Preguntas' }, { id:'escalamiento', label:'🚀 Escalamiento' },
     { id:'equipo', label:'👥 Equipo' }, { id:'pdf', label:'📄 Exportar PDF' },
   ]
@@ -817,6 +900,167 @@ export default function ZabuPlanNegocio() {
                 <div style={{ flex:1, textAlign:'right', fontSize:13, fontWeight:700, color:'var(--text2)' }}>{cop(e.valor*datos.financiero.precioPromedio*datos.financiero.diasMes)}/mes</div>
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* PROYECCIÓN */}
+      {tab==='proyeccion' && (
+        <div>
+          <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4 }}>
+            <div style={{ fontSize:16, fontWeight:800, color:'var(--text)' }}>Proyección de ventas y rentabilidad</div>
+            <BotonGuardar onSave={()=>guardarSeccion('proyeccion')} guardando={guardando.proyeccion} guardado={guardado.proyeccion} />
+          </div>
+          <div style={{ fontSize:12, color:'var(--text3)', marginBottom:16 }}>Meta diaria distribuida por día de la semana y hora — para saber exactamente cuánto vender cada hora de cada día</div>
+
+          {/* Parámetros base */}
+          <div className="panel" style={{ marginBottom:16 }}>
+            <div className="panel-title">Parámetros base</div>
+            <div className="grid-4" style={{ gap:10 }}>
+              <div>
+                <div style={{ fontSize:10, color:'var(--text3)' }}>Precio de venta</div>
+                <input type="number" value={datos.proyeccion.precioVenta} onChange={e=>update('proyeccion','precioVenta',parseInt(e.target.value)||0)} style={{...iStyle,marginTop:4,fontWeight:700,color:'var(--gold)'}} />
+              </div>
+              <div>
+                <div style={{ fontSize:10, color:'var(--text3)' }}>Promedio diario (por carrito)</div>
+                <input type="number" value={datos.proyeccion.promedioDiario} onChange={e=>update('proyeccion','promedioDiario',parseInt(e.target.value)||0)} style={{...iStyle,marginTop:4,fontWeight:700}} />
+              </div>
+              <div>
+                <div style={{ fontSize:10, color:'var(--text3)' }}>Días de operación/mes</div>
+                <input type="number" value={datos.proyeccion.diasOperacionMes} onChange={e=>update('proyeccion','diasOperacionMes',parseInt(e.target.value)||0)} style={{...iStyle,marginTop:4}} />
+              </div>
+              <div>
+                <div style={{ fontSize:10, color:'var(--text3)' }}>Número de carritos</div>
+                <input type="number" value={datos.proyeccion.numeroCarritos} onChange={e=>update('proyeccion','numeroCarritos',parseInt(e.target.value)||1)} style={{...iStyle,marginTop:4,fontWeight:700,color:'var(--blue)'}} />
+              </div>
+            </div>
+          </div>
+
+          {/* KPIs de resultado */}
+          <div className="grid-4" style={{ marginBottom:16 }}>
+            {[
+              { label:'Venta mensual (por carrito)', val:cop(proy.ventaMensualPorCarrito), color:'var(--gold)' },
+              { label:'Ingreso total/mes (todos los carritos)', val:cop(proy.ingresoMensualTotal), color:'var(--green)' },
+              { label:'Costos fijos totales/mes', val:cop(proy.totalCostosFijos), color:'var(--red)' },
+              { label:'Resultado mensual', val:cop(proy.resultadoMensual), color: proy.resultadoMensual>=0?'var(--green)':'var(--red)' },
+            ].map(k => (
+              <div key={k.label} className="kpi-card">
+                <div className="kpi-label">{k.label}</div>
+                <div className="kpi-val" style={{ color:k.color, fontSize:18 }}>{k.val}</div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ padding:'10px 14px', borderRadius:10, marginBottom:20,
+            background: proy.resultadoMensual>=0 ? 'var(--green-dim)' : 'var(--red-dim)',
+            border: `1px solid ${proy.resultadoMensual>=0 ? 'var(--green-border)' : 'rgba(224,82,82,0.3)'}`,
+          }}>
+            <span style={{ fontSize:13, fontWeight:700, color: proy.resultadoMensual>=0?'var(--green)':'var(--red)' }}>
+              {proy.resultadoMensual>=0 ? '✅ UTILIDAD' : '❌ PÉRDIDA'} de {cop(proy.resultadoMensual)}/mes
+            </span>
+            <span style={{ fontSize:12, color:'var(--text3)', marginLeft:10 }}>
+              · Punto de equilibrio: {proy.puntoEquilibrioUnidadesDia.toFixed(1)} hot dogs/día (todos los carritos) · Margen de contribución por unidad: {cop(proy.margenContribucionPorUnidad)}
+            </span>
+          </div>
+
+          {/* Costos fijos por carrito */}
+          <div className="panel" style={{ marginBottom:16 }}>
+            <div className="panel-title">Costos fijos POR CARRITO (se multiplican × {datos.proyeccion.numeroCarritos})</div>
+            {datos.proyeccion.costosFijosPorCarrito.map((c,i) => (
+              <div key={i} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 0', borderBottom:'1px solid var(--border)' }}>
+                <input type="text" value={c.concepto} onChange={e=>updateNestedLista('proyeccion','costosFijosPorCarrito',i,'concepto',e.target.value)} style={{...iStyle,marginTop:0,flex:1,fontSize:12}} />
+                <input type="number" value={c.monto} onChange={e=>updateNestedLista('proyeccion','costosFijosPorCarrito',i,'monto',parseInt(e.target.value)||0)} style={{...iStyle,marginTop:0,width:130,fontWeight:700}} />
+              </div>
+            ))}
+            <div style={{ display:'flex', justifyContent:'space-between', paddingTop:8, marginTop:4 }}>
+              <span style={{ fontSize:12, color:'var(--text3)' }}>Subtotal por carrito</span>
+              <span style={{ fontSize:14, fontWeight:800, color:'var(--text2)' }}>{cop(proy.totalCostosFijosPorCarrito)}</span>
+            </div>
+            <div style={{ marginTop:10, paddingTop:10, borderTop:'1px solid var(--border)' }}>
+              <div style={{ fontSize:10, color:'var(--text3)' }}>Marketing GLOBAL (NO se multiplica por carrito)</div>
+              <input type="number" value={datos.proyeccion.marketingGlobal} onChange={e=>update('proyeccion','marketingGlobal',parseInt(e.target.value)||0)} style={{...iStyle,marginTop:4,fontWeight:700,color:'var(--blue)'}} />
+            </div>
+          </div>
+
+          {/* Distribución por día de la semana */}
+          <div className="panel" style={{ marginBottom:16 }}>
+            <div className="panel-title">Distribución de ventas por día de la semana (%)</div>
+            <div style={{ fontSize:11, color:'var(--text4)', marginBottom:10 }}>Debe sumar 100% — ajusta cada día y verifica el total al final</div>
+            {datos.proyeccion.distribucionDias.map((d,i) => (
+              <div key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'6px 0', borderBottom:'1px solid var(--border)' }}>
+                <div style={{ width:90, fontSize:12, fontWeight:700, color:'var(--text2)' }}>{d.dia}</div>
+                <input type="number" value={d.pct} onChange={e=>updateNestedLista('proyeccion','distribucionDias',i,'pct',parseInt(e.target.value)||0)} style={{...iStyle,marginTop:0,width:70,fontWeight:700,color:'var(--gold)'}} />
+                <span style={{ fontSize:11, color:'var(--text4)' }}>%</span>
+                <div style={{ flex:1, textAlign:'right', fontSize:12, color:'var(--text3)' }}>
+                  {cop(proy.ventaSemanalPorCarrito*(d.pct/100))} · {(proy.ventaSemanalPorCarrito*(d.pct/100)/datos.proyeccion.precioVenta).toFixed(0)} hot dogs
+                </div>
+              </div>
+            ))}
+            <div style={{ display:'flex', justifyContent:'space-between', paddingTop:8, marginTop:4 }}>
+              <span style={{ fontSize:12, fontWeight:700, color:'var(--text)' }}>Total semana</span>
+              <span style={{ fontSize:13, fontWeight:800, color: datos.proyeccion.distribucionDias.reduce((s,d)=>s+d.pct,0)===100?'var(--green)':'var(--red)' }}>
+                {datos.proyeccion.distribucionDias.reduce((s,d)=>s+d.pct,0)}% {datos.proyeccion.distribucionDias.reduce((s,d)=>s+d.pct,0)===100?'✓':'⚠️ debe ser 100%'}
+              </span>
+            </div>
+          </div>
+
+          {/* Distribución por hora */}
+          <div className="panel" style={{ marginBottom:16 }}>
+            <div className="panel-title">Distribución de ventas por hora del día (%)</div>
+            <div style={{ fontSize:11, color:'var(--text4)', marginBottom:10 }}>Mismo patrón horario se aplica a todos los días — debe sumar 100%</div>
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+              {datos.proyeccion.distribucionHoras.map((h,i) => (
+                <div key={i} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:4, width:80 }}>
+                  <div style={{ fontSize:10, color:'var(--text3)' }}>{h.hora}</div>
+                  <input type="number" value={h.pct} onChange={e=>updateNestedLista('proyeccion','distribucionHoras',i,'pct',parseInt(e.target.value)||0)} style={{...iStyle,marginTop:0,width:60,textAlign:'center',fontWeight:700,color:'var(--blue)'}} />
+                  <span style={{ fontSize:10, color:'var(--text4)' }}>%</span>
+                </div>
+              ))}
+            </div>
+            <div style={{ display:'flex', justifyContent:'flex-end', paddingTop:10, marginTop:4 }}>
+              <span style={{ fontSize:13, fontWeight:800, color: datos.proyeccion.distribucionHoras.reduce((s,h)=>s+h.pct,0)===100?'var(--green)':'var(--red)' }}>
+                Total: {datos.proyeccion.distribucionHoras.reduce((s,h)=>s+h.pct,0)}% {datos.proyeccion.distribucionHoras.reduce((s,h)=>s+h.pct,0)===100?'✓':'⚠️ debe ser 100%'}
+              </span>
+            </div>
+          </div>
+
+          {/* Tabla completa día x hora en unidades */}
+          <div className="panel">
+            <div className="panel-title">Cantidad de hot dogs por día y hora (1 carrito) — meta operativa</div>
+            <div style={{ overflowX:'auto' }}>
+              <table style={{ width:'100%', fontSize:11, borderCollapse:'collapse', minWidth:700 }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding:'6px 8px', textAlign:'left', color:'var(--text3)' }}>Día</th>
+                    <th style={{ padding:'6px 8px', textAlign:'right', color:'var(--text3)' }}>Total día</th>
+                    {datos.proyeccion.distribucionHoras.map(h => (
+                      <th key={h.hora} style={{ padding:'6px 6px', textAlign:'center', color:'var(--text4)', fontSize:9 }}>{h.hora}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {proy.tablaDistribucion.map((d,i) => (
+                    <tr key={d.dia} style={{ borderTop:'1px solid var(--border)', background:i%2===0?'transparent':'rgba(255,255,255,0.02)' }}>
+                      <td style={{ padding:'6px 8px', fontWeight:700, color:'var(--text2)' }}>{d.dia}</td>
+                      <td style={{ padding:'6px 8px', textAlign:'right', fontWeight:800, color:'var(--gold)' }}>{d.unidadesDia.toFixed(0)}</td>
+                      {d.horas.map(h => (
+                        <td key={h.hora} style={{ padding:'6px 6px', textAlign:'center', color:'var(--text3)' }}>{h.unidades.toFixed(1)}</td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr style={{ borderTop:'2px solid var(--border)' }}>
+                    <td style={{ padding:'8px', fontWeight:800, color:'var(--text)' }}>TOTAL SEMANA</td>
+                    <td style={{ padding:'8px', textAlign:'right', fontWeight:900, color:'var(--gold)' }}>{proy.totalSemanaUnidades.toFixed(0)}</td>
+                    <td colSpan={datos.proyeccion.distribucionHoras.length}></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <div style={{ fontSize:10, color:'var(--text4)', marginTop:10, textAlign:'center' }}>
+              Esta tabla es por UN carrito — con {datos.proyeccion.numeroCarritos} carrito{datos.proyeccion.numeroCarritos>1?'s':''} activo{datos.proyeccion.numeroCarritos>1?'s':''}, multiplica estos valores × {datos.proyeccion.numeroCarritos}
+            </div>
           </div>
         </div>
       )}
