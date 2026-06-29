@@ -362,7 +362,10 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
 
   const PASOS = pasosDe(cat)
   const pasoVisual = item.paso === 'bebida' ? 3 : item.paso
-  const idxActual = PASOS.findIndex(p => p.paso === pasoVisual)
+  // Cuando el item ya está completo (paso 5), no existe como entrada en PASOS
+  // (que solo lista 1-4) — sin este caso especial, findIndex devolvía -1 y la
+  // barra mostraba todos los pasos como "pendientes" en vez de completados.
+  const idxActual = item.paso === 5 ? PASOS.length : PASOS.findIndex(p => p.paso === pasoVisual)
 
   return (
     <div style={{ background:'var(--bg3)', borderRadius:14, border:'1px solid var(--border)', overflow:'hidden', marginBottom:12 }}>
@@ -553,15 +556,25 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
           </div>
         )}
 
-        {/* ── COMPLETO — mismo indicador para cualquier categoría ── */}
+        {/* ── COMPLETO — mismo indicador para cualquier categoría. Aun
+             completo, el item sigue editable: el botón "Editar" lo regresa
+             al primer paso de su categoría (conservando lo ya elegido), y el
+             header de arriba siempre tiene el × para eliminarlo del todo.
+             Ningún item queda "trabado" antes de facturar. ── */}
         {item.paso === 5 && (
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:8 }}>
             <div style={{ fontSize:13, color:'var(--green)', fontWeight:700 }}>✓ Item completo</div>
-            {esUltimo && (
-              <button onClick={onAgregar} style={{ padding:'7px 14px', borderRadius:8, cursor:'pointer', fontSize:12, fontWeight:700, background:'rgba(55,138,221,0.1)', border:'0.5px solid rgba(55,138,221,0.3)', color:'var(--blue)', fontFamily:'inherit' }}>
-                + Otro item
+            <div style={{ display:'flex', gap:8 }}>
+              <button onClick={() => onChange({ ...item, paso: pasosDe(cat)[0]?.paso ?? 1 })}
+                style={{ padding:'7px 14px', borderRadius:8, cursor:'pointer', fontSize:12, fontWeight:700, background:'rgba(255,255,255,0.05)', border:'0.5px solid var(--border)', color:'var(--text2)', fontFamily:'inherit' }}>
+                ✏️ Editar
               </button>
-            )}
+              {esUltimo && (
+                <button onClick={onAgregar} style={{ padding:'7px 14px', borderRadius:8, cursor:'pointer', fontSize:12, fontWeight:700, background:'rgba(55,138,221,0.1)', border:'0.5px solid rgba(55,138,221,0.3)', color:'var(--blue)', fontFamily:'inherit' }}>
+                  + Otro item
+                </button>
+              )}
+            </div>
           </div>
         )}
       </div>
@@ -1131,12 +1144,30 @@ export default function ZabuPOS({ usuario }) {
         <Ticket orden={ordenActual} onCerrar={() => { setOrdenActual(null); reset() }} />
       )}
       <div className="grid-4" style={{ marginBottom:14 }}>
-        {[
-          { label:'Ventas sesión', val:cop(totalSesion),             color:'var(--gold)',  sub:`${ventas.length} órdenes`   },
-          { label:'Items orden',   val:String(itemsCompletos.length), color:'var(--text)',  sub:`de ${items.length} totales` },
-          { label:'Total orden',   val:cop(totalPrecio),              color:totalPrecio>0?'var(--gold)':'var(--text4)', sub:'acumulado' },
-          { label:'Meta',          val:`${ventas.length}/36`,         color:ventas.length>=36?'var(--green)':'var(--text)', sub:'equilibrio' },
-        ].map(k => (
+        {(() => {
+          // Semáforo de cumplimiento de la meta (punto de equilibrio = 36
+          // órdenes/sesión). Umbrales simples y ajustables: <50% rojo,
+          // 50-89% amarillo, ≥90% verde. Solo cambia el color/emoji — la
+          // meta numérica sigue siendo la misma de siempre.
+          const pctMeta = Math.min(100, Math.round((ventas.length/36)*100))
+          const semaforo = ventas.length>=36 ? {emoji:'🟢', color:'var(--green)'} : pctMeta>=50 ? {emoji:'🟡', color:'var(--gold)'} : {emoji:'🔴', color:'var(--red)'}
+
+          // ⚠️ PLACEHOLDER — Alerta de Inventario: el POS todavía no descuenta
+          // insumos por venta (no hay tabla de stock conectada). Este KPI es
+          // solo visual por ahora; cuando se conecte el inventario real, esta
+          // misma tarjeta debe mostrar cuántos insumos están en nivel bajo.
+          // El conteo de itemsCompletos de toda la sesión (no solo la orden
+          // actual) ya queda disponible aquí para alimentar ese consumo real
+          // más adelante sin tener que rediseñar el KPI otra vez.
+          const inventarioOK = true // TODO: conectar a stock real
+
+          return [
+            { label:'Ventas sesión', val:cop(totalSesion), color:'var(--gold)', sub:`${ventas.length} órdenes` },
+            { label:'Meta', val:`${semaforo.emoji} ${ventas.length}/36`, color:semaforo.color, sub:`${pctMeta}% del equilibrio` },
+            { label:'Total orden', val:cop(totalPrecio), color:totalPrecio>0?'var(--gold)':'var(--text4)', sub:'acumulado' },
+            { label:'Alerta de Inventario', val: inventarioOK ? '✓ OK' : '⚠️ Bajo', color: inventarioOK ? 'var(--green)' : 'var(--red)', sub:'próximamente' },
+          ]
+        })().map(k => (
           <div key={k.label} className="kpi-card">
             <div className="kpi-label">{k.label}</div>
             <div className="kpi-val" style={{ color:k.color, fontSize:isMobile?16:20 }}>{k.val}</div>
