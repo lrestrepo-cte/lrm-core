@@ -17,10 +17,14 @@ const CATEGORIAS = [
 
 // ════════════════════════════════════════════════════════════════════════════
 // CATÁLOGO — HOT DOG
+// Único producto desde ahora: ZABÚ a $18.000 solo. Se eliminó CheeZabú —
+// el queso cheddar sigue disponible como EXTRA si el cliente lo quiere
+// (ver EXTRAS más abajo), pero ya no existe como hot dog aparte con su
+// propio precio. Precio combo = solo + bebida base ($3.000), igual que el
+// resto del catálogo de combos.
 // ════════════════════════════════════════════════════════════════════════════
 const PRODUCTOS = [
-  { id:'zabu',     nombre:'ZABÚ',     desc:'El original',       precioSolo:18000, precioCombo:23000, emoji:'🌭' },
-  { id:'cheezabu', nombre:'CheeZabú', desc:'Con queso cheddar', precioSolo:20000, precioCombo:25000, emoji:'🧀' },
+  { id:'zabu', nombre:'ZABÚ', desc:'El original', precioSolo:18000, precioCombo:24000, emoji:'🌭' },
 ]
 
 const SALCHICHAS = [
@@ -1092,10 +1096,48 @@ export default function ZabuPOS({ usuario }) {
           nombre: NOMBRE_METODO[p.metodo] || 'Caja general',
           debe: p.monto, haber: 0, carrito_id: CARRITO_ID,
         }))
-      partidasVenta.push({
-        asiento_id: asientoVenta.id, codigo:'4106', nombre:'Ventas ZABÚ',
-        debe: 0, haber: totalPrecio, carrito_id: CARRITO_ID,
+
+      // Crédito de ingreso DISCRIMINADO por línea de producto — nunca un
+      // único código genérico. Regla acordada con Luis (jun-2026):
+      //   - Si la orden es domicilio (incluye plataformas Rappi/DiDi), TODO
+      //     el total va a 4145 "Ventas — domicilios", sin importar qué se
+      //     vendió — el canal manda sobre el producto en ese caso.
+      //   - Si NO es domicilio, cada línea va a su propia cuenta según tipo
+      //     de producto y si lleva combo o no, para que el Estado de
+      //     Resultados pueda discriminar de verdad (hot dog vs burger vs
+      //     combos vs sueltos), en vez de ocultarlo todo en un solo número.
+      const codigoIngresoDeItem = (item) => {
+        if (entrega === 'domicilio') return { codigo:'4145', nombre:'Ventas — domicilios' }
+        if (item.categoria === 'hotdog') return item.tipo === 'combo'
+          ? { codigo:'4140', nombre:'Ventas — combos con bebida' }
+          : { codigo:'4135', nombre:'Ventas — ZABÚ (venta directa)' }
+        if (item.categoria === 'burger') return item.bebidaSuelta
+          ? { codigo:'4140', nombre:'Ventas — combos con bebida' }
+          : { codigo:'4137', nombre:'Ventas — Hamburguesa (venta directa)' }
+        if (item.categoria === 'paleta') return { codigo:'4152', nombre:'Ventas — Paleta Z' }
+        if (item.categoria === 'kids')   return { codigo:'4154', nombre:'Ventas — Kids ZABÚ' }
+        // Fries Z, Bebida suelta, Extra suelto → venta suelta genérica
+        return { codigo:'4150', nombre:'Ventas — bebidas y extras sueltos' }
+      }
+
+      // Agrupa por código para no generar una partida de crédito por cada
+      // item individual cuando varios caen en la misma cuenta (ej: 3 hot
+      // dogs solos → 1 sola línea de 4135 con el total sumado).
+      const creditosPorCodigo = {}
+      ;(itemsCompletos.length ? itemsCompletos : items).forEach(item => {
+        const { codigo: cod, nombre } = codigoIngresoDeItem(item)
+        if (!creditosPorCodigo[cod]) creditosPorCodigo[cod] = { nombre, monto:0 }
+        creditosPorCodigo[cod].monto += precioItem(item)
       })
+      Object.entries(creditosPorCodigo).forEach(([cod, { nombre, monto }]) => {
+        if (monto > 0) {
+          partidasVenta.push({
+            asiento_id: asientoVenta.id, codigo: cod, nombre,
+            debe: 0, haber: monto, carrito_id: CARRITO_ID,
+          })
+        }
+      })
+
       await supabase.from('partidas').insert(partidasVenta)
     }
 
