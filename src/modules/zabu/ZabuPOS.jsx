@@ -27,11 +27,17 @@ const PRODUCTOS = [
   { id:'zabu', nombre:'ZABÚ', desc:'El original', precioSolo:18000, precioCombo:24000, emoji:'🌭' },
 ]
 
+// Catálogo real de salchichas (jun-2026). Gramaje = peso del paquete ÷
+// unidades. Costo = precio del paquete ÷ unidades — usado para el costeo
+// de la Ficha Técnica (la más cara, Polaca $4.180/ud, es la que define el
+// food cost conservador del ZABÚ, sin importar cuál elija el cliente).
 const SALCHICHAS = [
-  { id:'pavo',       nombre:'Pavo',       desc:'Ahumada',       emoji:'🦃' },
-  { id:'hotdog',     nombre:'Hot Dog',    desc:'Sabor clásico', emoji:'🌭' },
-  { id:'alemana',    nombre:'Alemana',    desc:'Estilo Múnich', emoji:'🥩' },
-  { id:'parisienne', nombre:'Parisienne', desc:'Suiza suave',   emoji:'⭐' },
+  { id:'pavo',      nombre:'Pavo Ahumada', desc:'Ahumada',              emoji:'🦃', gramos:62.5, costoUnidad:3700 },
+  { id:'americana', nombre:'Americana',    desc:'Gruesa',               emoji:'🌭', gramos:71.4, costoUnidad:2943 },
+  { id:'suiza',     nombre:'Suiza',        desc:'Clásica',              emoji:'🥩', gramos:100,  costoUnidad:4140 },
+  { id:'polaca',    nombre:'Polaca',       desc:'Tradicional',          emoji:'🥩', gramos:90,   costoUnidad:4180 },
+  { id:'alemana',   nombre:'Alemana',      desc:'Estilo Múnich',        emoji:'🥩', gramos:100,  costoUnidad:4140 },
+  { id:'frankfurt', nombre:'Frankfurt',    desc:'Tradicional alemana',  emoji:'⭐',  gramos:55.6, costoUnidad:2433 },
 ]
 
 // Toppings base del hot dog — TODOS vienen activados por defecto. El cajero
