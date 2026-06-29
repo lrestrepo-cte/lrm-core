@@ -22,7 +22,13 @@ function diasVence(fecha) {
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// MOTOR DE PRODUCCIÓN — descuenta insumos por FIFO real, crea lote del resultado
+// MOTOR DE PRODUCCIÓN — descuenta insumos por FIFO real, crea lote del resultado,
+// y AHORA TAMBIÉN genera el asiento contable de la transformación:
+//   Débito  1430 Producto en proceso/terminado   (por el costo total calculado)
+//   Crédito 1405 Materias primas — insumos sin transformar
+// Esto es lo que faltaba: hasta ahora la producción movía zabu_lotes (el dato
+// operativo) pero nunca tocaba asientos/partidas (el dato contable) — el
+// inventario "se movía" pero la contabilidad nunca se enteraba.
 // ════════════════════════════════════════════════════════════════════════════
 async function ejecutarProduccion({ receta, ingredientes, factor, lotesDisponibles, fechaVencimientoResultado, ubicacion, responsable }) {
   const consumos = []
@@ -86,6 +92,32 @@ async function ejecutarProduccion({ receta, ingredientes, factor, lotesDisponibl
     lote_resultado_id: loteNuevo.id, costo_total: Math.round(costoTotal),
     insumos_consumidos: consumos, responsable: responsable || 'Sin asignar',
   })
+
+  // ── ASIENTO CONTABLE DE LA TRANSFORMACIÓN ──────────────────────────────
+  // Solo se genera si hubo costo real que mover (evita asientos en $0 que
+  // no aportan nada y ensucian el Diario). carrito_id queda en la ubicación
+  // elegida para el lote resultante, para que el centro de costo del POS
+  // (filtroCarrito en Contabilidad) también pueda filtrar producción.
+  if (Math.round(costoTotal) > 0) {
+    const { data: asientoProd, error: errAsiento } = await supabase.from('asientos').insert({
+      fecha: new Date().toISOString().split('T')[0],
+      descripcion: `Producción — ${receta.nombre} (${cantidadProducida} ${receta.unidad_rendimiento})`,
+      carrito_id: ubicacion || 'C01',
+    }).select().single()
+
+    if (!errAsiento && asientoProd) {
+      await supabase.from('partidas').insert([
+        {
+          asiento_id: asientoProd.id, codigo:'1430', nombre:'Producto terminado',
+          debe: Math.round(costoTotal), haber: 0, carrito_id: ubicacion || 'C01',
+        },
+        {
+          asiento_id: asientoProd.id, codigo:'1405', nombre:'Materias primas — insumos sin transformar',
+          debe: 0, haber: Math.round(costoTotal), carrito_id: ubicacion || 'C01',
+        },
+      ])
+    }
+  }
 
   return { ok: true, loteNuevo, costoTotal, consumos }
 }
@@ -239,7 +271,7 @@ function ModalProducir({ receta, lotes, onClose, onProducido }) {
     })
     setProduciendo(false)
     if (res.error) { setResultado({ ok:false, msg:res.error }); return }
-    setResultado({ ok:true, msg:`✅ Se produjeron ${receta.rendimiento*factor} ${receta.unidad_rendimiento} de ${receta.nombre}. Costo total: ${cop(res.costoTotal)}` })
+    setResultado({ ok:true, msg:`✅ Se produjeron ${receta.rendimiento*factor} ${receta.unidad_rendimiento} de ${receta.nombre}. Costo total: ${cop(res.costoTotal)} · Asiento contable generado.` })
     setTimeout(() => { onProducido() }, 1800)
   }
 
