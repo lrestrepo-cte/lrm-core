@@ -121,11 +121,13 @@ function nuevoItemSuelto(producto, tipo) {
 }
 
 // Item de hamburguesa — burger seleccionada con sus toppings base activados.
-// toppingsQuitados guarda los ids que el cliente NO quiere (resto de pasos
-// que TopToggle no usemos quedan vacíos para mantener compatibilidad con
-// precioItem/lineaItem genéricos).
+// burger puede ser null al crearse (selección pendiente): el item se agrega
+// como "en construcción" (paso:1) y ItemBurgerCard se encarga de mostrar la
+// grilla de selección hasta que el cajero elija una. Nunca se marca paso:5
+// sin burger, así el resto del flujo (precioItem, toppingsActivos, render)
+// nunca asume que item.burger existe cuando en realidad puede ser null.
 function nuevoItemBurger(burger) {
-  return { id: Date.now()+Math.random(), esBurger:true, burger, toppingsQuitados:[], bebidaSuelta:null, paso:5 }
+  return { id: Date.now()+Math.random(), esBurger:true, burger: burger || null, toppingsQuitados:[], bebidaSuelta:null, paso: burger ? 5 : 1 }
 }
 
 // Item de Fries Z — producto fijo, sin pasos de armado, solo cantidad implícita
@@ -144,9 +146,11 @@ function precioItem(item) {
 }
 
 // Lista de toppings activos de un item (hot dog o burger), aplicando lo que
-// el cliente quitó. Devuelve [] para items que no tienen toppings (suelto, fries).
+// el cliente quitó. Devuelve [] para items que no tienen toppings (suelto, fries,
+// o burger sin elegir todavía).
 function toppingsActivos(item) {
   if (item.esBurger) {
+    if (!item.burger) return []
     const base = toppingsDeBurger(item.burger.id)
     return base.filter(t => !(item.toppingsQuitados||[]).includes(t.id))
   }
@@ -296,7 +300,7 @@ function ItemBurgerCard({ item, onChange, onEliminar, isMobile }) {
         <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:10 }}>ELIGE LA HAMBURGUESA</div>
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
           {BURGERS.map(b => (
-            <div key={b.id} onClick={() => onChange({ ...item, burger:b })} style={{
+            <div key={b.id} onClick={() => onChange({ ...item, burger:b, paso:5 })} style={{
               padding:isMobile?10:14, borderRadius:12, cursor:'pointer', textAlign:'center',
               border:'1px solid var(--border)', background:'rgba(255,255,255,0.03)',
               display:'flex', flexDirection:'column', alignItems:'center', gap:5,
@@ -569,16 +573,20 @@ function PantallaCliente({ items, totalPrecio, confirmado, orden }) {
                 <div style={{ fontSize:13, fontWeight:800, color:'var(--gold)' }}>{cop(precioItem(item))}</div>
               </div>
             ) : item.esBurger ? (
-              <div style={{ display:'flex', justifyContent:'space-between' }}>
-                <div>
-                  <div style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{item.burger.emoji} {item.burger.nombre}</div>
-                  {(item.toppingsQuitados||[]).length > 0 && (
-                    <div style={{ fontSize:10, color:'var(--text3)' }}>Sin: {toppingsDeBurger(item.burger.id).filter(t=>item.toppingsQuitados.includes(t.id)).map(t=>t.nombre).join(', ')}</div>
-                  )}
-                  {item.bebidaSuelta && <div style={{ fontSize:10, color:'var(--text3)' }}>🥤 {item.bebidaSuelta.nombre}</div>}
+              item.burger ? (
+                <div style={{ display:'flex', justifyContent:'space-between' }}>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{item.burger.emoji} {item.burger.nombre}</div>
+                    {(item.toppingsQuitados||[]).length > 0 && (
+                      <div style={{ fontSize:10, color:'var(--text3)' }}>Sin: {toppingsDeBurger(item.burger.id).filter(t=>item.toppingsQuitados.includes(t.id)).map(t=>t.nombre).join(', ')}</div>
+                    )}
+                    {item.bebidaSuelta && <div style={{ fontSize:10, color:'var(--text3)' }}>🥤 {item.bebidaSuelta.nombre}</div>}
+                  </div>
+                  <div style={{ fontSize:13, fontWeight:800, color:'var(--gold)' }}>{cop(precioItem(item))}</div>
                 </div>
-                <div style={{ fontSize:13, fontWeight:800, color:'var(--gold)' }}>{cop(precioItem(item))}</div>
-              </div>
+              ) : (
+                <div style={{ fontSize:12, color:'var(--text3)' }}>🍔 Eligiendo hamburguesa...</div>
+              )
             ) : (
               <div style={{ display:'flex', justifyContent:'space-between' }}>
                 <div>
@@ -613,6 +621,7 @@ function lineaItemTexto(item) {
   if (item.suelto) return `▸ ${item.productoSuelto.nombre} (suelto) — ${cop(precioItem(item))}`
   if (item.esFries) return `▸ ${FRIES_Z.nombre} — ${cop(precioItem(item))}`
   if (item.esBurger) {
+    if (!item.burger) return `▸ Hamburguesa (sin elegir)`
     const quitados = (item.toppingsQuitados||[]).length > 0
       ? `\n  Sin: ${toppingsDeBurger(item.burger.id).filter(t=>item.toppingsQuitados.includes(t.id)).map(t=>t.nombre).join(', ')}` : ''
     const beb = item.bebidaSuelta ? `\n  🥤 ${item.bebidaSuelta.nombre}` : ''
@@ -691,16 +700,20 @@ ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para 
                   <span>{cop(precioItem(item))}</span>
                 </div>
               ) : item.esBurger ? (
-                <>
-                  <div style={{ display:'flex', justifyContent:'space-between', fontWeight:700 }}>
-                    <span>{item.burger.nombre}</span>
-                    <span>{cop(precioItem(item))}</span>
-                  </div>
-                  {(item.toppingsQuitados||[]).length > 0 && (
-                    <div style={{ color:'#555', paddingLeft:6, fontSize:10 }}>Sin: {toppingsDeBurger(item.burger.id).filter(t=>item.toppingsQuitados.includes(t.id)).map(t=>t.nombre).join(', ')}</div>
-                  )}
-                  {item.bebidaSuelta && <div style={{ color:'#555', paddingLeft:6, fontSize:10 }}>🥤 {item.bebidaSuelta.nombre} {cop(item.bebidaSuelta.precio)}</div>}
-                </>
+                item.burger ? (
+                  <>
+                    <div style={{ display:'flex', justifyContent:'space-between', fontWeight:700 }}>
+                      <span>{item.burger.nombre}</span>
+                      <span>{cop(precioItem(item))}</span>
+                    </div>
+                    {(item.toppingsQuitados||[]).length > 0 && (
+                      <div style={{ color:'#555', paddingLeft:6, fontSize:10 }}>Sin: {toppingsDeBurger(item.burger.id).filter(t=>item.toppingsQuitados.includes(t.id)).map(t=>t.nombre).join(', ')}</div>
+                    )}
+                    {item.bebidaSuelta && <div style={{ color:'#555', paddingLeft:6, fontSize:10 }}>🥤 {item.bebidaSuelta.nombre} {cop(item.bebidaSuelta.precio)}</div>}
+                  </>
+                ) : (
+                  <div style={{ fontWeight:700 }}>Hamburguesa (sin elegir)</div>
+                )
               ) : (
                 <>
                   <div style={{ display:'flex', justifyContent:'space-between', fontWeight:700 }}>
@@ -756,11 +769,15 @@ ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para 
             ) : item.esFries ? (
               <div style={{ fontSize:15, fontWeight:800, color:'#C9A84C' }}>{FRIES_Z.emoji} {FRIES_Z.nombre}</div>
             ) : item.esBurger ? (
-              <>
-                <div style={{ fontSize:15, fontWeight:800, color:'#C9A84C' }}>{item.burger.emoji} {item.burger.nombre}</div>
-                {(item.toppingsQuitados||[]).length > 0 && <div style={{ fontSize:11, color:'#e05252' }}>SIN: {toppingsDeBurger(item.burger.id).filter(t=>item.toppingsQuitados.includes(t.id)).map(t=>t.nombre).join(', ')}</div>}
-                {item.bebidaSuelta && <div style={{ fontSize:11, color:'#888' }}>🥤 {item.bebidaSuelta.nombre}</div>}
-              </>
+              item.burger ? (
+                <>
+                  <div style={{ fontSize:15, fontWeight:800, color:'#C9A84C' }}>{item.burger.emoji} {item.burger.nombre}</div>
+                  {(item.toppingsQuitados||[]).length > 0 && <div style={{ fontSize:11, color:'#e05252' }}>SIN: {toppingsDeBurger(item.burger.id).filter(t=>item.toppingsQuitados.includes(t.id)).map(t=>t.nombre).join(', ')}</div>}
+                  {item.bebidaSuelta && <div style={{ fontSize:11, color:'#888' }}>🥤 {item.bebidaSuelta.nombre}</div>}
+                </>
+              ) : (
+                <div style={{ fontSize:15, fontWeight:800, color:'#C9A84C' }}>🍔 Hamburguesa (sin elegir)</div>
+              )
             ) : (
               <>
                 <div style={{ fontSize:15, fontWeight:800, color:'#C9A84C' }}>{item.producto.emoji} {item.producto.nombre}</div>
@@ -903,11 +920,18 @@ function PedidoPlataforma({ onConfirmar, onCerrar, isMobile }) {
             <div style={{ fontSize:11, fontWeight:700, color:'var(--text)' }}>{FRIES_Z.nombre}</div>
             <div style={{ fontSize:10, color:'var(--gold)', fontWeight:700 }}>{cop(FRIES_Z.precio)}</div>
           </div>
-          {BEBIDAS.slice(0,3).map(b => (
+          {BEBIDAS.map(b => (
             <div key={b.id} onClick={() => agregarSuelto(b,'bebida')} style={{ padding:10, borderRadius:10, cursor:'pointer', textAlign:'center', border:`1px solid ${b.color}33`, background:b.color+'11' }}>
               <div style={{ fontSize:24 }}>{b.emoji}</div>
               <div style={{ fontSize:11, fontWeight:700, color:'var(--text)' }}>{b.nombre}</div>
               <div style={{ fontSize:10, color:b.color, fontWeight:700 }}>{cop(b.precio)}</div>
+            </div>
+          ))}
+          {EXTRAS.map(e => (
+            <div key={e.id} onClick={() => agregarSuelto(e,'extra')} style={{ padding:10, borderRadius:10, cursor:'pointer', textAlign:'center', border:'1px solid var(--border)', background:'rgba(255,255,255,0.03)' }}>
+              <div style={{ fontSize:24 }}>{e.emoji}</div>
+              <div style={{ fontSize:11, fontWeight:700, color:'var(--text)' }}>{e.nombre}</div>
+              <div style={{ fontSize:10, color:'var(--gold)', fontWeight:700 }}>{cop(e.precio)}</div>
             </div>
           ))}
         </div>
@@ -918,11 +942,11 @@ function PedidoPlataforma({ onConfirmar, onCerrar, isMobile }) {
             <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>EN EL PEDIDO ({itemsPlat.length})</div>
             {itemsPlat.map(item => (
               <div key={item.id} style={{ background:'rgba(255,255,255,0.03)', borderRadius:10, border:'1px solid var(--border)', padding:'10px 12px', marginBottom:8 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: (item.producto || item.esBurger) ? 8 : 0 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: (item.producto || (item.esBurger && item.burger)) ? 8 : 0 }}>
                   <div style={{ fontSize:12, fontWeight:700, color:'var(--text)' }}>
                     {item.suelto ? `${item.productoSuelto.emoji} ${item.productoSuelto.nombre}` :
                      item.esFries ? `${FRIES_Z.emoji} ${FRIES_Z.nombre}` :
-                     item.esBurger ? `${item.burger.emoji} ${item.burger.nombre}` :
+                     item.esBurger ? (item.burger ? `${item.burger.emoji} ${item.burger.nombre}` : '🍔 Eligiendo...') :
                      `${item.producto.emoji} ${item.producto.nombre}`}
                   </div>
                   <div style={{ display:'flex', alignItems:'center', gap:8 }}>
@@ -930,7 +954,7 @@ function PedidoPlataforma({ onConfirmar, onCerrar, isMobile }) {
                     <div onClick={() => eliminarItem(item.id)} style={{ cursor:'pointer', color:'var(--text4)', fontSize:14 }}>×</div>
                   </div>
                 </div>
-                {item.esBurger && (
+                {item.esBurger && item.burger && (
                   <ToppingsToggle toppings={toppingsDeBurger(item.burger.id)} quitados={item.toppingsQuitados||[]}
                     onToggle={(id) => { const q=item.toppingsQuitados||[]; actualizarItem(item.id, {...item, toppingsQuitados: q.includes(id)?q.filter(x=>x!==id):[...q,id]}) }}
                     isMobile={isMobile} />
@@ -999,9 +1023,11 @@ export default function ZabuPOS({ usuario }) {
   }
 
   // Agrega una hamburguesa al carrito (reemplaza el primer item vacío, o
-  // se agrega aparte si ya hay algo en construcción).
-  const agregarItemBurger = (burger) => {
-    const nuevo = nuevoItemBurger(burger)
+  // se agrega aparte si ya hay algo en construcción). Se crea SIN burger
+  // elegido (nuevoItemBurger(null)) — ItemBurgerCard mostrará la grilla de
+  // selección "ELIGE LA HAMBURGUESA" hasta que el cajero toque una.
+  const agregarItemBurger = () => {
+    const nuevo = nuevoItemBurger(null)
     setItems(prev => {
       const primerVacio = prev.length === 1 && !prev[0].producto && !prev[0].suelto && !prev[0].esBurger && !prev[0].esFries
       return primerVacio ? [nuevo] : [...prev, nuevo]
@@ -1152,11 +1178,11 @@ export default function ZabuPOS({ usuario }) {
           {!fasePago ? (
             <>
               {!modoPlataforma && !ventaRapida && (
-                <div style={{ display:'flex', gap:8, marginBottom:12 }}>
-                  <div onClick={() => setVentaRapida(true)} style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'10px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'var(--gold-dim)', border:'1px solid var(--gold-border)', color:'var(--gold)' }}>
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:8, marginBottom:8 }}>
+                  <div onClick={() => setVentaRapida(true)} style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'10px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'var(--gold-dim)', border:'1px solid var(--gold-border)', color:'var(--gold)' }}>
                     ⚡ Venta rápida
                   </div>
-                  <div onClick={() => setModoPlataforma(true)} style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'10px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'rgba(255,68,31,0.1)', border:'1px solid rgba(255,68,31,0.3)', color:'#FF441F' }}>
+                  <div onClick={() => setModoPlataforma(true)} style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'10px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'rgba(255,68,31,0.1)', border:'1px solid rgba(255,68,31,0.3)', color:'#FF441F' }}>
                     📲 Pedido de Plataforma
                   </div>
                 </div>
@@ -1170,13 +1196,16 @@ export default function ZabuPOS({ usuario }) {
               )}
               {!modoPlataforma && (
                 <>
-                  {/* Selector rápido para iniciar burger o fries sin pasar por el flujo de tarjetas del hot dog */}
+                  {/* Selector rápido para iniciar burger o fries sin pasar por el flujo de tarjetas del hot dog.
+                      Misma grilla pareja de 3 columnas para que las 3 categorías (Hot Dog ya está representado
+                      por los ItemConstructor de abajo, así que aquí van Hamburguesa y Fries Z) queden uniformes
+                      visualmente con Venta rápida / Pedido de Plataforma arriba. */}
                   {items.length === 1 && !items[0].producto && !items[0].suelto && !items[0].esBurger && !items[0].esFries && (
-                    <div style={{ display:'flex', gap:8, marginBottom:12 }}>
-                      <div onClick={() => agregarItemBurger(null)} style={{ flex:1, padding:'8px', borderRadius:10, cursor:'pointer', textAlign:'center', fontSize:12, fontWeight:700, background:'rgba(255,255,255,0.03)', border:'1px solid var(--border)', color:'var(--text2)' }}>
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(2,1fr)', gap:8, marginBottom:12 }}>
+                      <div onClick={agregarItemBurger} style={{ padding:'10px', borderRadius:10, cursor:'pointer', textAlign:'center', fontSize:13, fontWeight:700, background:'rgba(255,255,255,0.03)', border:'1px solid var(--border)', color:'var(--text2)' }}>
                         🍔 Hamburguesa
                       </div>
-                      <div onClick={agregarItemFries} style={{ flex:1, padding:'8px', borderRadius:10, cursor:'pointer', textAlign:'center', fontSize:12, fontWeight:700, background:'rgba(255,255,255,0.03)', border:'1px solid var(--border)', color:'var(--text2)' }}>
+                      <div onClick={agregarItemFries} style={{ padding:'10px', borderRadius:10, cursor:'pointer', textAlign:'center', fontSize:13, fontWeight:700, background:'rgba(255,255,255,0.03)', border:'1px solid var(--border)', color:'var(--text2)' }}>
                         🍟 Fries Z
                       </div>
                     </div>
@@ -1225,7 +1254,7 @@ export default function ZabuPOS({ usuario }) {
                     <span style={{ fontSize:12, color:'var(--text2)' }}>
                       {item.suelto ? `${item.productoSuelto.nombre} (suelto)` :
                        item.esFries ? FRIES_Z.nombre :
-                       item.esBurger ? `${item.burger.nombre}${(item.toppingsQuitados||[]).length>0?' (sin '+item.toppingsQuitados.length+' topping(s))':''}` :
+                       item.esBurger ? `${item.burger?.nombre || 'Hamburguesa'}${(item.toppingsQuitados||[]).length>0?' (sin '+item.toppingsQuitados.length+' topping(s))':''}` :
                        `${item.producto.nombre} · ${item.salchicha.nombre} · ${item.tipo==='solo'?'Solo':'Combo'}${item.extras.length>0?` + ${item.extras.map(e=>e.nombre).join(', ')}` : ''}`}
                     </span>
                     <span style={{ fontSize:13, fontWeight:700, color:'var(--gold)' }}>{cop(precioItem(item))}</span>
