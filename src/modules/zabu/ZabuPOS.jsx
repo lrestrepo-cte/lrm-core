@@ -1,18 +1,67 @@
+// @ts-nocheck
 import { useState } from 'react'
 import { supabase } from '../../lib/supabase'
 
+// ════════════════════════════════════════════════════════════════════════════
+// CATÁLOGO — HOT DOG
+// ════════════════════════════════════════════════════════════════════════════
 const PRODUCTOS = [
-  { id:'zabu',     nombre:'ZABÚ',     desc:'El original',       precioSolo:17000, precioCombo:20000, emoji:'🌭' },
-  { id:'cheezabu', nombre:'CheeZabú', desc:'Con queso cheddar', precioSolo:19000, precioCombo:22000, emoji:'🧀' },
+  { id:'zabu',     nombre:'ZABÚ',     desc:'El original',       precioSolo:18000, precioCombo:23000, emoji:'🌭' },
+  { id:'cheezabu', nombre:'CheeZabú', desc:'Con queso cheddar', precioSolo:20000, precioCombo:25000, emoji:'🧀' },
 ]
 
 const SALCHICHAS = [
-  { id:'pavo',       nombre:'Pavo',       desc:'TurkeyLink™',  emoji:'🦃' },
+  { id:'pavo',       nombre:'Pavo',       desc:'Ahumada',       emoji:'🦃' },
   { id:'hotdog',     nombre:'Hot Dog',    desc:'Sabor clásico', emoji:'🌭' },
-  { id:'alemana',    nombre:'Alemana',    desc:'Ahumada',       emoji:'🥩' },
+  { id:'alemana',    nombre:'Alemana',    desc:'Estilo Múnich', emoji:'🥩' },
   { id:'parisienne', nombre:'Parisienne', desc:'Suiza suave',   emoji:'⭐' },
 ]
 
+// Toppings base del hot dog — TODOS vienen activados por defecto. El cajero
+// solo toca el topping que el cliente NO quiere para desactivarlo (check/uncheck),
+// en vez de construir el hot dog desde cero. El precio NUNCA cambia por quitar
+// un topping — es una preferencia de preparación, no un descuento.
+const TOPPINGS_HOTDOG = [
+  { id:'creamcode',     nombre:'Cream Code',         emoji:'🧈', porDefecto:true },
+  { id:'tocineta',      nombre:'Tocineta crispy',    emoji:'🥓', porDefecto:true },
+  { id:'pina',          nombre:'Piña caramelizada',  emoji:'🍍', porDefecto:true },
+  { id:'papachongo',    nombre:'Papa chongo',        emoji:'🍟', porDefecto:true },
+]
+
+// ════════════════════════════════════════════════════════════════════════════
+// CATÁLOGO — HAMBURGUESAS ZABÚ
+// ════════════════════════════════════════════════════════════════════════════
+const BURGERS = [
+  { id:'classic', nombre:'Classic Burger Z', desc:'Carne 60/30/10, Cream Code, tocineta', precio:25000, emoji:'🍔' },
+  { id:'pina',     nombre:'Burger Z con piña', desc:'Classic + piña caramelizada',          precio:25000, emoji:'🍔' },
+]
+
+// Toppings base de la Classic Burger Z — todos por defecto. La variante "con
+// piña" agrega piña caramelizada como topping adicional, también por defecto.
+const TOPPINGS_BURGER_CLASSIC = [
+  { id:'creamcode',     nombre:'Cream Code',             emoji:'🧈', porDefecto:true },
+  { id:'tocineta',      nombre:'Tocineta crispy',        emoji:'🥓', porDefecto:true },
+  { id:'quesocheddar',  nombre:'Queso cheddar',          emoji:'🧀', porDefecto:true },
+  { id:'lechuga',       nombre:'Lechuga romana',         emoji:'🥬', porDefecto:true },
+  { id:'mayoajo',       nombre:'Mayonesa de ajo ahumada',emoji:'🧄', porDefecto:true },
+]
+const TOPPINGS_BURGER_PINA = [
+  ...TOPPINGS_BURGER_CLASSIC,
+  { id:'pina', nombre:'Piña caramelizada', emoji:'🍍', porDefecto:true },
+]
+
+function toppingsDeBurger(burgerId) {
+  return burgerId === 'pina' ? TOPPINGS_BURGER_PINA : TOPPINGS_BURGER_CLASSIC
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// CATÁLOGO — FRIES Z (side, incluye Cream Code de fábrica)
+// ════════════════════════════════════════════════════════════════════════════
+const FRIES_Z = { id:'friesz', nombre:'Fries Z', desc:'Papa + sazonador ZABÚ + Cream Code', precio:7000, emoji:'🍟' }
+
+// ════════════════════════════════════════════════════════════════════════════
+// BEBIDAS Y EXTRAS — sin cambios respecto a la versión anterior
+// ════════════════════════════════════════════════════════════════════════════
 const BEBIDAS = [
   { id:'coca',        nombre:'Coca Cola',       precio:3000, emoji:'🥤', color:'#e05252' },
   { id:'colaroman',   nombre:'Cola Román',       precio:3000, emoji:'🥤', color:'#9C27B0' },
@@ -39,6 +88,15 @@ const UTENSILIOS = {
   domicilio: ['Caja gaveta', 'Servilletas', 'Porta Cream Code plástico', 'Bolsa', 'Sticker'],
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// PLATAFORMAS DE DOMICILIO — para el modo "Pedido de Plataforma"
+// ════════════════════════════════════════════════════════════════════════════
+const PLATAFORMAS = [
+  { id:'directo', nombre:'Directo',  emoji:'🏪', color:'#4caf50' },
+  { id:'rappi',   nombre:'Rappi',    emoji:'🛵', color:'#FF441F' },
+  { id:'didi',    nombre:'DiDi Food',emoji:'🚗', color:'#FF7E0E' },
+]
+
 function cop(n) {
   if (!n) return '$0'
   return '$' + Math.round(n).toLocaleString('es-CO')
@@ -52,7 +110,7 @@ function getOrdenNum(orden) {
 }
 
 function nuevoItem() {
-  return { id: Date.now(), producto:null, salchicha:null, tipo:null, bebida:null, extras:[], bebidaSuelta:null, paso:1 }
+  return { id: Date.now(), producto:null, salchicha:null, tipo:null, bebida:null, extras:[], bebidaSuelta:null, toppingsQuitados:[], paso:1 }
 }
 
 // Item de venta rápida — producto suelto (bebida o extra) sin pasar por el
@@ -62,11 +120,40 @@ function nuevoItemSuelto(producto, tipo) {
   return { id: Date.now()+Math.random(), suelto:true, productoSuelto:producto, tipoSuelto:tipo, paso:5 }
 }
 
+// Item de hamburguesa — burger seleccionada con sus toppings base activados.
+// toppingsQuitados guarda los ids que el cliente NO quiere (resto de pasos
+// que TopToggle no usemos quedan vacíos para mantener compatibilidad con
+// precioItem/lineaItem genéricos).
+function nuevoItemBurger(burger) {
+  return { id: Date.now()+Math.random(), esBurger:true, burger, toppingsQuitados:[], bebidaSuelta:null, paso:5 }
+}
+
+// Item de Fries Z — producto fijo, sin pasos de armado, solo cantidad implícita
+// de 1 por item (se agrega varias veces si se quieren varias unidades).
+function nuevoItemFries() {
+  return { id: Date.now()+Math.random(), esFries:true, paso:5 }
+}
+
 function precioItem(item) {
   if (item.suelto) return item.productoSuelto?.precio || 0
+  if (item.esBurger) return (item.burger?.precio || 0) + (item.bebidaSuelta?.precio || 0)
+  if (item.esFries) return FRIES_Z.precio
   if (!item.producto || !item.tipo) return 0
   const base = item.tipo === 'solo' ? item.producto.precioSolo : item.producto.precioCombo
   return base + item.extras.reduce((s,e) => s+e.precio, 0) + (item.bebidaSuelta?.precio || 0)
+}
+
+// Lista de toppings activos de un item (hot dog o burger), aplicando lo que
+// el cliente quitó. Devuelve [] para items que no tienen toppings (suelto, fries).
+function toppingsActivos(item) {
+  if (item.esBurger) {
+    const base = toppingsDeBurger(item.burger.id)
+    return base.filter(t => !(item.toppingsQuitados||[]).includes(t.id))
+  }
+  if (item.producto) {
+    return TOPPINGS_HOTDOG.filter(t => !(item.toppingsQuitados||[]).includes(t.id))
+  }
+  return []
 }
 
 // Resta el cambio del/los pago(s) en efectivo, para que lo que se registra
@@ -83,6 +170,34 @@ function ajustarPagosNetos(pagos, cambio) {
     }
     return { ...p, monto: parseFloat(p.monto) || 0 }
   })
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// TOGGLE DE TOPPINGS — componente reutilizable para hot dog y hamburguesa.
+// Muestra todos los toppings del producto, activados por defecto; un toque
+// los desactiva (tachado/atenuado) sin tocar el precio.
+// ════════════════════════════════════════════════════════════════════════════
+function ToppingsToggle({ toppings, quitados, onToggle, isMobile }) {
+  return (
+    <div style={{ display:'grid', gridTemplateColumns:`repeat(${isMobile?2:3},1fr)`, gap:8 }}>
+      {toppings.map(t => {
+        const activo = !quitados.includes(t.id)
+        return (
+          <div key={t.id} onClick={() => onToggle(t.id)} style={{
+            padding:isMobile?8:10, borderRadius:10, cursor:'pointer', textAlign:'center',
+            border:`1px solid ${activo ? 'var(--green-border)' : 'var(--border)'}`,
+            background: activo ? 'var(--green-dim)' : 'rgba(255,255,255,0.02)',
+            display:'flex', flexDirection:'column', alignItems:'center', gap:4,
+            opacity: activo ? 1 : 0.5,
+          }}>
+            <div style={{ fontSize:isMobile?18:22, textDecoration: activo?'none':'line-through' }}>{t.emoji}</div>
+            <div style={{ fontSize:10, fontWeight:600, color: activo?'var(--text)':'var(--text4)', textDecoration: activo?'none':'line-through' }}>{t.nombre}</div>
+            <div style={{ fontSize:9, color: activo?'var(--green)':'var(--text4)', fontWeight:700 }}>{activo?'✓ Incluido':'Sin esto'}</div>
+          </div>
+        )
+      })}
+    </div>
+  )
 }
 
 function VentaRapida({ onAgregar, onCerrar, isMobile }) {
@@ -142,9 +257,108 @@ function ItemSueltoCard({ item, onEliminar }) {
   )
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// CARD DE FRIES Z — sin pasos de armado, solo agregar/quitar
+// ════════════════════════════════════════════════════════════════════════════
+function ItemFriesCard({ item, onEliminar }) {
+  return (
+    <div style={{ background:'var(--bg3)', borderRadius:14, border:'1px solid var(--border)', overflow:'hidden', marginBottom:12, padding:'12px 14px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+        <span style={{ fontSize:20 }}>{FRIES_Z.emoji}</span>
+        <div>
+          <div style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{FRIES_Z.nombre}</div>
+          <div style={{ fontSize:11, color:'var(--text3)' }}>{FRIES_Z.desc}</div>
+        </div>
+      </div>
+      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+        <span style={{ fontSize:14, fontWeight:800, color:'var(--gold)' }}>{cop(precioItem(item))}</span>
+        <div onClick={onEliminar} style={{ width:26, height:26, borderRadius:7, background:'rgba(224,82,82,0.1)', border:'0.5px solid rgba(224,82,82,0.3)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', fontSize:14, color:'var(--red)' }}>×</div>
+      </div>
+    </div>
+  )
+}
+
+// ════════════════════════════════════════════════════════════════════════════
+// CARD DE HAMBURGUESA — elegir cuál, luego personalizar toppings (todos
+// activados por defecto), opcional bebida suelta. Sin pasos de tarjetas
+// múltiples como el hot dog — todo en una sola tarjeta expandida.
+// ════════════════════════════════════════════════════════════════════════════
+function ItemBurgerCard({ item, onChange, onEliminar, isMobile }) {
+  const toggleTopping = (toppingId) => {
+    const quitados = item.toppingsQuitados || []
+    const yaQuitado = quitados.includes(toppingId)
+    onChange({ ...item, toppingsQuitados: yaQuitado ? quitados.filter(id=>id!==toppingId) : [...quitados, toppingId] })
+  }
+
+  if (!item.burger) {
+    return (
+      <div style={{ background:'var(--bg3)', borderRadius:14, border:'1px solid var(--border)', overflow:'hidden', marginBottom:12, padding:'12px 14px' }}>
+        <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:10 }}>ELIGE LA HAMBURGUESA</div>
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+          {BURGERS.map(b => (
+            <div key={b.id} onClick={() => onChange({ ...item, burger:b })} style={{
+              padding:isMobile?10:14, borderRadius:12, cursor:'pointer', textAlign:'center',
+              border:'1px solid var(--border)', background:'rgba(255,255,255,0.03)',
+              display:'flex', flexDirection:'column', alignItems:'center', gap:5,
+            }}>
+              <div style={{ fontSize:isMobile?28:36 }}>{b.emoji}</div>
+              <div style={{ fontSize:13, fontWeight:800, color:'var(--text)' }}>{b.nombre}</div>
+              <div style={{ fontSize:10, color:'var(--text3)' }}>{b.desc}</div>
+              <div style={{ fontSize:13, color:'var(--gold)', fontWeight:700 }}>{cop(b.precio)}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    )
+  }
+
+  const toppings = toppingsDeBurger(item.burger.id)
+
+  return (
+    <div style={{ background:'var(--bg3)', borderRadius:14, border:'1px solid var(--border)', overflow:'hidden', marginBottom:12 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderBottom:'1px solid var(--border)', background:'rgba(255,255,255,0.02)' }}>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ fontSize:18 }}>{item.burger.emoji}</span>
+          <div style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{item.burger.nombre}</div>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+          <span style={{ fontSize:14, fontWeight:800, color:'var(--gold)' }}>{cop(precioItem(item))}</span>
+          <div onClick={onEliminar} style={{ width:26, height:26, borderRadius:7, background:'rgba(224,82,82,0.1)', border:'0.5px solid rgba(224,82,82,0.3)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', fontSize:14, color:'var(--red)' }}>×</div>
+        </div>
+      </div>
+      <div style={{ padding:'12px 14px' }}>
+        <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>TOPPINGS (toca para quitar)</div>
+        <ToppingsToggle toppings={toppings} quitados={item.toppingsQuitados||[]} onToggle={toggleTopping} isMobile={isMobile} />
+        <div style={{ marginTop:12 }}>
+          <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>BEBIDA SUELTA (opcional)</div>
+          <div style={{ display:'grid', gridTemplateColumns:`repeat(${isMobile?3:4},1fr)`, gap:8 }}>
+            {BEBIDAS.map(b => (
+              <div key={b.id} onClick={() => onChange({...item, bebidaSuelta: item.bebidaSuelta?.id===b.id ? null : b})} style={{
+                padding:isMobile?6:8, borderRadius:10, cursor:'pointer', textAlign:'center',
+                border:`1px solid ${item.bebidaSuelta?.id===b.id ? b.color+'66' : 'var(--border)'}`,
+                background: item.bebidaSuelta?.id===b.id ? b.color+'15' : 'rgba(255,255,255,0.03)',
+                display:'flex', flexDirection:'column', alignItems:'center', gap:3,
+              }}>
+                <div style={{ fontSize:isMobile?16:18 }}>{b.emoji}</div>
+                <div style={{ fontSize:9, fontWeight:600, color:'var(--text)' }}>{b.nombre}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMobile }) {
-  const PASOS_LABEL = ['Producto','Salchicha','Tipo','Extras']
+  const PASOS_LABEL = ['Producto','Salchicha','Tipo','Toppings']
   const pasoNum = item.paso === 'bebida' ? 3 : (typeof item.paso === 'number' ? item.paso : 1)
+
+  const toggleTopping = (toppingId) => {
+    const quitados = item.toppingsQuitados || []
+    const yaQuitado = quitados.includes(toppingId)
+    onChange({ ...item, toppingsQuitados: yaQuitado ? quitados.filter(id=>id!==toppingId) : [...quitados, toppingId] })
+  }
 
   const card = (sel, color) => ({
     padding: isMobile ? 10 : 14,
@@ -257,7 +471,11 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
         {item.paso === 4 && (
           <div style={{ display:'flex', flexDirection:'column', gap:12 }}>
             <div>
-              <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>EXTRAS (opcional)</div>
+              <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>TOPPINGS DEL HOT DOG (toca para quitar)</div>
+              <ToppingsToggle toppings={TOPPINGS_HOTDOG} quitados={item.toppingsQuitados||[]} onToggle={toggleTopping} isMobile={isMobile} />
+            </div>
+            <div>
+              <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>EXTRAS ADICIONALES (con costo extra)</div>
               <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8 }}>
                 {EXTRAS.map(e => {
                   const sel = item.extras.find(x=>x.id===e.id)
@@ -332,17 +550,33 @@ function PantallaCliente({ items, totalPrecio, confirmado, orden }) {
         <div style={{ fontSize:10, color:'var(--text3)' }}>HOT DOGS DE VERDAD</div>
       </div>
       <div style={{ flex:1, overflowY:'auto', padding:'12px' }}>
-        {items.length === 0 || (!items[0].producto && !items[0].suelto) ? (
+        {items.length === 0 || (!items[0].producto && !items[0].suelto && !items[0].esBurger && !items[0].esFries) ? (
           <div style={{ textAlign:'center', paddingTop:40 }}>
             <div style={{ fontSize:36, marginBottom:10 }}>👋</div>
             <div style={{ fontSize:14, fontWeight:700, color:'var(--text)' }}>Bienvenido a ZABÚ</div>
             <div style={{ fontSize:11, color:'var(--text3)', marginTop:4 }}>Tu orden aparecerá aquí</div>
           </div>
-        ) : items.filter(i=>i.producto || i.suelto).map((item) => (
+        ) : items.filter(i=>i.producto || i.suelto || i.esBurger || i.esFries).map((item) => (
           <div key={item.id} style={{ background:'var(--bg3)', borderRadius:10, border:'1px solid var(--border)', padding:'10px 12px', marginBottom:8 }}>
             {item.suelto ? (
               <div style={{ display:'flex', justifyContent:'space-between' }}>
                 <div style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{item.productoSuelto.emoji} {item.productoSuelto.nombre}</div>
+                <div style={{ fontSize:13, fontWeight:800, color:'var(--gold)' }}>{cop(precioItem(item))}</div>
+              </div>
+            ) : item.esFries ? (
+              <div style={{ display:'flex', justifyContent:'space-between' }}>
+                <div style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{FRIES_Z.emoji} {FRIES_Z.nombre}</div>
+                <div style={{ fontSize:13, fontWeight:800, color:'var(--gold)' }}>{cop(precioItem(item))}</div>
+              </div>
+            ) : item.esBurger ? (
+              <div style={{ display:'flex', justifyContent:'space-between' }}>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{item.burger.emoji} {item.burger.nombre}</div>
+                  {(item.toppingsQuitados||[]).length > 0 && (
+                    <div style={{ fontSize:10, color:'var(--text3)' }}>Sin: {toppingsDeBurger(item.burger.id).filter(t=>item.toppingsQuitados.includes(t.id)).map(t=>t.nombre).join(', ')}</div>
+                  )}
+                  {item.bebidaSuelta && <div style={{ fontSize:10, color:'var(--text3)' }}>🥤 {item.bebidaSuelta.nombre}</div>}
+                </div>
                 <div style={{ fontSize:13, fontWeight:800, color:'var(--gold)' }}>{cop(precioItem(item))}</div>
               </div>
             ) : (
@@ -351,6 +585,9 @@ function PantallaCliente({ items, totalPrecio, confirmado, orden }) {
                   <div style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{item.producto.emoji} {item.producto.nombre}</div>
                   {item.salchicha && <div style={{ fontSize:11, color:'var(--text3)' }}>🥩 {item.salchicha.nombre}</div>}
                   {item.tipo && <div style={{ fontSize:11, color:'var(--text3)' }}>{item.tipo==='solo'?'🌭 Solo':'🥤 Combo'}{item.bebida?` · ${item.bebida.nombre}`:''}</div>}
+                  {(item.toppingsQuitados||[]).length > 0 && (
+                    <div style={{ fontSize:10, color:'var(--text3)' }}>Sin: {TOPPINGS_HOTDOG.filter(t=>item.toppingsQuitados.includes(t.id)).map(t=>t.nombre).join(', ')}</div>
+                  )}
                   {item.extras.map(e=><div key={e.id} style={{ fontSize:10, color:'var(--text3)' }}>+ {e.nombre}</div>)}
                   {item.bebidaSuelta && <div style={{ fontSize:10, color:'var(--text3)' }}>🥤 {item.bebidaSuelta.nombre}</div>}
                 </div>
@@ -372,17 +609,28 @@ function PantallaCliente({ items, totalPrecio, confirmado, orden }) {
   )
 }
 
+function lineaItemTexto(item) {
+  if (item.suelto) return `▸ ${item.productoSuelto.nombre} (suelto) — ${cop(precioItem(item))}`
+  if (item.esFries) return `▸ ${FRIES_Z.nombre} — ${cop(precioItem(item))}`
+  if (item.esBurger) {
+    const quitados = (item.toppingsQuitados||[]).length > 0
+      ? `\n  Sin: ${toppingsDeBurger(item.burger.id).filter(t=>item.toppingsQuitados.includes(t.id)).map(t=>t.nombre).join(', ')}` : ''
+    const beb = item.bebidaSuelta ? `\n  🥤 ${item.bebidaSuelta.nombre}` : ''
+    return `▸ ${item.burger.nombre}${quitados}${beb} — ${cop(precioItem(item))}`
+  }
+  const quitadosHotdog = (item.toppingsQuitados||[]).length > 0
+    ? `\n  Sin: ${TOPPINGS_HOTDOG.filter(t=>item.toppingsQuitados.includes(t.id)).map(t=>t.nombre).join(', ')}` : ''
+  return `▸ ${item.producto.nombre} · ${item.salchicha.nombre} · ${item.tipo==='solo'?'Solo':'Combo'}${item.bebida?` (${item.bebida.nombre})`:''}${quitadosHotdog}${item.extras.length>0?'\n  + '+item.extras.map(e=>e.nombre).join(', '):''}${item.bebidaSuelta?`\n  🥤 ${item.bebidaSuelta.nombre}`:''} — ${cop(precioItem(item))}`
+}
+
 function Ticket({ orden, onCerrar }) {
   const [telInput, setTelInput] = useState('')
   const [enviado,  setEnviado]  = useState(false)
 
-  const lineaItem = (item) => {
-    if (item.suelto) return `▸ ${item.productoSuelto.nombre} (suelto) — ${cop(precioItem(item))}`
-    return `▸ ${item.producto.nombre} · ${item.salchicha.nombre} · ${item.tipo==='solo'?'Solo':'Combo'}${item.bebida?` (${item.bebida.nombre})`:''}${item.extras.length>0?'\n  + '+item.extras.map(e=>e.nombre).join(', '):''}${item.bebidaSuelta?`\n  🥤 ${item.bebidaSuelta.nombre}`:''} — ${cop(precioItem(item))}`
-  }
+  const PLATAFORMA_INFO = PLATAFORMAS.find(p => p.id === orden.plataforma) || PLATAFORMAS[0]
 
   const textoWsp = `🌭 *ZABÚ* — Orden ${getOrdenNum(orden.num)}
-${orden.nombreCliente ? `Cliente: ${orden.nombreCliente}\n` : ''}${orden.items.map(lineaItem).join('\n')}
+${orden.plataforma && orden.plataforma !== 'directo' ? `Canal: ${PLATAFORMA_INFO.emoji} ${PLATAFORMA_INFO.nombre}\n` : ''}${orden.nombreCliente ? `Cliente: ${orden.nombreCliente}\n` : ''}${orden.items.map(lineaItemTexto).join('\n')}
 
 💰 *Total: ${cop(orden.total)}*
 ${orden.pagos.map(p=>`${p.metodo==='efectivo'?'💵 Efectivo':p.metodo==='qr'?'📲 QR':'💳 Tarjeta'}: ${cop(p.monto)}`).join('\n')}${orden.cambio>0?`\nCambio: ${cop(orden.cambio)}`:''}
@@ -414,6 +662,9 @@ ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para 
         <div style={{ marginBottom:8 }}>
           <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
             <span style={{ fontWeight:800 }}>{orden.codigo || getOrdenNum(orden.num)}</span>
+            {orden.plataforma && orden.plataforma !== 'directo' && (
+              <span style={{ fontSize:10, fontWeight:700, color:'#FF441F' }}>{PLATAFORMA_INFO.emoji} {PLATAFORMA_INFO.nombre}</span>
+            )}
           </div>
           {orden.nombreCliente && (
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
@@ -434,6 +685,22 @@ ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para 
                   <span>{item.productoSuelto.nombre} (suelto)</span>
                   <span>{cop(precioItem(item))}</span>
                 </div>
+              ) : item.esFries ? (
+                <div style={{ display:'flex', justifyContent:'space-between', fontWeight:700 }}>
+                  <span>{FRIES_Z.nombre}</span>
+                  <span>{cop(precioItem(item))}</span>
+                </div>
+              ) : item.esBurger ? (
+                <>
+                  <div style={{ display:'flex', justifyContent:'space-between', fontWeight:700 }}>
+                    <span>{item.burger.nombre}</span>
+                    <span>{cop(precioItem(item))}</span>
+                  </div>
+                  {(item.toppingsQuitados||[]).length > 0 && (
+                    <div style={{ color:'#555', paddingLeft:6, fontSize:10 }}>Sin: {toppingsDeBurger(item.burger.id).filter(t=>item.toppingsQuitados.includes(t.id)).map(t=>t.nombre).join(', ')}</div>
+                  )}
+                  {item.bebidaSuelta && <div style={{ color:'#555', paddingLeft:6, fontSize:10 }}>🥤 {item.bebidaSuelta.nombre} {cop(item.bebidaSuelta.precio)}</div>}
+                </>
               ) : (
                 <>
                   <div style={{ display:'flex', justifyContent:'space-between', fontWeight:700 }}>
@@ -442,6 +709,7 @@ ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para 
                   </div>
                   <div style={{ color:'#555', paddingLeft:6, fontSize:10 }}>
                     {item.tipo==='solo'?'Solo':'Combo'}{item.bebida?` · ${item.bebida.nombre}`:''}
+                    {(item.toppingsQuitados||[]).length > 0 && <div>Sin: {TOPPINGS_HOTDOG.filter(t=>item.toppingsQuitados.includes(t.id)).map(t=>t.nombre).join(', ')}</div>}
                     {item.extras.map(e=><div key={e.id}>+ {e.nombre} {cop(e.precio)}</div>)}
                     {item.bebidaSuelta && <div>🥤 {item.bebidaSuelta.nombre} {cop(item.bebidaSuelta.precio)}</div>}
                   </div>
@@ -475,6 +743,9 @@ ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para 
         <div style={{ textAlign:'center', borderBottom:'1px dashed #444', paddingBottom:10, marginBottom:12 }}>
           <div style={{ fontSize:10, color:'#C9A84C', letterSpacing:2, fontWeight:600 }}>COMANDA</div>
           <div style={{ fontSize:32, fontWeight:900, color:'#fff', letterSpacing:-1 }}>{orden.codigo || getOrdenNum(orden.num)}</div>
+          {orden.plataforma && orden.plataforma !== 'directo' && (
+            <div style={{ fontSize:12, fontWeight:700, color:'#FF441F', marginTop:2 }}>{PLATAFORMA_INFO.emoji} {PLATAFORMA_INFO.nombre}</div>
+          )}
           {orden.nombreCliente && <div style={{ fontSize:12, color:'#C9A84C', fontWeight:700, marginTop:2 }}>{orden.nombreCliente}</div>}
           <div style={{ fontSize:10, color:'#888', marginTop:2 }}>{new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})}</div>
         </div>
@@ -482,11 +753,20 @@ ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para 
           <div key={i} style={{ marginBottom:10, paddingBottom:10, borderBottom:'1px dashed #333' }}>
             {item.suelto ? (
               <div style={{ fontSize:15, fontWeight:800, color:'#C9A84C' }}>{item.productoSuelto.emoji} {item.productoSuelto.nombre} (suelto)</div>
+            ) : item.esFries ? (
+              <div style={{ fontSize:15, fontWeight:800, color:'#C9A84C' }}>{FRIES_Z.emoji} {FRIES_Z.nombre}</div>
+            ) : item.esBurger ? (
+              <>
+                <div style={{ fontSize:15, fontWeight:800, color:'#C9A84C' }}>{item.burger.emoji} {item.burger.nombre}</div>
+                {(item.toppingsQuitados||[]).length > 0 && <div style={{ fontSize:11, color:'#e05252' }}>SIN: {toppingsDeBurger(item.burger.id).filter(t=>item.toppingsQuitados.includes(t.id)).map(t=>t.nombre).join(', ')}</div>}
+                {item.bebidaSuelta && <div style={{ fontSize:11, color:'#888' }}>🥤 {item.bebidaSuelta.nombre}</div>}
+              </>
             ) : (
               <>
                 <div style={{ fontSize:15, fontWeight:800, color:'#C9A84C' }}>{item.producto.emoji} {item.producto.nombre}</div>
                 <div style={{ fontSize:13, fontWeight:700, color:'#fff', marginTop:2 }}>🥩 {item.salchicha.nombre}</div>
                 <div style={{ fontSize:11, color:'#888' }}>{item.tipo==='solo'?'🌭 Solo':'🥤 Combo'}{item.bebida?` · ${item.bebida.nombre}`:''}</div>
+                {(item.toppingsQuitados||[]).length > 0 && <div style={{ fontSize:11, color:'#e05252' }}>SIN: {TOPPINGS_HOTDOG.filter(t=>item.toppingsQuitados.includes(t.id)).map(t=>t.nombre).join(', ')}</div>}
                 {item.extras.map(e=><div key={e.id} style={{ fontSize:12, color:'#fff' }}>+ {e.nombre}</div>)}
                 {item.bebidaSuelta && <div style={{ fontSize:11, color:'#888' }}>🥤 {item.bebidaSuelta.nombre}</div>}
               </>
@@ -540,6 +820,142 @@ ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para 
   )
 }
 
+// ════════════════════════════════════════════════════════════════════════════
+// MODO PEDIDO DE PLATAFORMA — pantalla aparte, simplificada. Replica el pedido
+// que llegó por la app de delivery (Rappi/DiDi) en pocos toques: elegir
+// plataforma, tocar productos directo de una grilla única (sin pasos de
+// tarjetas), ajustar toppings con el mismo toggle, y confirmar. Se registra
+// igual que una venta normal, pero con canal = la plataforma elegida, para
+// que la proyección financiera pueda diferenciarlo más adelante.
+// ════════════════════════════════════════════════════════════════════════════
+function PedidoPlataforma({ onConfirmar, onCerrar, isMobile }) {
+  const [plataforma, setPlataforma] = useState(null)
+  const [itemsPlat,  setItemsPlat]  = useState([])
+
+  const agregarHotdog = (producto) => setItemsPlat(prev => [...prev, { id:Date.now()+Math.random(), producto, salchicha:SALCHICHAS[0], tipo:'solo', bebida:null, extras:[], bebidaSuelta:null, toppingsQuitados:[], paso:5 }])
+  const agregarBurger = (burger) => setItemsPlat(prev => [...prev, nuevoItemBurger(burger)])
+  const agregarFries  = () => setItemsPlat(prev => [...prev, nuevoItemFries()])
+  const agregarSuelto = (producto, tipo) => setItemsPlat(prev => [...prev, nuevoItemSuelto(producto, tipo)])
+  const actualizarItem = (id, nuevo) => setItemsPlat(prev => prev.map(i => i.id===id ? nuevo : i))
+  const eliminarItem   = (id) => setItemsPlat(prev => prev.filter(i=>i.id!==id))
+
+  const total = itemsPlat.reduce((s,i)=>s+precioItem(i), 0)
+  const colorPlat = PLATAFORMAS.find(p=>p.id===plataforma)?.color || 'var(--gold)'
+
+  if (!plataforma) {
+    return (
+      <div style={{ background:'var(--bg3)', borderRadius:14, border:'1px solid var(--gold-border)', overflow:'hidden', marginBottom:12 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderBottom:'1px solid var(--border)', background:'var(--gold-dim)' }}>
+          <div style={{ fontSize:13, fontWeight:700, color:'var(--gold)' }}>📲 Pedido de Plataforma</div>
+          <div onClick={onCerrar} style={{ width:26, height:26, borderRadius:7, background:'rgba(255,255,255,0.06)', border:'0.5px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', fontSize:14, color:'var(--text3)' }}>×</div>
+        </div>
+        <div style={{ padding:'16px 14px' }}>
+          <div style={{ fontSize:12, color:'var(--text3)', marginBottom:12, textAlign:'center' }}>¿De dónde llegó el pedido?</div>
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 }}>
+            {PLATAFORMAS.map(p => (
+              <div key={p.id} onClick={() => setPlataforma(p.id)} style={{
+                padding:isMobile?12:16, borderRadius:12, cursor:'pointer', textAlign:'center',
+                border:`1px solid ${p.color}44`, background:p.color+'15',
+                display:'flex', flexDirection:'column', alignItems:'center', gap:6,
+              }}>
+                <div style={{ fontSize:isMobile?28:32 }}>{p.emoji}</div>
+                <div style={{ fontSize:12, fontWeight:800, color:p.color }}>{p.nombre}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{ background:'var(--bg3)', borderRadius:14, border:`1px solid ${colorPlat}44`, overflow:'hidden', marginBottom:12 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderBottom:'1px solid var(--border)', background:colorPlat+'15' }}>
+        <div style={{ fontSize:13, fontWeight:700, color:colorPlat }}>
+          {PLATAFORMAS.find(p=>p.id===plataforma)?.emoji} Pedido {PLATAFORMAS.find(p=>p.id===plataforma)?.nombre}
+        </div>
+        <div style={{ display:'flex', gap:8 }}>
+          <div onClick={() => setPlataforma(null)} style={{ fontSize:11, color:'var(--text3)', cursor:'pointer' }}>Cambiar</div>
+          <div onClick={onCerrar} style={{ width:26, height:26, borderRadius:7, background:'rgba(255,255,255,0.06)', border:'0.5px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', fontSize:14, color:'var(--text3)' }}>×</div>
+        </div>
+      </div>
+
+      <div style={{ padding:'12px 14px' }}>
+        {/* Grilla única de TODOS los productos — un toque agrega, sin pasos */}
+        <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>TOCA PARA AGREGAR</div>
+        <div style={{ display:'grid', gridTemplateColumns:`repeat(${isMobile?2:4},1fr)`, gap:8, marginBottom:16 }}>
+          {PRODUCTOS.map(p => (
+            <div key={p.id} onClick={() => agregarHotdog(p)} style={{ padding:10, borderRadius:10, cursor:'pointer', textAlign:'center', border:'1px solid var(--border)', background:'rgba(255,255,255,0.03)' }}>
+              <div style={{ fontSize:24 }}>{p.emoji}</div>
+              <div style={{ fontSize:11, fontWeight:700, color:'var(--text)' }}>{p.nombre}</div>
+              <div style={{ fontSize:10, color:'var(--gold)', fontWeight:700 }}>{cop(p.precioSolo)}</div>
+            </div>
+          ))}
+          {BURGERS.map(b => (
+            <div key={b.id} onClick={() => agregarBurger(b)} style={{ padding:10, borderRadius:10, cursor:'pointer', textAlign:'center', border:'1px solid var(--border)', background:'rgba(255,255,255,0.03)' }}>
+              <div style={{ fontSize:24 }}>{b.emoji}</div>
+              <div style={{ fontSize:11, fontWeight:700, color:'var(--text)' }}>{b.nombre}</div>
+              <div style={{ fontSize:10, color:'var(--gold)', fontWeight:700 }}>{cop(b.precio)}</div>
+            </div>
+          ))}
+          <div onClick={agregarFries} style={{ padding:10, borderRadius:10, cursor:'pointer', textAlign:'center', border:'1px solid var(--border)', background:'rgba(255,255,255,0.03)' }}>
+            <div style={{ fontSize:24 }}>{FRIES_Z.emoji}</div>
+            <div style={{ fontSize:11, fontWeight:700, color:'var(--text)' }}>{FRIES_Z.nombre}</div>
+            <div style={{ fontSize:10, color:'var(--gold)', fontWeight:700 }}>{cop(FRIES_Z.precio)}</div>
+          </div>
+          {BEBIDAS.slice(0,3).map(b => (
+            <div key={b.id} onClick={() => agregarSuelto(b,'bebida')} style={{ padding:10, borderRadius:10, cursor:'pointer', textAlign:'center', border:`1px solid ${b.color}33`, background:b.color+'11' }}>
+              <div style={{ fontSize:24 }}>{b.emoji}</div>
+              <div style={{ fontSize:11, fontWeight:700, color:'var(--text)' }}>{b.nombre}</div>
+              <div style={{ fontSize:10, color:b.color, fontWeight:700 }}>{cop(b.precio)}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Items ya agregados — personalización rápida de toppings inline */}
+        {itemsPlat.length > 0 && (
+          <div style={{ marginBottom:16 }}>
+            <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>EN EL PEDIDO ({itemsPlat.length})</div>
+            {itemsPlat.map(item => (
+              <div key={item.id} style={{ background:'rgba(255,255,255,0.03)', borderRadius:10, border:'1px solid var(--border)', padding:'10px 12px', marginBottom:8 }}>
+                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: (item.producto || item.esBurger) ? 8 : 0 }}>
+                  <div style={{ fontSize:12, fontWeight:700, color:'var(--text)' }}>
+                    {item.suelto ? `${item.productoSuelto.emoji} ${item.productoSuelto.nombre}` :
+                     item.esFries ? `${FRIES_Z.emoji} ${FRIES_Z.nombre}` :
+                     item.esBurger ? `${item.burger.emoji} ${item.burger.nombre}` :
+                     `${item.producto.emoji} ${item.producto.nombre}`}
+                  </div>
+                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    <span style={{ fontSize:13, fontWeight:800, color:'var(--gold)' }}>{cop(precioItem(item))}</span>
+                    <div onClick={() => eliminarItem(item.id)} style={{ cursor:'pointer', color:'var(--text4)', fontSize:14 }}>×</div>
+                  </div>
+                </div>
+                {item.esBurger && (
+                  <ToppingsToggle toppings={toppingsDeBurger(item.burger.id)} quitados={item.toppingsQuitados||[]}
+                    onToggle={(id) => { const q=item.toppingsQuitados||[]; actualizarItem(item.id, {...item, toppingsQuitados: q.includes(id)?q.filter(x=>x!==id):[...q,id]}) }}
+                    isMobile={isMobile} />
+                )}
+                {item.producto && (
+                  <ToppingsToggle toppings={TOPPINGS_HOTDOG} quitados={item.toppingsQuitados||[]}
+                    onToggle={(id) => { const q=item.toppingsQuitados||[]; actualizarItem(item.id, {...item, toppingsQuitados: q.includes(id)?q.filter(x=>x!==id):[...q,id]}) }}
+                    isMobile={isMobile} />
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {itemsPlat.length > 0 && (
+          <button className="btn-gold" style={{ width:'100%', padding:'14px', fontSize:15, fontWeight:800 }}
+            onClick={() => onConfirmar(plataforma, itemsPlat, total)}>
+            Continuar a pago · {cop(total)} →
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function ZabuPOS({ usuario }) {
   const [items,           setItems]           = useState([nuevoItem()])
   const [fasePago,        setFasePago]        = useState(false)
@@ -554,6 +970,8 @@ export default function ZabuPOS({ usuario }) {
   const [confirmado,      setConfirmado]      = useState(false)
   const [ordenConfirmada, setOrdenConfirmada] = useState(null)
   const [ventaRapida,     setVentaRapida]     = useState(false)
+  const [modoPlataforma,  setModoPlataforma]  = useState(false)
+  const [plataformaActiva,setPlataformaActiva]= useState('directo') // se fija al confirmar un pedido de plataforma
 
   const isMobile       = window.innerWidth < 768
   const totalPrecio    = items.reduce((s,i) => s+precioItem(i), 0)
@@ -575,7 +993,25 @@ export default function ZabuPOS({ usuario }) {
   const agregarItemSuelto = (producto, tipo) => {
     const nuevo = nuevoItemSuelto(producto, tipo)
     setItems(prev => {
-      const primerVacio = prev.length === 1 && !prev[0].producto && !prev[0].suelto
+      const primerVacio = prev.length === 1 && !prev[0].producto && !prev[0].suelto && !prev[0].esBurger && !prev[0].esFries
+      return primerVacio ? [nuevo] : [...prev, nuevo]
+    })
+  }
+
+  // Agrega una hamburguesa al carrito (reemplaza el primer item vacío, o
+  // se agrega aparte si ya hay algo en construcción).
+  const agregarItemBurger = (burger) => {
+    const nuevo = nuevoItemBurger(burger)
+    setItems(prev => {
+      const primerVacio = prev.length === 1 && !prev[0].producto && !prev[0].suelto && !prev[0].esBurger && !prev[0].esFries
+      return primerVacio ? [nuevo] : [...prev, nuevo]
+    })
+  }
+
+  const agregarItemFries = () => {
+    const nuevo = nuevoItemFries()
+    setItems(prev => {
+      const primerVacio = prev.length === 1 && !prev[0].producto && !prev[0].suelto && !prev[0].esBurger && !prev[0].esFries
       return primerVacio ? [nuevo] : [...prev, nuevo]
     })
   }
@@ -602,18 +1038,19 @@ export default function ZabuPOS({ usuario }) {
     const orden = {
       num, codigo, items: itemsCompletos.length?itemsCompletos:items, total: totalPrecio,
       entrega, nombreCliente, direccion, telefono, pagos: pagosNetos, cambio,
-      utensilios: UTENSILIOS[entrega]||[],
+      utensilios: UTENSILIOS[entrega]||[], plataforma: plataformaActiva,
       hora: new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}),
     }
     await supabase.from('ordenes').insert({
       num, carrito_id: CARRITO_ID, items: orden.items,
       entrega, nombre_cliente: nombreCliente, direccion, telefono,
       pagos: pagosNetos, total: totalPrecio, cambio, estado:'pendiente',
+      canal: plataformaActiva,
       hora: orden.hora, fecha: new Date().toISOString().split('T')[0],
     })
     await supabase.from('movimientos').insert({
       fecha: new Date().toISOString().split('T')[0],
-      descripcion: `Venta ${codigo} — ${orden.items.length} item(s)`,
+      descripcion: `Venta ${codigo} — ${orden.items.length} item(s)${plataformaActiva!=='directo'?` · ${plataformaActiva}`:''}`,
       tipo:'ingreso', categoria:'Ventas', monto: totalPrecio,
       carrito: CARRITO_ID, carrito_id: CARRITO_ID,
     })
@@ -660,7 +1097,19 @@ export default function ZabuPOS({ usuario }) {
     setNombreCliente(''); setDireccion(''); setTelefono('')
     setPagos([{metodo:'efectivo',monto:''}])
     setConfirmado(false); setOrdenConfirmada(null); setOrdenActual(null)
-    setVentaRapida(false)
+    setVentaRapida(false); setModoPlataforma(false); setPlataformaActiva('directo')
+  }
+
+  // Cuando se confirma un "Pedido de Plataforma": toma los items armados en
+  // esa pantalla simplificada, los carga al carrito normal, fija la
+  // plataforma, y entrega automáticamente de una vez (los domicilios de
+  // plataforma siempre son "domicilio" — la app del repartidor lo recoge).
+  const confirmarDesdePlataforma = (plataforma, itemsDePlat, total) => {
+    setItems(itemsDePlat)
+    setPlataformaActiva(plataforma)
+    setEntrega('domicilio')
+    setModoPlataforma(false)
+    setFasePago(true)
   }
 
   const cardBase = {
@@ -702,29 +1151,56 @@ export default function ZabuPOS({ usuario }) {
         <div style={{ overflowY:'auto', padding:isMobile?'12px':'16px 20px', borderRight:isMobile?'none':'1px solid var(--border)', background:'var(--bg)', borderBottom:isMobile?'1px solid var(--border)':'none' }}>
           {!fasePago ? (
             <>
-              {!ventaRapida && (
-                <div onClick={() => setVentaRapida(true)} style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'10px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'var(--gold-dim)', border:'1px solid var(--gold-border)', color:'var(--gold)', marginBottom:12 }}>
-                  ⚡ Venta rápida — solo bebida o extra suelto
+              {!modoPlataforma && !ventaRapida && (
+                <div style={{ display:'flex', gap:8, marginBottom:12 }}>
+                  <div onClick={() => setVentaRapida(true)} style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'10px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'var(--gold-dim)', border:'1px solid var(--gold-border)', color:'var(--gold)' }}>
+                    ⚡ Venta rápida
+                  </div>
+                  <div onClick={() => setModoPlataforma(true)} style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'10px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'rgba(255,68,31,0.1)', border:'1px solid rgba(255,68,31,0.3)', color:'#FF441F' }}>
+                    📲 Pedido de Plataforma
+                  </div>
                 </div>
+              )}
+              {modoPlataforma && (
+                <PedidoPlataforma isMobile={isMobile} onCerrar={() => setModoPlataforma(false)} onConfirmar={confirmarDesdePlataforma} />
               )}
               {ventaRapida && (
                 <VentaRapida isMobile={isMobile} onCerrar={() => setVentaRapida(false)}
                   onAgregar={(producto, tipo) => agregarItemSuelto(producto, tipo)} />
               )}
-              {items.map((item, i) => (
-                item.suelto ? (
-                  <ItemSueltoCard key={item.id} item={item} onEliminar={() => eliminarItem(item.id)} />
-                ) : (
-                  <ItemConstructor key={item.id} item={item}
-                    onChange={(newItem) => updateItem(item.id, newItem)}
-                    onAgregar={agregarItem}
-                    onEliminar={() => eliminarItem(item.id)}
-                    esUltimo={i === items.length-1}
-                    isMobile={isMobile}
-                  />
-                )
-              ))}
-              {todosCompletos && (
+              {!modoPlataforma && (
+                <>
+                  {/* Selector rápido para iniciar burger o fries sin pasar por el flujo de tarjetas del hot dog */}
+                  {items.length === 1 && !items[0].producto && !items[0].suelto && !items[0].esBurger && !items[0].esFries && (
+                    <div style={{ display:'flex', gap:8, marginBottom:12 }}>
+                      <div onClick={() => agregarItemBurger(null)} style={{ flex:1, padding:'8px', borderRadius:10, cursor:'pointer', textAlign:'center', fontSize:12, fontWeight:700, background:'rgba(255,255,255,0.03)', border:'1px solid var(--border)', color:'var(--text2)' }}>
+                        🍔 Hamburguesa
+                      </div>
+                      <div onClick={agregarItemFries} style={{ flex:1, padding:'8px', borderRadius:10, cursor:'pointer', textAlign:'center', fontSize:12, fontWeight:700, background:'rgba(255,255,255,0.03)', border:'1px solid var(--border)', color:'var(--text2)' }}>
+                        🍟 Fries Z
+                      </div>
+                    </div>
+                  )}
+                  {items.map((item, i) => (
+                    item.suelto ? (
+                      <ItemSueltoCard key={item.id} item={item} onEliminar={() => eliminarItem(item.id)} />
+                    ) : item.esFries ? (
+                      <ItemFriesCard key={item.id} item={item} onEliminar={() => eliminarItem(item.id)} />
+                    ) : item.esBurger ? (
+                      <ItemBurgerCard key={item.id} item={item} onChange={(n)=>updateItem(item.id,n)} onEliminar={() => eliminarItem(item.id)} isMobile={isMobile} />
+                    ) : (
+                      <ItemConstructor key={item.id} item={item}
+                        onChange={(newItem) => updateItem(item.id, newItem)}
+                        onAgregar={agregarItem}
+                        onEliminar={() => eliminarItem(item.id)}
+                        esUltimo={i === items.length-1}
+                        isMobile={isMobile}
+                      />
+                    )
+                  ))}
+                </>
+              )}
+              {!modoPlataforma && todosCompletos && (
                 <div style={{ display:'flex', gap:10, marginTop:4 }}>
                   <button onClick={agregarItem} style={{ flex:1, padding:'11px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'rgba(55,138,221,0.1)', border:'0.5px solid rgba(55,138,221,0.3)', color:'var(--blue)', fontFamily:'inherit' }}>+ Otro</button>
                   <button onClick={() => setFasePago(true)} style={{ flex:3, padding:'11px', borderRadius:10, cursor:'pointer', fontSize:14, fontWeight:800, background:'rgba(201,168,76,0.15)', border:'1px solid var(--gold-border)', color:'var(--gold)', fontFamily:'inherit' }}>
@@ -736,13 +1212,21 @@ export default function ZabuPOS({ usuario }) {
           ) : (
             <>
               <button onClick={() => setFasePago(false)} style={{ fontSize:12, color:'var(--text3)', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', marginBottom:14 }}>← Volver a editar</button>
+              {plataformaActiva !== 'directo' && (
+                <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', borderRadius:10, marginBottom:12, background:'rgba(255,68,31,0.1)', border:'1px solid rgba(255,68,31,0.3)' }}>
+                  <span style={{ fontSize:16 }}>{PLATAFORMAS.find(p=>p.id===plataformaActiva)?.emoji}</span>
+                  <span style={{ fontSize:12, fontWeight:700, color:'#FF441F' }}>Pedido de {PLATAFORMAS.find(p=>p.id===plataformaActiva)?.nombre}</span>
+                </div>
+              )}
               <div className="panel" style={{ marginBottom:12 }}>
                 <div className="panel-title">Resumen</div>
                 {itemsCompletos.map((item,i) => (
                   <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'5px 0', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
                     <span style={{ fontSize:12, color:'var(--text2)' }}>
                       {item.suelto ? `${item.productoSuelto.nombre} (suelto)` :
-                        `${item.producto.nombre} · ${item.salchicha.nombre} · ${item.tipo==='solo'?'Solo':'Combo'}${item.extras.length>0?` + ${item.extras.map(e=>e.nombre).join(', ')}` : ''}`}
+                       item.esFries ? FRIES_Z.nombre :
+                       item.esBurger ? `${item.burger.nombre}${(item.toppingsQuitados||[]).length>0?' (sin '+item.toppingsQuitados.length+' topping(s))':''}` :
+                       `${item.producto.nombre} · ${item.salchicha.nombre} · ${item.tipo==='solo'?'Solo':'Combo'}${item.extras.length>0?` + ${item.extras.map(e=>e.nombre).join(', ')}` : ''}`}
                     </span>
                     <span style={{ fontSize:13, fontWeight:700, color:'var(--gold)' }}>{cop(precioItem(item))}</span>
                   </div>
@@ -851,6 +1335,7 @@ export default function ZabuPOS({ usuario }) {
               <div key={v.num} style={{ padding:'6px 12px', background:'rgba(255,255,255,0.03)', borderRadius:10, border:'1px solid var(--border)' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:8 }}>
                   <span style={{ fontSize:12, fontWeight:800, color:'var(--gold)' }}>{getOrdenNum(v.num)}</span>
+                  {v.plataforma && v.plataforma !== 'directo' && <span style={{ fontSize:11 }}>{PLATAFORMAS.find(p=>p.id===v.plataforma)?.emoji}</span>}
                   <span style={{ fontSize:11, color:'var(--text3)' }}>{v.items.length} item{v.items.length>1?'s':''}</span>
                   <span style={{ fontSize:12, fontWeight:700, color:'var(--text)' }}>{cop(v.total)}</span>
                   <span style={{ fontSize:11 }}>{v.entrega==='aqui'?'🪑':v.entrega==='llevar'?'🛍':'🛵'}</span>
