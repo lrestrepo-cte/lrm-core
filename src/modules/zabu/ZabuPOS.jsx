@@ -6,124 +6,173 @@ import { supabase } from '../../lib/supabase'
 // CATÁLOGO — CATEGORÍAS (paso 1, mismo peso visual para todas)
 // ════════════════════════════════════════════════════════════════════════════
 const CATEGORIAS = [
-  { id:'hotdog',  nombre:'Hot Dog',     emoji:'🌭' },
-  { id:'burger',  nombre:'Hamburguesa', emoji:'🍔' },
-  { id:'fries',   nombre:'Fries Z',     emoji:'🍟' },
-  { id:'paleta',  nombre:'Paleta Z',    emoji:'🍡' },
-  { id:'kids',    nombre:'Kids ZABÚ',   emoji:'🎈' },
-  { id:'bebida',  nombre:'Bebida',      emoji:'🥤' },
-  { id:'extra',   nombre:'Extra',       emoji:'➕' },
+  { id:'hotdog',     nombre:'Hot Dog',        emoji:'🌭' },
+  { id:'burger',     nombre:'Hamburguesa',    emoji:'🍔' },
+  { id:'salchipapa', nombre:'Salchipapa ZABÚ',emoji:'🍟' },
+  { id:'fries',      nombre:'Fries',          emoji:'🥔' },
+  { id:'paleta',     nombre:'Paleta',         emoji:'🍡' },
+  { id:'kids',       nombre:'Kids ZABÚ',      emoji:'🎈' },
+  { id:'granizado',  nombre:'Granizado',      emoji:'🧊' },
+  { id:'bebida',     nombre:'Bebida',         emoji:'🥤' },
+  { id:'extra',      nombre:'Extra',          emoji:'➕' },
 ]
 
 // ════════════════════════════════════════════════════════════════════════════
 // CATÁLOGO — HOT DOG
-// Único producto desde ahora: ZABÚ a $18.000 solo. Se eliminó CheeZabú —
-// el queso cheddar sigue disponible como EXTRA si el cliente lo quiere
-// (ver EXTRAS más abajo), pero ya no existe como hot dog aparte con su
-// propio precio. Precio combo = solo + bebida base ($3.000), igual que el
-// resto del catálogo de combos.
+// ZABÚ: $18.000 solo / $25.000 combo (incluye Fries + Gaseosa 250ml)
+// El cliente elige su salchicha y su queso — el resto de toppings vienen
+// activados por defecto (Cream Code™, Tocineta Crispy, Piña, Papa Chongo).
 // ════════════════════════════════════════════════════════════════════════════
 const PRODUCTOS = [
-  { id:'zabu', nombre:'ZABÚ', desc:'El original', precioSolo:18000, precioCombo:24000, emoji:'🌭' },
+  { id:'zabu', nombre:'ZABÚ', desc:'Pan ZaBun™ · Elige tu salchicha y tu queso', precioSolo:18000, precioCombo:25000, emoji:'🌭' },
 ]
 
-// Catálogo real de salchichas (jun-2026). Gramaje = peso del paquete ÷
-// unidades. Costo = precio del paquete ÷ unidades — usado para el costeo
-// de la Ficha Técnica (la más cara, Polaca $4.180/ud, es la que define el
-// food cost conservador del ZABÚ, sin importar cuál elija el cliente).
+// Catálogo real de salchichas (jun-2026). Gramaje = peso paquete ÷ unidades.
+// Costo = precio paquete ÷ unidades. La Polaca ($4.180/ud) es referencia de
+// costeo conservador. La Pavo Ahumada es la salchicha ancla de la marca.
 const SALCHICHAS = [
-  { id:'pavo',      nombre:'Pavo Ahumada', desc:'Ahumada',              emoji:'🦃', gramos:62.5, costoUnidad:3700 },
-  { id:'americana', nombre:'Americana',    desc:'Gruesa',               emoji:'🌭', gramos:71.4, costoUnidad:2943 },
-  { id:'suiza',     nombre:'Suiza',        desc:'Clásica',              emoji:'🥩', gramos:100,  costoUnidad:4140 },
-  { id:'polaca',    nombre:'Polaca',       desc:'Tradicional',          emoji:'🥩', gramos:90,   costoUnidad:4180 },
-  { id:'alemana',   nombre:'Alemana',      desc:'Estilo Múnich',        emoji:'🥩', gramos:100,  costoUnidad:4140 },
-  { id:'frankfurt', nombre:'Frankfurt',    desc:'Tradicional alemana',  emoji:'⭐',  gramos:55.6, costoUnidad:2433 },
+  { id:'pavo',      nombre:'Pavo Ahumada', desc:'Ahumada · ancla de la marca', emoji:'🦃', gramos:62.5, costoUnidad:3700 },
+  { id:'americana', nombre:'Americana',    desc:'Gruesa',                       emoji:'🌭', gramos:71.4, costoUnidad:2943 },
+  { id:'suiza',     nombre:'Suiza',        desc:'Clásica',                      emoji:'🥩', gramos:100,  costoUnidad:4140 },
+  { id:'polaca',    nombre:'Polaca',       desc:'Tradicional',                  emoji:'🥩', gramos:90,   costoUnidad:4180 },
+  { id:'alemana',   nombre:'Alemana',      desc:'Estilo Múnich',                emoji:'🥩', gramos:100,  costoUnidad:4140 },
+  { id:'frankfurt', nombre:'Frankfurt',    desc:'Tradicional alemana',          emoji:'⭐', gramos:55.6, costoUnidad:2433 },
 ]
 
-// Toppings base del hot dog — TODOS vienen activados por defecto. El cajero
-// solo toca el topping que el cliente NO quiere para desactivarlo (check/uncheck),
-// en vez de construir el hot dog desde cero. El precio NUNCA cambia por quitar
-// un topping — es una preferencia de preparación, no un descuento.
+// Quesos disponibles para el hot dog — el cliente elige uno.
+const QUESOS_HOTDOG = [
+  { id:'cheddar',   nombre:'Cheddar',    emoji:'🧀' },
+  { id:'coljack',   nombre:'Colby Jack', emoji:'🧀' },
+  { id:'provolone', nombre:'Provolone',  emoji:'🧀' },
+  { id:'suizo',     nombre:'Suizo',      emoji:'🧀' },
+]
+
+// Toppings base del hot dog — TODOS activados por defecto. El cajero solo
+// toca lo que el cliente NO quiere. Precio nunca cambia por quitar toppings.
 const TOPPINGS_HOTDOG = [
-  { id:'creamcode',     nombre:'Cream Code',         emoji:'🧈', porDefecto:true },
-  { id:'tocineta',      nombre:'Tocineta crispy',    emoji:'🥓', porDefecto:true },
-  { id:'pina',          nombre:'Piña caramelizada',  emoji:'🍍', porDefecto:true },
-  { id:'papachongo',    nombre:'Papa chongo',        emoji:'🍟', porDefecto:true },
+  { id:'creamcode',  nombre:'Cream Code™',       emoji:'🧈', porDefecto:true },
+  { id:'tocineta',   nombre:'Tocineta crispy',   emoji:'🥓', porDefecto:true },
+  { id:'pina',       nombre:'Piña caramelizada', emoji:'🍍', porDefecto:true },
+  { id:'papachongo', nombre:'Papa chongo',       emoji:'🍟', porDefecto:true },
 ]
 
 // ════════════════════════════════════════════════════════════════════════════
-// CATÁLOGO — HAMBURGUESAS ZABÚ
+// CATÁLOGO — HAMBURGUESAS ZABÚ (Blend ZABÚ: Res Angus + Cerdo + Chorizo res)
+// Todas incluyen el combo: Fries + Gaseosa 250ml al precio indicado.
 // ════════════════════════════════════════════════════════════════════════════
 const BURGERS = [
-  { id:'classic', nombre:'Classic Burger Z', desc:'Carne 60/30/10, Cream Code, tocineta', precio:25000, emoji:'🍔' },
-  { id:'pina',     nombre:'Burger Z con piña', desc:'Classic + piña caramelizada',          precio:25000, emoji:'🍔' },
+  { id:'classic',      nombre:'Classic Burger Z',   desc:'Blend ZABÚ · Cream Code · Cheddar · Tocineta · Lechuga · Mayo ajo', precio:25000, precioCombo:32000, emoji:'🍔' },
+  { id:'hawaii',       nombre:'Hawaii',              desc:'Blend ZABÚ · Cheddar · Piña caramelizada · Tocineta · Mayo ajo',    precio:25000, precioCombo:32000, emoji:'🍔' },
+  { id:'cheesez',      nombre:'CheesBurger Z',       desc:'Blend ZABÚ · Cheddar · Salsa ZABÚ',                                 precio:23000, precioCombo:30000, emoji:'🧀' },
+  { id:'cheesezdoble', nombre:'CheesBurger Doble',   desc:'Doble Blend ZABÚ · Doble cheddar · Salsa ZABÚ',                    precio:31000, precioCombo:38000, emoji:'🧀' },
 ]
 
 const TOPPINGS_BURGER_CLASSIC = [
-  { id:'creamcode',     nombre:'Cream Code',             emoji:'🧈', porDefecto:true },
-  { id:'tocineta',      nombre:'Tocineta crispy',        emoji:'🥓', porDefecto:true },
-  { id:'quesocheddar',  nombre:'Queso cheddar',          emoji:'🧀', porDefecto:true },
-  { id:'lechuga',       nombre:'Lechuga romana',         emoji:'🥬', porDefecto:true },
-  { id:'mayoajo',       nombre:'Mayonesa de ajo ahumada',emoji:'🧄', porDefecto:true },
+  { id:'creamcode',    nombre:'Cream Code™',          emoji:'🧈', porDefecto:true },
+  { id:'tocineta',     nombre:'Tocineta crispy',      emoji:'🥓', porDefecto:true },
+  { id:'quesocheddar', nombre:'Queso cheddar',        emoji:'🧀', porDefecto:true },
+  { id:'lechuga',      nombre:'Lechuga romana',       emoji:'🥬', porDefecto:true },
+  { id:'mayoajo',      nombre:'Mayo de ajo ahumada',  emoji:'🧄', porDefecto:true },
 ]
-const TOPPINGS_BURGER_PINA = [
-  ...TOPPINGS_BURGER_CLASSIC,
-  { id:'pina', nombre:'Piña caramelizada', emoji:'🍍', porDefecto:true },
+const TOPPINGS_BURGER_HAWAII = [
+  { id:'quesocheddar', nombre:'Queso cheddar',        emoji:'🧀', porDefecto:true },
+  { id:'pina',         nombre:'Piña caramelizada',    emoji:'🍍', porDefecto:true },
+  { id:'tocineta',     nombre:'Tocineta crispy',      emoji:'🥓', porDefecto:true },
+  { id:'mayoajo',      nombre:'Mayo de ajo ahumada',  emoji:'🧄', porDefecto:true },
+]
+const TOPPINGS_BURGER_CHEESEZ = [
+  { id:'salsazabu',    nombre:'Salsa ZABÚ',           emoji:'🧈', porDefecto:true },
+  { id:'quesocheddar', nombre:'Queso cheddar',        emoji:'🧀', porDefecto:true },
+]
+const TOPPINGS_BURGER_CHEESEZDOBLE = [
+  { id:'salsazabu',    nombre:'Salsa ZABÚ',           emoji:'🧈', porDefecto:true },
+  { id:'quesocheddar', nombre:'Doble queso cheddar',  emoji:'🧀', porDefecto:true },
 ]
 
 function toppingsDeBurger(burgerId) {
-  return burgerId === 'pina' ? TOPPINGS_BURGER_PINA : TOPPINGS_BURGER_CLASSIC
+  if (burgerId === 'hawaii')       return TOPPINGS_BURGER_HAWAII
+  if (burgerId === 'cheesez')      return TOPPINGS_BURGER_CHEESEZ
+  if (burgerId === 'cheesezdoble') return TOPPINGS_BURGER_CHEESEZDOBLE
+  return TOPPINGS_BURGER_CLASSIC
 }
 
 // ════════════════════════════════════════════════════════════════════════════
-// CATÁLOGO — FRIES Z (producto único, sin variantes ni toppings)
+// CATÁLOGO — SALCHIPAPA ZABÚ $29.000
+// Incluye: papas a la francesa + 2 salchichas ZABÚ + queso para rayar
+// + piña caramelizada + tocineta crispy + papa chongo + salsas ZABÚ + perejil
+// El cajero elige el queso para rayar (mismo portafolio de quesos del hot dog).
 // ════════════════════════════════════════════════════════════════════════════
-const FRIES_Z = { id:'friesz', nombre:'Fries Z', desc:'Papa + sazonador ZABÚ + Cream Code', precio:7000, emoji:'🍟' }
+const SALCHIPAPA_Z = {
+  id:'salchipapaz', nombre:'Salchipapa ZABÚ', precio:29000, emoji:'🍟',
+  desc:'2 salchichas · papas · queso rayado · piña · tocineta · papa chongo · salsas ZABÚ · perejil',
+}
+// Quesos disponibles para rayar en la Salchipapa (mismo portafolio)
+const QUESOS_SALCHIPAPA = QUESOS_HOTDOG
 
 // ════════════════════════════════════════════════════════════════════════════
-// CATÁLOGO — PALETA Z  ⚠️ PLACEHOLDER — sabores y precio PENDIENTES de costeo real.
-// Hardcodeado para destrabar el desarrollo del POS; ajustar aquí cuando haya
-// ficha técnica definitiva (ver DOCUMENTO_MAESTRO_ZABU — sección Paletas: "cero
-// desarrollo" al momento de escribir esto).
+// CATÁLOGO — FRIES
+// Fries Z: $7.000 (papas + sazonador ZABÚ)
+// Fries ZABÚ: $10.000 (papas + sazonador + tocineta crispy + Cream Code™)
 // ════════════════════════════════════════════════════════════════════════════
-const PALETAS = [
-  { id:'pal_mora',     nombre:'Paleta Z · Mora',     desc:'Pulpa de mora',     precio:4000, emoji:'🍡' }, // TODO PRECIO REAL
-  { id:'pal_mango',    nombre:'Paleta Z · Mango',    desc:'Pulpa de mango',    precio:4000, emoji:'🍡' }, // TODO PRECIO REAL
-  { id:'pal_coco',     nombre:'Paleta Z · Coco',     desc:'Coco cremoso',      precio:4000, emoji:'🍡' }, // TODO PRECIO REAL
-  { id:'pal_maracuya', nombre:'Paleta Z · Maracuyá', desc:'Pulpa de maracuyá', precio:4000, emoji:'🍡' }, // TODO PRECIO REAL
+const FRIES_ITEMS = [
+  { id:'friesz',    nombre:'Fries',      desc:'Papa a la francesa + sazonador ZABÚ',              precio:7000,  emoji:'🥔' },
+  { id:'friesZabu', nombre:'Fries ZABÚ', desc:'Papa + sazonador + tocineta crispy + Cream Code™', precio:10000, emoji:'🍟' },
 ]
 
 // ════════════════════════════════════════════════════════════════════════════
-// CATÁLOGO — KIDS ZABÚ  ⚠️ PLACEHOLDER — precio de nuggets pendiente de costeo
-// real (bloqueaba el menú infantil según DOCUMENTO_MAESTRO_ZABU). Combo cerrado,
-// sin toppings ni variantes: 8 nuggets + papas + jugo + sorpresa.
+// CATÁLOGO — PALETAS ARTESANALES $7.000 c/u
+// Sabores pendientes de definir con el proveedor. Se muestran como
+// "sabores de temporada" hasta confirmar el portafolio definitivo.
 // ════════════════════════════════════════════════════════════════════════════
-const KIDS_ZABU = {
-  id:'kidszabu', nombre:'Kids ZABÚ', desc:'8 nuggets + papas + juguito + sorpresa',
-  precio:17000, emoji:'🎈', // TODO PRECIO REAL (depende del costeo final de nuggets)
-}
+const PALETAS = [
+  { id:'pal_frutosrojos', nombre:'Frutos Rojos',    desc:'Artesanal',    precio:7000, emoji:'🍡' },
+  { id:'pal_mango',       nombre:'Mango',           desc:'Artesanal',    precio:7000, emoji:'🍡' },
+  { id:'pal_cookiescream',nombre:'Cookies & Cream', desc:'Artesanal',    precio:7000, emoji:'🍡' },
+  { id:'pal_chocobelga',  nombre:'Chocolate Belga', desc:'Artesanal',    precio:7000, emoji:'🍡' },
+]
+
+// ════════════════════════════════════════════════════════════════════════════
+// CATÁLOGO — KIDS ZABÚ $18.000 — menú infantil unificado.
+// Tres opciones al mismo precio. Incluye papas + Jugo Hit 200ml + sorpresa.
+// ⚠️ Mini hot dog: pendiente conseguir salchicha americana de tamaño pequeño.
+// ════════════════════════════════════════════════════════════════════════════
+const KIDS_OPCIONES = [
+  { id:'kids_hotdog',  nombre:'Mini Hot Dog', desc:'Salchicha · ZaBún · queso · Salsa ZABÚ · papas · Hit 200ml · sorpresa', emoji:'🌭' },
+  { id:'kids_burger',  nombre:'Mini Burger',  desc:'Carne · queso · Salsa ZABÚ · papas · Hit 200ml · sorpresa',            emoji:'🍔' },
+  { id:'kids_nuggets', nombre:'Nuggets x8',   desc:'8 nuggets de pollo · papas · Hit 200ml · sorpresa',                    emoji:'🍗' },
+]
+const KIDS_PRECIO = 18000
+
+// ════════════════════════════════════════════════════════════════════════════
+// CATÁLOGO — CÓCTELES GRANIZADOS $20.000 c/u (500ml) · Extra shot +$7.000
+// Luna Azul: Maracuyá + Whisky
+// Código Rojo: Fruit Punch + Ron
+// ════════════════════════════════════════════════════════════════════════════
+const GRANIZADOS = [
+  { id:'luna_azul',    nombre:'Luna Azul',    desc:'Maracuyá + Whisky · 500ml',   precio:20000, emoji:'🧊' },
+  { id:'codigo_rojo',  nombre:'Código Rojo',  desc:'Fruit Punch + Ron · 500ml',   precio:20000, emoji:'🧊' },
+]
+const EXTRA_SHOT = { precio:7000, nombre:'Extra Shot' }
 
 // ════════════════════════════════════════════════════════════════════════════
 // BEBIDAS Y EXTRAS
 // ════════════════════════════════════════════════════════════════════════════
 const BEBIDAS = [
-  { id:'coca',        nombre:'Coca Cola',       precio:3000, emoji:'🥤', color:'#e05252' },
-  { id:'colaroman',   nombre:'Cola Román',       precio:3000, emoji:'🥤', color:'#9C27B0' },
-  { id:'quatro',      nombre:'Quatro Toronja',   precio:3000, emoji:'🥤', color:'#FF9800' },
-  { id:'cokazero',    nombre:'Coca Cola Zero',   precio:3000, emoji:'🥤', color:'#333'    },
-  { id:'aquaman',     nombre:'Aqua Manzana',     precio:3000, emoji:'💧', color:'#4caf50' },
-  { id:'postonaranja',nombre:'Postobón Naranja', precio:3000, emoji:'🍊', color:'#FF9800' },
-  { id:'postomanz',   nombre:'Postobón Manzana', precio:3000, emoji:'🍏', color:'#4caf50' },
-  { id:'postouva',    nombre:'Postobón Uva',     precio:3000, emoji:'🍇', color:'#9C27B0' },
-  { id:'postcol',     nombre:'Colombiana',       precio:3000, emoji:'🥤', color:'#C9A84C' },
-  { id:'hatsu',       nombre:'Té Hatsu',         precio:5000, emoji:'🍵', color:'#4caf50' },
-  { id:'agua',        nombre:'Agua 500ml',       precio:2000, emoji:'💧', color:'#378ADD' },
+  { id:'coca',      nombre:'Coca Cola 350ml',  precio:4000, emoji:'🥤', color:'#e05252' },
+  { id:'colaroman', nombre:'Cola Román 350ml', precio:4000, emoji:'🥤', color:'#9C27B0' },
+  { id:'quatro',    nombre:'Quatro 350ml',     precio:4000, emoji:'🥤', color:'#FF9800' },
+  { id:'cokazero',  nombre:'Coca Zero 350ml',  precio:4000, emoji:'🥤', color:'#333'    },
+  { id:'colombiana',nombre:'Colombiana 350ml', precio:4000, emoji:'🥤', color:'#C9A84C' },
+  { id:'hitjugo',   nombre:'Jugo Hit 200ml',   precio:4000, emoji:'🧃', color:'#FF9800' },
+  { id:'hatsu',     nombre:'Té Hatsu 400ml',   precio:6000, emoji:'🍵', color:'#4caf50' },
+  { id:'agua',      nombre:'Agua Mineral 500ml',precio:4000, emoji:'💧', color:'#378ADD' },
 ]
 
 const EXTRAS = [
-  { id:'tocineta', nombre:'Tocineta',      precio:3000, emoji:'🥓' },
-  { id:'pina',     nombre:'Piña',          precio:2000, emoji:'🍍' },
-  { id:'queso',    nombre:'Queso Cheddar', precio:3000, emoji:'🧀' },
+  { id:'tocineta',  nombre:'Tocineta crispy', precio:3000, emoji:'🥓' },
+  { id:'pina',      nombre:'Piña caramelizada',precio:2000, emoji:'🍍' },
+  { id:'cheddar',   nombre:'Queso Cheddar',   precio:3000, emoji:'🧀' },
+  { id:'extrashot', nombre:'Extra Shot',       precio:7000, emoji:'🥃' },
 ]
 
 const UTENSILIOS = {
@@ -205,33 +254,39 @@ function precioItem(item) {
   if (item.categoria === 'burger') {
     return (item.burger?.precio || 0) + (item.bebidaSuelta?.precio || 0)
   }
-  if (item.categoria === 'fries')  return FRIES_Z.precio
-  if (item.categoria === 'paleta') return item.paleta?.precio || 0
-  if (item.categoria === 'kids')   return KIDS_ZABU.precio
-  if (item.categoria === 'bebida') return item.bebidaItem?.precio || 0
-  if (item.categoria === 'extra')  return item.extraItem?.precio || 0
+  if (item.categoria === 'salchipapa') return SALCHIPAPA_Z.precio
+  if (item.categoria === 'fries')      return item.friesItem?.precio || FRIES_ITEMS[0].precio
+  if (item.categoria === 'paleta')     return item.paleta?.precio || 0
+  if (item.categoria === 'kids')       return KIDS_PRECIO
+  if (item.categoria === 'granizado')  return item.granizado?.precio || 0
+  if (item.categoria === 'bebida')     return item.bebidaItem?.precio || 0
+  if (item.categoria === 'extra')      return item.extraItem?.precio || 0
   return 0
 }
 
 function emojiItem(item) {
-  if (item.categoria === 'hotdog')  return item.producto?.emoji || '🌭'
-  if (item.categoria === 'burger')  return item.burger?.emoji || '🍔'
-  if (item.categoria === 'fries')   return FRIES_Z.emoji
-  if (item.categoria === 'paleta')  return item.paleta?.emoji || '🍡'
-  if (item.categoria === 'kids')    return KIDS_ZABU.emoji
-  if (item.categoria === 'bebida')  return item.bebidaItem?.emoji || '🥤'
-  if (item.categoria === 'extra')   return item.extraItem?.emoji || '➕'
+  if (item.categoria === 'hotdog')     return item.producto?.emoji || '🌭'
+  if (item.categoria === 'burger')     return item.burger?.emoji || '🍔'
+  if (item.categoria === 'salchipapa') return SALCHIPAPA_Z.emoji
+  if (item.categoria === 'fries')      return item.friesItem?.emoji || FRIES_ITEMS[0].emoji
+  if (item.categoria === 'paleta')     return item.paleta?.emoji || '🍡'
+  if (item.categoria === 'kids')       return item.kidsOpcion?.emoji || '🎈'
+  if (item.categoria === 'granizado')  return item.granizado?.emoji || '🧊'
+  if (item.categoria === 'bebida')     return item.bebidaItem?.emoji || '🥤'
+  if (item.categoria === 'extra')      return item.extraItem?.emoji || '➕'
   return '🍽️'
 }
 
 function nombreItem(item) {
-  if (item.categoria === 'hotdog')  return item.producto?.nombre || 'Hot Dog'
-  if (item.categoria === 'burger')  return item.burger?.nombre || 'Hamburguesa'
-  if (item.categoria === 'fries')   return FRIES_Z.nombre
-  if (item.categoria === 'paleta')  return item.paleta?.nombre || 'Paleta Z'
-  if (item.categoria === 'kids')    return KIDS_ZABU.nombre
-  if (item.categoria === 'bebida')  return item.bebidaItem?.nombre || 'Bebida'
-  if (item.categoria === 'extra')   return item.extraItem?.nombre || 'Extra'
+  if (item.categoria === 'hotdog')     return item.producto?.nombre || 'Hot Dog'
+  if (item.categoria === 'burger')     return item.burger?.nombre || 'Hamburguesa'
+  if (item.categoria === 'salchipapa') return `Salchipapa Z${item.salchicha ? ` · ${item.salchicha.nombre}` : ''}`
+  if (item.categoria === 'fries')      return item.friesItem?.nombre || FRIES_ITEMS[0].nombre
+  if (item.categoria === 'paleta')     return `Paleta Z · ${item.paleta?.nombre || '...'}`
+  if (item.categoria === 'kids')       return `Kids ZABÚ · ${item.kidsOpcion?.nombre || '...'}`
+  if (item.categoria === 'granizado')  return item.granizado?.nombre || 'Granizado'
+  if (item.categoria === 'bebida')     return item.bebidaItem?.nombre || 'Bebida'
+  if (item.categoria === 'extra')      return item.extraItem?.nombre || 'Extra'
   return ''
 }
 
@@ -312,15 +367,15 @@ function CardSeleccion({ sel, color, isMobile, onClick, children }) {
 // editar") sea siempre la misma mecánica sin importar el producto.
 // ════════════════════════════════════════════════════════════════════════════
 function pasosDe(categoria) {
-  // Cada entrada: { paso, label } — el paso 0 (categoría) es implícito y
-  // siempre el primero; no se repite en la barra para no ser redundante.
-  if (categoria === 'hotdog') return [{paso:1,label:'Producto'},{paso:2,label:'Salchicha'},{paso:3,label:'Tipo'},{paso:4,label:'Toppings'}]
-  if (categoria === 'burger') return [{paso:1,label:'Producto'},{paso:4,label:'Toppings'}]
-  if (categoria === 'paleta') return [{paso:1,label:'Sabor'}]
-  if (categoria === 'bebida') return [{paso:1,label:'Bebida'}]
-  if (categoria === 'extra')  return [{paso:1,label:'Extra'}]
-  if (categoria === 'fries')  return [{paso:1,label:'Confirmar'}]
-  if (categoria === 'kids')   return [{paso:1,label:'Confirmar'}]
+  if (categoria === 'hotdog')     return [{paso:1,label:'Producto'},{paso:2,label:'Salchicha'},{paso:'queso',label:'Queso'},{paso:3,label:'Tipo'},{paso:4,label:'Toppings'}]
+  if (categoria === 'burger')     return [{paso:1,label:'Producto'},{paso:4,label:'Toppings'}]
+  if (categoria === 'salchipapa') return [{paso:1,label:'Queso'}]
+  if (categoria === 'fries')      return [{paso:1,label:'Tipo'}]
+  if (categoria === 'paleta')     return [{paso:1,label:'Sabor'}]
+  if (categoria === 'kids')       return [{paso:1,label:'Opción'}]
+  if (categoria === 'granizado')  return [{paso:1,label:'Sabor'}]
+  if (categoria === 'bebida')     return [{paso:1,label:'Bebida'}]
+  if (categoria === 'extra')      return [{paso:1,label:'Extra'}]
   return []
 }
 
@@ -371,10 +426,9 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
   }
 
   const PASOS = pasosDe(cat)
+  // 'bebida' y 'queso' son pasos string — se mapean a su valor real para
+  // que findIndex los encuentre correctamente en el array de PASOS.
   const pasoVisual = item.paso === 'bebida' ? 3 : item.paso
-  // Cuando el item ya está completo (paso 5), no existe como entrada en PASOS
-  // (que solo lista 1-4) — sin este caso especial, findIndex devolvía -1 y la
-  // barra mostraba todos los pasos como "pendientes" en vez de completados.
   const idxActual = item.paso === 5 ? PASOS.length : PASOS.findIndex(p => p.paso === pasoVisual)
 
   return (
@@ -444,12 +498,25 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
         {cat === 'hotdog' && item.paso === 2 && (
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
             {SALCHICHAS.map(s => (
-              <CardSeleccion key={s.id} isMobile={isMobile} sel={item.salchicha?.id===s.id} onClick={() => onChange({...item, salchicha:s, paso:3})}>
+              <CardSeleccion key={s.id} isMobile={isMobile} sel={item.salchicha?.id===s.id} onClick={() => onChange({...item, salchicha:s, paso:'queso'})}>
                 <div style={{ fontSize:isMobile?24:28 }}>{s.emoji}</div>
                 <div style={{ fontSize:12, fontWeight:700, color:'var(--text)' }}>{s.nombre}</div>
                 <div style={{ fontSize:10, color:'var(--text3)' }}>{s.desc}</div>
               </CardSeleccion>
             ))}
+          </div>
+        )}
+        {cat === 'hotdog' && item.paso === 'queso' && (
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>ELIGE TU QUESO</div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+              {QUESOS_HOTDOG.map(q => (
+                <CardSeleccion key={q.id} isMobile={isMobile} sel={item.quesoElegido?.id===q.id} onClick={() => onChange({...item, quesoElegido:q, paso:3})}>
+                  <div style={{ fontSize:isMobile?24:28 }}>{q.emoji}</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:'var(--text)' }}>{q.nombre}</div>
+                </CardSeleccion>
+              ))}
+            </div>
           </div>
         )}
         {cat === 'hotdog' && item.paso === 3 && (
@@ -544,25 +611,71 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
           </div>
         )}
 
-        {/* ── FRIES Z — confirmar (producto único) ── */}
-        {cat === 'fries' && item.paso === 1 && (
-          <div style={{ display:'flex', flexDirection:'column', gap:10, alignItems:'center', textAlign:'center', padding:'10px 0' }}>
-            <div style={{ fontSize:40 }}>{FRIES_Z.emoji}</div>
-            <div style={{ fontSize:14, fontWeight:800, color:'var(--text)' }}>{FRIES_Z.nombre}</div>
-            <div style={{ fontSize:11, color:'var(--text3)' }}>{FRIES_Z.desc}</div>
-            <div style={{ fontSize:16, color:'var(--gold)', fontWeight:800 }}>{cop(FRIES_Z.precio)}</div>
-            <button className="btn-gold" style={{ width:'100%', padding:'12px', fontSize:14, fontWeight:700 }} onClick={() => onChange({...item, paso:5})}>✓ Agregar</button>
+        {/* ── SALCHIPAPA ZABÚ — elige queso para rayar ── */}
+        {cat === 'salchipapa' && item.paso === 1 && (
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:4 }}>ELIGE EL QUESO PARA RAYAR</div>
+            <div style={{ fontSize:10, color:'var(--text4)', marginBottom:10 }}>Incluye 2 salchichas ZABÚ · papas · piña · tocineta · papa chongo · salsas · perejil · {cop(SALCHIPAPA_Z.precio)}</div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+              {QUESOS_SALCHIPAPA.map(q => (
+                <CardSeleccion key={q.id} isMobile={isMobile} sel={false} onClick={() => onChange({...item, quesoElegido:q, paso:5})}>
+                  <div style={{ fontSize:isMobile?24:28 }}>{q.emoji}</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:'var(--text)' }}>{q.nombre}</div>
+                </CardSeleccion>
+              ))}
+            </div>
           </div>
         )}
 
-        {/* ── KIDS ZABÚ — confirmar (combo único) ── */}
+        {/* ── KIDS ZABÚ — elige opción (mini hot dog / mini burger / nuggets) ── */}
         {cat === 'kids' && item.paso === 1 && (
-          <div style={{ display:'flex', flexDirection:'column', gap:10, alignItems:'center', textAlign:'center', padding:'10px 0' }}>
-            <div style={{ fontSize:40 }}>{KIDS_ZABU.emoji}</div>
-            <div style={{ fontSize:14, fontWeight:800, color:'var(--text)' }}>{KIDS_ZABU.nombre}</div>
-            <div style={{ fontSize:11, color:'var(--text3)' }}>{KIDS_ZABU.desc}</div>
-            <div style={{ fontSize:16, color:'var(--gold)', fontWeight:800 }}>{cop(KIDS_ZABU.precio)}</div>
-            <button className="btn-gold" style={{ width:'100%', padding:'12px', fontSize:14, fontWeight:700 }} onClick={() => onChange({...item, paso:5})}>✓ Agregar</button>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>ELIGE LA OPCIÓN</div>
+            <div style={{ fontSize:10, color:'var(--text4)', marginBottom:10 }}>Todas incluyen papas + bebida cajita + sorpresa · {cop(KIDS_PRECIO)}</div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:8 }}>
+              {KIDS_OPCIONES.map(o => (
+                <CardSeleccion key={o.id} isMobile={isMobile} sel={false} onClick={() => onChange({...item, kidsOpcion:o, paso:5})}>
+                  <div style={{ display:'flex', alignItems:'center', gap:12, width:'100%', textAlign:'left' }}>
+                    <div style={{ fontSize:isMobile?28:32 }}>{o.emoji}</div>
+                    <div>
+                      <div style={{ fontSize:13, fontWeight:800, color:'var(--text)' }}>{o.nombre}</div>
+                      <div style={{ fontSize:10, color:'var(--text3)' }}>{o.desc}</div>
+                    </div>
+                  </div>
+                </CardSeleccion>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── GRANIZADO — elige Luna Azul o Código Rojo ── */}
+        {cat === 'granizado' && item.paso === 1 && (
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>ELIGE EL CÓCTEL · 500ml · Extra shot +{cop(EXTRA_SHOT.precio)}</div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+              {GRANIZADOS.map(g => (
+                <CardSeleccion key={g.id} isMobile={isMobile} sel={false} onClick={() => onChange({...item, granizado:g, paso:5})}>
+                  <div style={{ fontSize:isMobile?28:36 }}>{g.emoji}</div>
+                  <div style={{ fontSize:13, fontWeight:800, color:'var(--text)' }}>{g.nombre}</div>
+                  <div style={{ fontSize:10, color:'var(--text3)' }}>{g.desc}</div>
+                  <div style={{ fontSize:14, color:'var(--gold)', fontWeight:800 }}>{cop(g.precio)}</div>
+                </CardSeleccion>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── FRIES — elige Fries o Fries ZABÚ ── */}
+        {cat === 'fries' && item.paso === 1 && (
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+            {FRIES_ITEMS.map(f => (
+              <CardSeleccion key={f.id} isMobile={isMobile} sel={false} onClick={() => onChange({...item, friesItem:f, paso:5})}>
+                <div style={{ fontSize:isMobile?28:36 }}>{f.emoji}</div>
+                <div style={{ fontSize:13, fontWeight:800, color:'var(--text)' }}>{f.nombre}</div>
+                <div style={{ fontSize:10, color:'var(--text3)' }}>{f.desc}</div>
+                <div style={{ fontSize:14, color:'var(--gold)', fontWeight:800 }}>{cop(f.precio)}</div>
+              </CardSeleccion>
+            ))}
           </div>
         )}
 
@@ -721,7 +834,7 @@ function Ticket({ orden, onCerrar }) {
   const PLATAFORMA_INFO = PLATAFORMAS.find(p => p.id === orden.plataforma) || PLATAFORMAS[0]
 
   const textoWsp = `🌭 *ZABÚ* — Orden ${getOrdenNum(orden.num)}
-${orden.plataforma && orden.plataforma !== 'directo' ? `Canal: ${PLATAFORMA_INFO.emoji} ${PLATAFORMA_INFO.nombre}\n` : ''}${orden.nombreCliente ? `Cliente: ${orden.nombreCliente}\n` : ''}${orden.items.map(lineaItemTexto).join('\n')}
+${orden.plataforma && orden.plataforma !== 'directo' ? `Canal: ${PLATAFORMA_INFO.emoji} ${PLATAFORMA_INFO.nombre}${orden.codigoPlataforma?` · Pedido ${orden.codigoPlataforma}`:''}\n` : ''}${orden.nombreCliente ? `Cliente: ${orden.nombreCliente}\n` : ''}${orden.items.map(lineaItemTexto).join('\n')}
 
 💰 *Total: ${cop(orden.total)}*
 ${orden.pagos.map(p=>`${p.metodo==='efectivo'?'💵 Efectivo':p.metodo==='qr'?'📲 QR':'💳 Tarjeta'}: ${cop(p.monto)}`).join('\n')}${orden.cambio>0?`\nCambio: ${cop(orden.cambio)}`:''}
@@ -757,6 +870,11 @@ ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para 
               <span style={{ fontSize:10, fontWeight:700, color:'#FF441F' }}>{PLATAFORMA_INFO.emoji} {PLATAFORMA_INFO.nombre}</span>
             )}
           </div>
+          {orden.plataforma && orden.plataforma !== 'directo' && orden.codigoPlataforma && (
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
+              <span style={{ color:'#888' }}>Pedido {PLATAFORMA_INFO.nombre}</span><span style={{ fontWeight:700 }}>{orden.codigoPlataforma}</span>
+            </div>
+          )}
           {orden.nombreCliente && (
             <div style={{ display:'flex', justifyContent:'space-between', marginBottom:2 }}>
               <span style={{ color:'#888' }}>Cliente</span><span style={{ fontWeight:700 }}>{orden.nombreCliente}</span>
@@ -811,6 +929,9 @@ ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para 
           <div style={{ fontSize:32, fontWeight:900, color:'#fff', letterSpacing:-1 }}>{orden.codigo || getOrdenNum(orden.num)}</div>
           {orden.plataforma && orden.plataforma !== 'directo' && (
             <div style={{ fontSize:12, fontWeight:700, color:'#FF441F', marginTop:2 }}>{PLATAFORMA_INFO.emoji} {PLATAFORMA_INFO.nombre}</div>
+          )}
+          {orden.plataforma && orden.plataforma !== 'directo' && orden.codigoPlataforma && (
+            <div style={{ fontSize:11, color:'#888', marginTop:1 }}>Pedido {orden.codigoPlataforma}</div>
           )}
           {orden.nombreCliente && <div style={{ fontSize:12, color:'#C9A84C', fontWeight:700, marginTop:2 }}>{orden.nombreCliente}</div>}
           <div style={{ fontSize:10, color:'#888', marginTop:2 }}>{new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'})}</div>
@@ -872,152 +993,6 @@ ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para 
   )
 }
 
-// ════════════════════════════════════════════════════════════════════════════
-// MODO PEDIDO DE PLATAFORMA — única pantalla genuinamente distinta del resto:
-// es un flujo exprés sin pasos para replicar un pedido que ya llegó armado
-// de Rappi/DiDi. Usa el mismo catálogo y el mismo ToppingsToggle que el flujo
-// normal, pero sin la navegación paso a paso (porque el pedido ya viene
-// decidido por el cliente en la app — el cajero solo lo transcribe rápido).
-// ════════════════════════════════════════════════════════════════════════════
-function PedidoPlataforma({ onConfirmar, onCerrar, isMobile }) {
-  const [plataforma, setPlataforma] = useState(null)
-  const [itemsPlat,  setItemsPlat]  = useState([])
-
-  const agregarRapido = (categoria, extra) => {
-    const base = { ...nuevoItemVacio(), categoria, paso:5, ...extra }
-    setItemsPlat(prev => [...prev, base])
-  }
-  const actualizarItem = (id, nuevo) => setItemsPlat(prev => prev.map(i => i.id===id ? nuevo : i))
-  const eliminarItem   = (id) => setItemsPlat(prev => prev.filter(i=>i.id!==id))
-
-  const total = itemsPlat.reduce((s,i)=>s+precioItem(i), 0)
-  const colorPlat = PLATAFORMAS.find(p=>p.id===plataforma)?.color || 'var(--gold)'
-
-  if (!plataforma) {
-    return (
-      <div style={{ background:'var(--bg3)', borderRadius:14, border:'1px solid var(--gold-border)', overflow:'hidden', marginBottom:12 }}>
-        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderBottom:'1px solid var(--border)', background:'var(--gold-dim)' }}>
-          <div style={{ fontSize:13, fontWeight:700, color:'var(--gold)' }}>📲 Pedido de Plataforma</div>
-          <div onClick={onCerrar} style={{ width:26, height:26, borderRadius:7, background:'rgba(255,255,255,0.06)', border:'0.5px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', fontSize:14, color:'var(--text3)' }}>×</div>
-        </div>
-        <div style={{ padding:'16px 14px' }}>
-          <div style={{ fontSize:12, color:'var(--text3)', marginBottom:12, textAlign:'center' }}>¿De dónde llegó el pedido?</div>
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10 }}>
-            {PLATAFORMAS.map(p => (
-              <div key={p.id} onClick={() => setPlataforma(p.id)} style={{
-                padding:isMobile?12:16, borderRadius:12, cursor:'pointer', textAlign:'center',
-                border:`1px solid ${p.color}44`, background:p.color+'15',
-                display:'flex', flexDirection:'column', alignItems:'center', gap:6,
-              }}>
-                <div style={{ fontSize:isMobile?28:32 }}>{p.emoji}</div>
-                <div style={{ fontSize:12, fontWeight:800, color:p.color }}>{p.nombre}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div style={{ background:'var(--bg3)', borderRadius:14, border:`1px solid ${colorPlat}44`, overflow:'hidden', marginBottom:12 }}>
-      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderBottom:'1px solid var(--border)', background:colorPlat+'15' }}>
-        <div style={{ fontSize:13, fontWeight:700, color:colorPlat }}>
-          {PLATAFORMAS.find(p=>p.id===plataforma)?.emoji} Pedido {PLATAFORMAS.find(p=>p.id===plataforma)?.nombre}
-        </div>
-        <div style={{ display:'flex', gap:8 }}>
-          <div onClick={() => setPlataforma(null)} style={{ fontSize:11, color:'var(--text3)', cursor:'pointer' }}>Cambiar</div>
-          <div onClick={onCerrar} style={{ width:26, height:26, borderRadius:7, background:'rgba(255,255,255,0.06)', border:'0.5px solid var(--border)', display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', fontSize:14, color:'var(--text3)' }}>×</div>
-        </div>
-      </div>
-
-      <div style={{ padding:'12px 14px' }}>
-        {/* Grilla única de TODOS los productos de TODAS las categorías — un
-            toque agrega ya completo, sin pasos. Mismo tamaño de tarjeta para
-            cualquier producto, igual que en el flujo normal. */}
-        <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>TOCA PARA AGREGAR</div>
-        <div style={{ display:'grid', gridTemplateColumns:`repeat(${isMobile?2:4},1fr)`, gap:8, marginBottom:16 }}>
-          {PRODUCTOS.map(p => (
-            <div key={p.id} onClick={() => agregarRapido('hotdog', { producto:p, salchicha:SALCHICHAS[0], tipo:'solo' })} style={{ padding:10, borderRadius:10, cursor:'pointer', textAlign:'center', border:'1px solid var(--border)', background:'rgba(255,255,255,0.03)' }}>
-              <div style={{ fontSize:24 }}>{p.emoji}</div>
-              <div style={{ fontSize:11, fontWeight:700, color:'var(--text)' }}>{p.nombre}</div>
-              <div style={{ fontSize:10, color:'var(--gold)', fontWeight:700 }}>{cop(p.precioSolo)}</div>
-            </div>
-          ))}
-          {BURGERS.map(b => (
-            <div key={b.id} onClick={() => agregarRapido('burger', { burger:b })} style={{ padding:10, borderRadius:10, cursor:'pointer', textAlign:'center', border:'1px solid var(--border)', background:'rgba(255,255,255,0.03)' }}>
-              <div style={{ fontSize:24 }}>{b.emoji}</div>
-              <div style={{ fontSize:11, fontWeight:700, color:'var(--text)' }}>{b.nombre}</div>
-              <div style={{ fontSize:10, color:'var(--gold)', fontWeight:700 }}>{cop(b.precio)}</div>
-            </div>
-          ))}
-          <div onClick={() => agregarRapido('fries', {})} style={{ padding:10, borderRadius:10, cursor:'pointer', textAlign:'center', border:'1px solid var(--border)', background:'rgba(255,255,255,0.03)' }}>
-            <div style={{ fontSize:24 }}>{FRIES_Z.emoji}</div>
-            <div style={{ fontSize:11, fontWeight:700, color:'var(--text)' }}>{FRIES_Z.nombre}</div>
-            <div style={{ fontSize:10, color:'var(--gold)', fontWeight:700 }}>{cop(FRIES_Z.precio)}</div>
-          </div>
-          {PALETAS.map(p => (
-            <div key={p.id} onClick={() => agregarRapido('paleta', { paleta:p })} style={{ padding:10, borderRadius:10, cursor:'pointer', textAlign:'center', border:'1px solid var(--border)', background:'rgba(255,255,255,0.03)' }}>
-              <div style={{ fontSize:24 }}>{p.emoji}</div>
-              <div style={{ fontSize:11, fontWeight:700, color:'var(--text)' }}>{p.nombre}</div>
-              <div style={{ fontSize:10, color:'var(--gold)', fontWeight:700 }}>{cop(p.precio)}</div>
-            </div>
-          ))}
-          <div onClick={() => agregarRapido('kids', {})} style={{ padding:10, borderRadius:10, cursor:'pointer', textAlign:'center', border:'1px solid var(--border)', background:'rgba(255,255,255,0.03)' }}>
-            <div style={{ fontSize:24 }}>{KIDS_ZABU.emoji}</div>
-            <div style={{ fontSize:11, fontWeight:700, color:'var(--text)' }}>{KIDS_ZABU.nombre}</div>
-            <div style={{ fontSize:10, color:'var(--gold)', fontWeight:700 }}>{cop(KIDS_ZABU.precio)}</div>
-          </div>
-          {BEBIDAS.map(b => (
-            <div key={b.id} onClick={() => agregarRapido('bebida', { bebidaItem:b })} style={{ padding:10, borderRadius:10, cursor:'pointer', textAlign:'center', border:`1px solid ${b.color}33`, background:b.color+'11' }}>
-              <div style={{ fontSize:24 }}>{b.emoji}</div>
-              <div style={{ fontSize:11, fontWeight:700, color:'var(--text)' }}>{b.nombre}</div>
-              <div style={{ fontSize:10, color:b.color, fontWeight:700 }}>{cop(b.precio)}</div>
-            </div>
-          ))}
-          {EXTRAS.map(e => (
-            <div key={e.id} onClick={() => agregarRapido('extra', { extraItem:e })} style={{ padding:10, borderRadius:10, cursor:'pointer', textAlign:'center', border:'1px solid var(--border)', background:'rgba(255,255,255,0.03)' }}>
-              <div style={{ fontSize:24 }}>{e.emoji}</div>
-              <div style={{ fontSize:11, fontWeight:700, color:'var(--text)' }}>{e.nombre}</div>
-              <div style={{ fontSize:10, color:'var(--gold)', fontWeight:700 }}>{cop(e.precio)}</div>
-            </div>
-          ))}
-        </div>
-
-        {/* Items ya agregados — personalización rápida de toppings inline */}
-        {itemsPlat.length > 0 && (
-          <div style={{ marginBottom:16 }}>
-            <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>EN EL PEDIDO ({itemsPlat.length})</div>
-            {itemsPlat.map(item => (
-              <div key={item.id} style={{ background:'rgba(255,255,255,0.03)', borderRadius:10, border:'1px solid var(--border)', padding:'10px 12px', marginBottom:8 }}>
-                <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom: tieneToppings(item) ? 8 : 0 }}>
-                  <div style={{ fontSize:12, fontWeight:700, color:'var(--text)' }}>{emojiItem(item)} {nombreItem(item)}</div>
-                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
-                    <span style={{ fontSize:13, fontWeight:800, color:'var(--gold)' }}>{cop(precioItem(item))}</span>
-                    <div onClick={() => eliminarItem(item.id)} style={{ cursor:'pointer', color:'var(--text4)', fontSize:14 }}>×</div>
-                  </div>
-                </div>
-                {tieneToppings(item) && (
-                  <ToppingsToggle toppings={toppingsDe(item)} quitados={item.toppingsQuitados||[]}
-                    onToggle={(id) => { const q=item.toppingsQuitados||[]; actualizarItem(item.id, {...item, toppingsQuitados: q.includes(id)?q.filter(x=>x!==id):[...q,id]}) }}
-                    isMobile={isMobile} />
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {itemsPlat.length > 0 && (
-          <button className="btn-gold" style={{ width:'100%', padding:'14px', fontSize:15, fontWeight:800 }}
-            onClick={() => onConfirmar(plataforma, itemsPlat, total)}>
-            Continuar a pago · {cop(total)} →
-          </button>
-        )}
-      </div>
-    </div>
-  )
-}
-
 export default function ZabuPOS({ usuario }) {
   const [items,           setItems]           = useState([nuevoItemVacio()])
   const [fasePago,        setFasePago]        = useState(false)
@@ -1031,8 +1006,13 @@ export default function ZabuPOS({ usuario }) {
   const [ordenActual,     setOrdenActual]     = useState(null)
   const [confirmado,      setConfirmado]      = useState(false)
   const [ordenConfirmada, setOrdenConfirmada] = useState(null)
-  const [modoPlataforma,  setModoPlataforma]  = useState(false)
-  const [plataformaActiva,setPlataformaActiva]= useState('directo') // se fija al confirmar un pedido de plataforma
+  // plataformaActiva ahora se fija directamente al elegir la entrega
+  // (Rappi/DiDi como opción de primer nivel, junto a Aquí/Llevar/Domicilio
+  // directo) — ya no existe un modo de captura aparte para plataformas,
+  // todo pedido se arma con el mismo flujo de categorías para minimizar
+  // error de transcripción.
+  const [plataformaActiva,setPlataformaActiva]= useState('directo')
+  const [numPedidoPlataforma, setNumPedidoPlataforma] = useState('') // código/número que asigna Rappi o DiDi
 
   const isMobile       = window.innerWidth < 768
   const totalPrecio    = items.reduce((s,i) => s+precioItem(i), 0)
@@ -1068,18 +1048,19 @@ export default function ZabuPOS({ usuario }) {
       num, codigo, items: itemsCompletos.length?itemsCompletos:items, total: totalPrecio,
       entrega, nombreCliente, direccion, telefono, pagos: pagosNetos, cambio,
       utensilios: UTENSILIOS[entrega]||[], plataforma: plataformaActiva,
+      codigoPlataforma: numPedidoPlataforma || null,
       hora: new Date().toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}),
     }
     await supabase.from('ordenes').insert({
       num, carrito_id: CARRITO_ID, items: orden.items,
       entrega, nombre_cliente: nombreCliente, direccion, telefono,
       pagos: pagosNetos, total: totalPrecio, cambio, estado:'pendiente',
-      canal: plataformaActiva,
+      canal: plataformaActiva, codigo_plataforma: numPedidoPlataforma || null,
       hora: orden.hora, fecha: new Date().toISOString().split('T')[0],
     })
     await supabase.from('movimientos').insert({
       fecha: new Date().toISOString().split('T')[0],
-      descripcion: `Venta ${codigo} — ${orden.items.length} item(s)${plataformaActiva!=='directo'?` · ${plataformaActiva}`:''}`,
+      descripcion: `Venta ${codigo} — ${orden.items.length} item(s)${plataformaActiva!=='directo'?` · ${plataformaActiva}${numPedidoPlataforma?` (${numPedidoPlataforma})`:''}`:''}`,
       tipo:'ingreso', categoria:'Ventas', monto: totalPrecio,
       carrito: CARRITO_ID, carrito_id: CARRITO_ID,
     })
@@ -1120,9 +1101,9 @@ export default function ZabuPOS({ usuario }) {
         if (item.categoria === 'burger') return item.bebidaSuelta
           ? { codigo:'4140', nombre:'Ventas — combos con bebida' }
           : { codigo:'4137', nombre:'Ventas — Hamburguesa (venta directa)' }
-        if (item.categoria === 'paleta') return { codigo:'4152', nombre:'Ventas — Paleta Z' }
-        if (item.categoria === 'kids')   return { codigo:'4154', nombre:'Ventas — Kids ZABÚ' }
-        // Fries Z, Bebida suelta, Extra suelto → venta suelta genérica
+        if (item.categoria === 'paleta')     return { codigo:'4152', nombre:'Ventas — Paleta Z' }
+        if (item.categoria === 'kids')       return { codigo:'4154', nombre:'Ventas — Kids ZABÚ' }
+        // Salchipapa Z, Fries Z, Granizado, Bebida suelta, Extra → venta suelta
         return { codigo:'4150', nombre:'Ventas — bebidas y extras sueltos' }
       }
 
@@ -1159,19 +1140,7 @@ export default function ZabuPOS({ usuario }) {
     setNombreCliente(''); setDireccion(''); setTelefono('')
     setPagos([{metodo:'efectivo',monto:''}])
     setConfirmado(false); setOrdenConfirmada(null); setOrdenActual(null)
-    setModoPlataforma(false); setPlataformaActiva('directo')
-  }
-
-  // Cuando se confirma un "Pedido de Plataforma": toma los items armados en
-  // esa pantalla simplificada, los carga al carrito normal, fija la
-  // plataforma, y entrega automáticamente de una vez (los domicilios de
-  // plataforma siempre son "domicilio" — la app del repartidor lo recoge).
-  const confirmarDesdePlataforma = (plataforma, itemsDePlat, total) => {
-    setItems(itemsDePlat)
-    setPlataformaActiva(plataforma)
-    setEntrega('domicilio')
-    setModoPlataforma(false)
-    setFasePago(true)
+    setPlataformaActiva('directo'); setNumPedidoPlataforma('')
   }
 
   const cardBase = {
@@ -1231,20 +1200,13 @@ export default function ZabuPOS({ usuario }) {
         <div style={{ overflowY:'auto', padding:isMobile?'12px':'16px 20px', borderRight:isMobile?'none':'1px solid var(--border)', background:'var(--bg)', borderBottom:isMobile?'1px solid var(--border)':'none' }}>
           {!fasePago ? (
             <>
-              {/* Único modo aparte del flujo normal: Pedido de Plataforma.
-                  "Venta rápida" ya no existe como modo separado — ahora
-                  Bebida y Extra son categorías más dentro del mismo selector
-                  unificado de abajo, con el mismo peso visual que Hot Dog,
-                  Hamburguesa, Fries Z, Paleta Z y Kids ZABÚ. */}
-              {!modoPlataforma && (
-                <div onClick={() => setModoPlataforma(true)} style={{ display:'flex', alignItems:'center', justifyContent:'center', gap:8, padding:'10px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'rgba(255,68,31,0.1)', border:'1px solid rgba(255,68,31,0.3)', color:'#FF441F', marginBottom:12 }}>
-                  📲 Pedido de Plataforma
-                </div>
-              )}
-              {modoPlataforma && (
-                <PedidoPlataforma isMobile={isMobile} onCerrar={() => setModoPlataforma(false)} onConfirmar={confirmarDesdePlataforma} />
-              )}
-              {!modoPlataforma && items.map((item, i) => (
+              {/* Ya no existe ningún modo de captura aparte. TODO pedido —
+                  sin importar de dónde llegue (mostrador, Rappi, DiDi)— se
+                  arma con el mismo flujo de categorías de abajo, para
+                  minimizar el riesgo de transcribir mal un producto o
+                  topping. La plataforma se elige al final, junto con el
+                  resto de opciones de entrega (ver fase de pago). */}
+              {items.map((item, i) => (
                 <ItemConstructor key={item.id} item={item}
                   onChange={(newItem) => updateItem(item.id, newItem)}
                   onAgregar={agregarItem}
@@ -1253,7 +1215,7 @@ export default function ZabuPOS({ usuario }) {
                   isMobile={isMobile}
                 />
               ))}
-              {!modoPlataforma && todosCompletos && (
+              {todosCompletos && (
                 <div style={{ display:'flex', gap:10, marginTop:4 }}>
                   <button onClick={agregarItem} style={{ flex:1, padding:'11px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'rgba(55,138,221,0.1)', border:'0.5px solid rgba(55,138,221,0.3)', color:'var(--blue)', fontFamily:'inherit' }}>+ Otro</button>
                   <button onClick={() => setFasePago(true)} style={{ flex:3, padding:'11px', borderRadius:10, cursor:'pointer', fontSize:14, fontWeight:800, background:'rgba(201,168,76,0.15)', border:'1px solid var(--gold-border)', color:'var(--gold)', fontFamily:'inherit' }}>
@@ -1290,17 +1252,29 @@ export default function ZabuPOS({ usuario }) {
               </div>
               <div className="panel" style={{ marginBottom:12 }}>
                 <div className="panel-title">¿Cómo se entrega?</div>
-                <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, marginBottom:12 }}>
+                {/* 5 opciones de entrega al mismo nivel — Rappi y DiDi ya no
+                    son un sub-paso escondido dentro de "Domicilio", son tan
+                    visibles como Aquí/Llevar. Internamente las 3 últimas
+                    siguen siendo entrega='domicilio' (mismos utensilios,
+                    misma dirección/teléfono), pero plataformaActiva guarda
+                    cuál de las 3 fue exactamente, para el asiento contable
+                    (4145) y para discriminar el canal en reportes. */}
+                <div style={{ display:'grid', gridTemplateColumns:`repeat(${isMobile?2:5},1fr)`, gap:8, marginBottom:12 }}>
                   {[
-                    {id:'aqui',label:'Aquí',emoji:'🪑',color:'var(--green)'},
-                    {id:'llevar',label:'Llevar',emoji:'🛍',color:'var(--gold)'},
-                    {id:'domicilio',label:'Domicilio',emoji:'🛵',color:'var(--blue)'},
-                  ].map(t => (
-                    <div key={t.id} onClick={() => setEntrega(t.id)} style={{ ...cardBase, border:`1px solid ${entrega===t.id?t.color+'66':'var(--border)'}`, background:entrega===t.id?t.color+'15':'rgba(255,255,255,0.03)' }}>
-                      <div style={{ fontSize:24 }}>{t.emoji}</div>
-                      <div style={{ fontSize:12, fontWeight:700, color:entrega===t.id?t.color:'var(--text)' }}>{t.label}</div>
-                    </div>
-                  ))}
+                    {id:'aqui',    plat:'directo', label:'Aquí',             emoji:'🪑', color:'var(--green)'},
+                    {id:'llevar',  plat:'directo', label:'Llevar',           emoji:'🛍', color:'var(--gold)'},
+                    {id:'domicilio',plat:'directo',label:'Domicilio directo',emoji:'🛵', color:'var(--blue)'},
+                    {id:'domicilio',plat:'rappi',  label:'Rappi',            emoji:'🛵', color:'#FF441F'},
+                    {id:'domicilio',plat:'didi',   label:'DiDi Food',        emoji:'🚗', color:'#FF7E0E'},
+                  ].map((t,i) => {
+                    const activo = entrega===t.id && plataformaActiva===t.plat
+                    return (
+                      <div key={i} onClick={() => { setEntrega(t.id); setPlataformaActiva(t.plat) }} style={{ ...cardBase, border:`1px solid ${activo?t.color+'66':'var(--border)'}`, background:activo?t.color+'15':'rgba(255,255,255,0.03)' }}>
+                        <div style={{ fontSize:24 }}>{t.emoji}</div>
+                        <div style={{ fontSize:11, fontWeight:700, color:activo?t.color:'var(--text)', textAlign:'center' }}>{t.label}</div>
+                      </div>
+                    )
+                  })}
                 </div>
                 {entrega && (
                   <div>
@@ -1319,6 +1293,14 @@ export default function ZabuPOS({ usuario }) {
                       <input type="tel" value={telefono} onChange={e=>setTelefono(e.target.value)} placeholder="300 000 0000" style={inputStyle} />
                     </div>
                   </>
+                )}
+                {entrega === 'domicilio' && (plataformaActiva === 'rappi' || plataformaActiva === 'didi') && (
+                  <div style={{ marginTop:10 }}>
+                    <div style={{ fontSize:11, color:'var(--text3)' }}>N° de pedido en {plataformaActiva === 'rappi' ? 'Rappi' : 'DiDi Food'}</div>
+                    <input type="text" value={numPedidoPlataforma} onChange={e=>setNumPedidoPlataforma(e.target.value)}
+                      placeholder={plataformaActiva === 'rappi' ? 'Ej: RP-48213' : 'Ej: DD-29104'} style={inputStyle} />
+                    <div style={{ fontSize:10, color:'var(--text4)', marginTop:4 }}>Se guarda junto a nuestro consecutivo para poder cruzarlos.</div>
+                  </div>
                 )}
                 {entrega && (
                   <div style={{ marginTop:10, padding:'8px 10px', background:'rgba(255,255,255,0.03)', borderRadius:8, border:'1px solid var(--border)' }}>
