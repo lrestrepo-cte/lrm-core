@@ -24,7 +24,7 @@ const CATEGORIAS = [
 // activados por defecto (Cream Code™, Tocineta Crispy, Piña, Papa Chongo).
 // ════════════════════════════════════════════════════════════════════════════
 const PRODUCTOS = [
-  { id:'zabu', nombre:'ZABÚ', desc:'Pan ZaBun™ · Elige tu salchicha y tu queso', precioSolo:18000, precioCombo:25000, emoji:'🌭' },
+  { id:'zabu', nombre:'ZABÚ', desc:'Pan ZaBun™ · Elige tu salchicha y tu queso', precioSolo:18000, precioCombo:24000, emoji:'🌭' },
 ]
 
 // Catálogo real de salchichas (jun-2026). Gramaje = peso paquete ÷ unidades.
@@ -61,10 +61,10 @@ const TOPPINGS_HOTDOG = [
 // Todas incluyen el combo: Fries + Gaseosa 250ml al precio indicado.
 // ════════════════════════════════════════════════════════════════════════════
 const BURGERS = [
-  { id:'classic',      nombre:'Classic Burger Z',   desc:'Blend ZABÚ · Cream Code · Cheddar · Tocineta · Lechuga · Mayo ajo', precio:25000, precioCombo:32000, emoji:'🍔' },
-  { id:'hawaii',       nombre:'Hawaii',              desc:'Blend ZABÚ · Cheddar · Piña caramelizada · Tocineta · Mayo ajo',    precio:25000, precioCombo:32000, emoji:'🍔' },
-  { id:'cheesez',      nombre:'CheesBurger Z',       desc:'Blend ZABÚ · Cheddar · Salsa ZABÚ',                                 precio:23000, precioCombo:30000, emoji:'🧀' },
-  { id:'cheesezdoble', nombre:'CheesBurger Doble',   desc:'Doble Blend ZABÚ · Doble cheddar · Salsa ZABÚ',                    precio:31000, precioCombo:38000, emoji:'🧀' },
+  { id:'classic',      nombre:'Classic Burger Z',   desc:'Blend ZABÚ · Cream Code · Cheddar · Tocineta · Lechuga · Mayo ajo', precio:25000, precioCombo:31000, emoji:'🍔' },
+  { id:'hawaii',       nombre:'Hawaii',              desc:'Blend ZABÚ · Cheddar · Piña caramelizada · Tocineta · Mayo ajo',    precio:25000, precioCombo:31000, emoji:'🍔' },
+  { id:'cheesez',      nombre:'CheesBurger Z',       desc:'Blend ZABÚ · Cheddar · Salsa ZABÚ',                                 precio:23000, precioCombo:29000, emoji:'🧀' },
+  { id:'cheesezdoble', nombre:'CheesBurger Doble',   desc:'Doble Blend ZABÚ · Doble cheddar · Salsa ZABÚ',                    precio:31000, precioCombo:37000, emoji:'🧀' },
 ]
 
 const TOPPINGS_BURGER_CLASSIC = [
@@ -547,7 +547,7 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
                 </CardSeleccion>
               ))}
             </div>
-            <button className="btn" style={{ width:'100%' }} onClick={() => onChange({...item, paso:3})}>← Volver</button>
+            <button style={{ width:'100%', padding:'10px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'rgba(255,255,255,0.06)', border:'1px solid var(--border)', color:'var(--text2)', fontFamily:'inherit' }} onClick={() => onChange({...item, paso:3})}>← Volver al tipo</button>
           </div>
         )}
         {cat === 'hotdog' && item.paso === 4 && (
@@ -996,6 +996,7 @@ ${orden.entrega==='aqui'?'🪑 Comer aquí':orden.entrega==='llevar'?'🛍 Para 
 export default function ZabuPOS({ usuario }) {
   const [items,           setItems]           = useState([nuevoItemVacio()])
   const [fasePago,        setFasePago]        = useState(false)
+  const [precuenta,       setPrecuenta]       = useState(false)
   const [entrega,         setEntrega]         = useState(null)
   const [nombreCliente,   setNombreCliente]   = useState('')
   const [direccion,       setDireccion]       = useState('')
@@ -1136,7 +1137,7 @@ export default function ZabuPOS({ usuario }) {
   }
 
   const reset = () => {
-    setItems([nuevoItemVacio()]); setFasePago(false); setEntrega(null)
+    setItems([nuevoItemVacio()]); setFasePago(false); setPrecuenta(false); setEntrega(null)
     setNombreCliente(''); setDireccion(''); setTelefono('')
     setPagos([{metodo:'efectivo',monto:''}])
     setConfirmado(false); setOrdenConfirmada(null); setOrdenActual(null)
@@ -1200,12 +1201,16 @@ export default function ZabuPOS({ usuario }) {
         <div style={{ overflowY:'auto', padding:isMobile?'12px':'16px 20px', borderRight:isMobile?'none':'1px solid var(--border)', background:'var(--bg)', borderBottom:isMobile?'1px solid var(--border)':'none' }}>
           {!fasePago ? (
             <>
-              {/* Ya no existe ningún modo de captura aparte. TODO pedido —
-                  sin importar de dónde llegue (mostrador, Rappi, DiDi)— se
-                  arma con el mismo flujo de categorías de abajo, para
-                  minimizar el riesgo de transcribir mal un producto o
-                  topping. La plataforma se elige al final, junto con el
-                  resto de opciones de entrega (ver fase de pago). */}
+              {/* Botón "Nuevo pedido" — visible siempre que haya algo armado,
+                  en cualquier punto antes de pagar. Permite borrar todo y
+                  empezar desde cero sin tener que eliminar item por item. */}
+              {items.some(i => i.categoria) && (
+                <div style={{ display:'flex', justifyContent:'flex-end', marginBottom:8 }}>
+                  <button onClick={reset} style={{ padding:'7px 14px', borderRadius:8, cursor:'pointer', fontSize:12, fontWeight:700, background:'rgba(224,82,82,0.08)', border:'1px solid rgba(224,82,82,0.25)', color:'var(--red)', fontFamily:'inherit', display:'flex', alignItems:'center', gap:6 }}>
+                    🗑 Nuevo pedido
+                  </button>
+                </div>
+              )}
               {items.map((item, i) => (
                 <ItemConstructor key={item.id} item={item}
                   onChange={(newItem) => updateItem(item.id, newItem)}
@@ -1215,18 +1220,73 @@ export default function ZabuPOS({ usuario }) {
                   isMobile={isMobile}
                 />
               ))}
-              {todosCompletos && (
-                <div style={{ display:'flex', gap:10, marginTop:4 }}>
+
+              {/* Botones de acción — aparecen cuando todos los items están completos.
+                  Tres opciones: agregar más, ver precuenta (resumen visual sin cobrar)
+                  o ir directo al cobro. */}
+              {todosCompletos && !precuenta && (
+                <div style={{ display:'flex', gap:8, marginTop:4 }}>
                   <button onClick={agregarItem} style={{ flex:1, padding:'11px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'rgba(55,138,221,0.1)', border:'0.5px solid rgba(55,138,221,0.3)', color:'var(--blue)', fontFamily:'inherit' }}>+ Otro</button>
+                  <button onClick={() => setPrecuenta(true)} style={{ flex:2, padding:'11px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'rgba(255,255,255,0.05)', border:'1px solid var(--border)', color:'var(--text2)', fontFamily:'inherit' }}>
+                    📋 Precuenta
+                  </button>
                   <button onClick={() => setFasePago(true)} style={{ flex:3, padding:'11px', borderRadius:10, cursor:'pointer', fontSize:14, fontWeight:800, background:'rgba(201,168,76,0.15)', border:'1px solid var(--gold-border)', color:'var(--gold)', fontFamily:'inherit' }}>
                     Pagar · {cop(totalPrecio)} →
                   </button>
                 </div>
               )}
+
+              {/* Panel de precuenta — resumen visual del pedido sin generar venta.
+                  Solo para que el cajero o el cliente vean el total antes de pagar.
+                  No genera asiento contable, no descuenta inventario, no crea
+                  consecutivo — es una toma de pedido, no una transacción. */}
+              {precuenta && (
+                <div style={{ background:'var(--bg3)', borderRadius:14, border:'1px solid var(--gold-border)', overflow:'hidden', marginTop:4 }}>
+                  <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderBottom:'1px solid var(--border)', background:'var(--gold-dim)' }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:'var(--gold)' }}>📋 Precuenta</div>
+                    <div onClick={() => setPrecuenta(false)} style={{ fontSize:11, color:'var(--text3)', cursor:'pointer' }}>× Cerrar</div>
+                  </div>
+                  <div style={{ padding:'12px 14px' }}>
+                    {itemsCompletos.map((item, i) => (
+                      <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'7px 0', borderBottom:'1px solid rgba(255,255,255,0.04)' }}>
+                        <div style={{ fontSize:13, color:'var(--text2)', fontWeight:600 }}>
+                          {emojiItem(item)} {nombreItem(item)}
+                          {item.salchicha && <span style={{ fontSize:11, color:'var(--text3)' }}> · {item.salchicha.nombre}</span>}
+                          {item.quesoElegido && <span style={{ fontSize:11, color:'var(--text3)' }}> · {item.quesoElegido.nombre}</span>}
+                          {item.tipo && <span style={{ fontSize:11, color:'var(--text3)' }}> · {item.tipo === 'solo' ? 'Solo' : 'Combo'}</span>}
+                        </div>
+                        <div style={{ fontSize:13, fontWeight:700, color:'var(--gold)', flexShrink:0, marginLeft:12 }}>{cop(precioItem(item))}</div>
+                      </div>
+                    ))}
+                    <div style={{ display:'flex', justifyContent:'space-between', padding:'12px 0 4px', marginTop:4, borderTop:'2px solid var(--border)' }}>
+                      <span style={{ fontSize:15, fontWeight:800, color:'var(--text)' }}>TOTAL</span>
+                      <span style={{ fontSize:22, fontWeight:900, color:'var(--gold)' }}>{cop(totalPrecio)}</span>
+                    </div>
+                    <div style={{ display:'flex', gap:8, marginTop:12 }}>
+                      <button onClick={() => { setPrecuenta(false); agregarItem() }} style={{ flex:1, padding:'10px', borderRadius:10, cursor:'pointer', fontSize:12, fontWeight:700, background:'rgba(55,138,221,0.1)', border:'0.5px solid rgba(55,138,221,0.3)', color:'var(--blue)', fontFamily:'inherit' }}>+ Agregar</button>
+                      <button onClick={() => { setPrecuenta(false) }} style={{ flex:1, padding:'10px', borderRadius:10, cursor:'pointer', fontSize:12, fontWeight:700, background:'rgba(255,255,255,0.05)', border:'1px solid var(--border)', color:'var(--text2)', fontFamily:'inherit' }}>✏️ Editar</button>
+                      <button onClick={() => { setPrecuenta(false); setFasePago(true) }} style={{ flex:2, padding:'10px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:800, background:'rgba(201,168,76,0.15)', border:'1px solid var(--gold-border)', color:'var(--gold)', fontFamily:'inherit' }}>
+                        Cobrar · {cop(totalPrecio)} →
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </>
           ) : (
             <>
-              <button onClick={() => setFasePago(false)} style={{ fontSize:12, color:'var(--text3)', background:'none', border:'none', cursor:'pointer', fontFamily:'inherit', marginBottom:14 }}>← Volver a editar</button>
+              {/* Navegación de la fase de pago — siempre visibles, con peso
+                  visual suficiente para que el cajero no los pierda de vista */}
+              <div style={{ display:'flex', gap:8, marginBottom:16 }}>
+                <button onClick={() => { setFasePago(false); setPrecuenta(false) }}
+                  style={{ flex:2, padding:'11px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'rgba(255,255,255,0.06)', border:'1px solid var(--border)', color:'var(--text2)', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                  ← Volver a editar
+                </button>
+                <button onClick={reset}
+                  style={{ flex:1, padding:'11px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'rgba(224,82,82,0.1)', border:'1px solid rgba(224,82,82,0.3)', color:'var(--red)', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:6 }}>
+                  🗑 Cancelar
+                </button>
+              </div>
               {plataformaActiva !== 'directo' && (
                 <div style={{ display:'flex', alignItems:'center', gap:8, padding:'8px 12px', borderRadius:10, marginBottom:12, background:'rgba(255,68,31,0.1)', border:'1px solid rgba(255,68,31,0.3)' }}>
                   <span style={{ fontSize:16 }}>{PLATAFORMAS.find(p=>p.id===plataformaActiva)?.emoji}</span>
@@ -1350,7 +1410,6 @@ export default function ZabuPOS({ usuario }) {
               {entrega && pagoCompleto && (
                 <button className="btn-green" onClick={confirmar} style={{ fontSize:15, fontWeight:800 }}>✓ Confirmar · {cop(totalPrecio)}</button>
               )}
-              <button className="btn" style={{ width:'100%', marginTop:8 }} onClick={reset}>Cancelar</button>
             </>
           )}
         </div>
