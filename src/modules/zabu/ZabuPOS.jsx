@@ -24,7 +24,7 @@ const CATEGORIAS = [
 // activados por defecto (Cream Code™, Tocineta Crispy, Piña, Papa Chongo).
 // ════════════════════════════════════════════════════════════════════════════
 const PRODUCTOS = [
-  { id:'zabu', nombre:'ZABÚ', desc:'Pan ZaBun™ · Elige tu salchicha y tu queso', precioSolo:18000, precioCombo:24000, emoji:'🌭' },
+  { id:'zabu', nombre:'ZABÚ', desc:'Pan ZaBun™ · Elige tu salchicha y tu queso', precioSolo:18000, precioCombo:25000, emoji:'🌭' },
 ]
 
 // Catálogo real de salchichas (jun-2026). Gramaje = peso paquete ÷ unidades.
@@ -47,11 +47,12 @@ const QUESOS_HOTDOG = [
   { id:'suizo',     nombre:'Suizo',      emoji:'🧀' },
 ]
 
-// Toppings base del hot dog — TODOS activados por defecto. El cajero solo
-// toca lo que el cliente NO quiere. Precio nunca cambia por quitar toppings.
+// Toppings base del hot dog — todos activados por defecto, el cliente quita
+// lo que NO quiere. Precio nunca cambia por quitar toppings.
+// NOTA: la tocineta crispy ya NO es topping visible — va dentro de la
+// Salsa ZABÚ como ingrediente interno de la receta.
 const TOPPINGS_HOTDOG = [
   { id:'creamcode',  nombre:'Cream Code™',       emoji:'🧈', porDefecto:true },
-  { id:'tocineta',   nombre:'Tocineta crispy',   emoji:'🥓', porDefecto:true },
   { id:'pina',       nombre:'Piña caramelizada', emoji:'🍍', porDefecto:true },
   { id:'papachongo', nombre:'Papa chongo',       emoji:'🍟', porDefecto:true },
 ]
@@ -61,15 +62,17 @@ const TOPPINGS_HOTDOG = [
 // Todas incluyen el combo: Fries + Gaseosa 250ml al precio indicado.
 // ════════════════════════════════════════════════════════════════════════════
 const BURGERS = [
-  { id:'classic',      nombre:'Classic Burger Z',   desc:'Blend ZABÚ · Cream Code · Cheddar · Tocineta · Lechuga · Mayo ajo', precio:25000, precioCombo:31000, emoji:'🍔' },
-  { id:'hawaii',       nombre:'Hawaii',              desc:'Blend ZABÚ · Cheddar · Piña caramelizada · Tocineta · Mayo ajo',    precio:25000, precioCombo:31000, emoji:'🍔' },
-  { id:'cheesez',      nombre:'CheesBurger Z',       desc:'Blend ZABÚ · Cheddar · Salsa ZABÚ',                                 precio:23000, precioCombo:29000, emoji:'🧀' },
-  { id:'cheesezdoble', nombre:'CheesBurger Doble',   desc:'Doble Blend ZABÚ · Doble cheddar · Salsa ZABÚ',                    precio:31000, precioCombo:37000, emoji:'🧀' },
+  { id:'classic',      nombre:'Classic Burger Z',   desc:'Blend ZABÚ · Cream Code · Cheddar · Lechuga · Mayo ajo',           precio:25000, precioCombo:32000, emoji:'🍔' },
+  { id:'hawaii',       nombre:'Hawaii',              desc:'Blend ZABÚ · Cheddar · Piña caramelizada · Mayo ajo',              precio:25000, precioCombo:32000, emoji:'🍔' },
+  { id:'cheesez',      nombre:'CheesBurger Z',       desc:'Blend ZABÚ · Cheddar · Salsa ZABÚ',                                precio:23000, precioCombo:30000, emoji:'🧀' },
+  { id:'cheesezdoble', nombre:'CheesBurger Doble',   desc:'Doble Blend ZABÚ · Doble cheddar · Salsa ZABÚ',                   precio:31000, precioCombo:38000, emoji:'🧀' },
 ]
 
+// Toppings de las burgers — todos activados por defecto, el cliente quita
+// lo que NO quiere. La tocineta crispy ya no es topping visible — va dentro
+// de la Salsa ZABÚ como ingrediente interno de la receta.
 const TOPPINGS_BURGER_CLASSIC = [
-  { id:'creamcode',    nombre:'Cream Code™',          emoji:'🧈', porDefecto:true },
-  { id:'tocineta',     nombre:'Tocineta crispy',      emoji:'🥓', porDefecto:true },
+  { id:'creamcode',    nombre:'Cream Code™',         emoji:'🧈', porDefecto:true },
   { id:'quesocheddar', nombre:'Queso cheddar',        emoji:'🧀', porDefecto:true },
   { id:'lechuga',      nombre:'Lechuga romana',       emoji:'🥬', porDefecto:true },
   { id:'mayoajo',      nombre:'Mayo de ajo ahumada',  emoji:'🧄', porDefecto:true },
@@ -77,7 +80,6 @@ const TOPPINGS_BURGER_CLASSIC = [
 const TOPPINGS_BURGER_HAWAII = [
   { id:'quesocheddar', nombre:'Queso cheddar',        emoji:'🧀', porDefecto:true },
   { id:'pina',         nombre:'Piña caramelizada',    emoji:'🍍', porDefecto:true },
-  { id:'tocineta',     nombre:'Tocineta crispy',      emoji:'🥓', porDefecto:true },
   { id:'mayoajo',      nombre:'Mayo de ajo ahumada',  emoji:'🧄', porDefecto:true },
 ]
 const TOPPINGS_BURGER_CHEESEZ = [
@@ -252,7 +254,9 @@ function precioItem(item) {
     return base + item.extras.reduce((s,e) => s+e.precio, 0) + (item.bebidaSuelta?.precio || 0)
   }
   if (item.categoria === 'burger') {
-    return (item.burger?.precio || 0) + (item.bebidaSuelta?.precio || 0)
+    if (!item.burger) return 0
+    const base = item.tipo === 'combo' ? (item.burger.precioCombo || item.burger.precio + 7000) : item.burger.precio
+    return base + (item.bebidaSuelta?.precio || 0)
   }
   if (item.categoria === 'salchipapa') return SALCHIPAPA_Z.precio
   if (item.categoria === 'fries')      return item.friesItem?.precio || FRIES_ITEMS[0].precio
@@ -368,7 +372,7 @@ function CardSeleccion({ sel, color, isMobile, onClick, children }) {
 // ════════════════════════════════════════════════════════════════════════════
 function pasosDe(categoria) {
   if (categoria === 'hotdog')     return [{paso:1,label:'Producto'},{paso:2,label:'Salchicha'},{paso:'queso',label:'Queso'},{paso:3,label:'Tipo'},{paso:4,label:'Toppings'}]
-  if (categoria === 'burger')     return [{paso:1,label:'Producto'},{paso:4,label:'Toppings'}]
+  if (categoria === 'burger')     return [{paso:1,label:'Producto'},{paso:3,label:'Solo/Combo'},{paso:4,label:'Toppings'}]
   if (categoria === 'salchipapa') return [{paso:1,label:'Queso'}]
   if (categoria === 'fries')      return [{paso:1,label:'Tipo'}]
   if (categoria === 'paleta')     return [{paso:1,label:'Sabor'}]
@@ -520,26 +524,40 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
           </div>
         )}
         {cat === 'hotdog' && item.paso === 3 && (
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-            <CardSeleccion isMobile={isMobile} sel={item.tipo==='solo'} onClick={() => onChange({...item, tipo:'solo', bebida:null, paso:4})}>
-              <div style={{ fontSize:isMobile?28:32 }}>🌭</div>
-              <div style={{ fontSize:13, fontWeight:800, color:'var(--text)' }}>Solo</div>
-              <div style={{ fontSize:10, color:'var(--text3)' }}>Solo el perro</div>
-              <div style={{ fontSize:14, fontWeight:800, color:'var(--gold)' }}>{cop(item.producto?.precioSolo)}</div>
-            </CardSeleccion>
-            <CardSeleccion isMobile={isMobile} sel={item.tipo==='combo'} onClick={() => onChange({...item, tipo:'combo', paso:'bebida'})}>
-              <div style={{ fontSize:isMobile?28:32 }}>🥤</div>
-              <div style={{ fontSize:13, fontWeight:800, color:'var(--text)' }}>Combo</div>
-              <div style={{ fontSize:10, color:'var(--text3)' }}>Perro + bebida</div>
-              <div style={{ fontSize:14, fontWeight:800, color:'var(--gold)' }}>{cop(item.producto?.precioCombo)}</div>
-            </CardSeleccion>
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:2 }}>¿CÓMO LO QUIERE?</div>
+            {/* Botones grandes para minimizar error — es la decisión de precio
+                más importante del pedido */}
+            <div onClick={() => onChange({...item, tipo:'solo', bebida:null, paso:4})}
+              style={{ padding:isMobile?16:20, borderRadius:14, cursor:'pointer', border:`2px solid ${item.tipo==='solo'?'var(--gold-border)':'var(--border)'}`, background:item.tipo==='solo'?'rgba(201,168,76,0.1)':'rgba(255,255,255,0.03)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                <div style={{ fontSize:isMobile?32:40 }}>🌭</div>
+                <div>
+                  <div style={{ fontSize:16, fontWeight:900, color:'var(--text)' }}>SOLO</div>
+                  <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>Solo el perro</div>
+                </div>
+              </div>
+              <div style={{ fontSize:22, fontWeight:900, color:'var(--gold)' }}>{cop(item.producto?.precioSolo)}</div>
+            </div>
+            <div onClick={() => onChange({...item, tipo:'combo', paso:'bebida'})}
+              style={{ padding:isMobile?16:20, borderRadius:14, cursor:'pointer', border:`2px solid ${item.tipo==='combo'?'var(--gold-border)':'var(--border)'}`, background:item.tipo==='combo'?'rgba(201,168,76,0.1)':'rgba(255,255,255,0.03)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                <div style={{ fontSize:isMobile?32:40 }}>🥤</div>
+                <div>
+                  <div style={{ fontSize:16, fontWeight:900, color:'var(--text)' }}>COMBO</div>
+                  <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>+ Fries (100g) + Bebida 250ml</div>
+                  <div style={{ fontSize:10, color:'var(--gold)', marginTop:1 }}>+$7.000</div>
+                </div>
+              </div>
+              <div style={{ fontSize:22, fontWeight:900, color:'var(--gold)' }}>{cop(item.producto?.precioCombo)}</div>
+            </div>
           </div>
         )}
-        {cat === 'hotdog' && item.paso === 'bebida' && (
+        {(cat === 'hotdog' || cat === 'burger') && item.paso === 'bebida' && (
           <div>
-            <div style={{ fontSize:11, color:'var(--gold)', letterSpacing:1, fontWeight:700, marginBottom:10 }}>SELECCIONA LA BEBIDA DEL COMBO</div>
+            <div style={{ fontSize:11, color:'var(--gold)', letterSpacing:1, fontWeight:700, marginBottom:10 }}>SELECCIONA LA BEBIDA DEL COMBO (250ml)</div>
             <div style={{ display:'grid', gridTemplateColumns:`repeat(${isMobile?3:4},1fr)`, gap:8, marginBottom:12 }}>
-              {BEBIDAS.map(b => (
+              {BEBIDAS.filter(b => b.precio <= 4000).map(b => (
                 <CardSeleccion key={b.id} isMobile={isMobile} sel={item.bebida?.id===b.id} color={b.color} onClick={() => onChange({...item, bebida:b, paso:4})}>
                   <div style={{ fontSize:isMobile?20:24 }}>{b.emoji}</div>
                   <div style={{ fontSize:10, fontWeight:600, color:'var(--text)', lineHeight:1.3 }}>{b.nombre}</div>
@@ -547,7 +565,7 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
                 </CardSeleccion>
               ))}
             </div>
-            <button style={{ width:'100%', padding:'10px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'rgba(255,255,255,0.06)', border:'1px solid var(--border)', color:'var(--text2)', fontFamily:'inherit' }} onClick={() => onChange({...item, paso:3})}>← Volver al tipo</button>
+            <button style={{ width:'100%', padding:'10px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'rgba(255,255,255,0.06)', border:'1px solid var(--border)', color:'var(--text2)', fontFamily:'inherit' }} onClick={() => onChange({...item, paso:3})}>← Volver</button>
           </div>
         )}
         {cat === 'hotdog' && item.paso === 4 && (
@@ -558,13 +576,42 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
         {cat === 'burger' && item.paso === 1 && (
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
             {BURGERS.map(b => (
-              <CardSeleccion key={b.id} isMobile={isMobile} sel={false} onClick={() => onChange({...item, burger:b, paso:4})}>
+              <CardSeleccion key={b.id} isMobile={isMobile} sel={false} onClick={() => onChange({...item, burger:b, paso:3})}>
                 <div style={{ fontSize:isMobile?28:36 }}>{b.emoji}</div>
                 <div style={{ fontSize:13, fontWeight:800, color:'var(--text)' }}>{b.nombre}</div>
                 <div style={{ fontSize:10, color:'var(--text3)' }}>{b.desc}</div>
                 <div style={{ fontSize:13, color:'var(--gold)', fontWeight:700 }}>{cop(b.precio)}</div>
               </CardSeleccion>
             ))}
+          </div>
+        )}
+        {/* ── BURGER — Solo o Combo ── */}
+        {cat === 'burger' && item.paso === 3 && (
+          <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+            <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:2 }}>¿CÓMO LA QUIERE?</div>
+            <div onClick={() => onChange({...item, tipo:'solo', bebida:null, paso:4})}
+              style={{ padding:isMobile?16:20, borderRadius:14, cursor:'pointer', border:`2px solid ${item.tipo==='solo'?'var(--gold-border)':'var(--border)'}`, background:item.tipo==='solo'?'rgba(201,168,76,0.1)':'rgba(255,255,255,0.03)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                <div style={{ fontSize:isMobile?32:40 }}>🍔</div>
+                <div>
+                  <div style={{ fontSize:16, fontWeight:900, color:'var(--text)' }}>SOLO</div>
+                  <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>Solo la hamburguesa</div>
+                </div>
+              </div>
+              <div style={{ fontSize:22, fontWeight:900, color:'var(--gold)' }}>{cop(item.burger?.precio)}</div>
+            </div>
+            <div onClick={() => onChange({...item, tipo:'combo', paso:'bebida'})}
+              style={{ padding:isMobile?16:20, borderRadius:14, cursor:'pointer', border:`2px solid ${item.tipo==='combo'?'var(--gold-border)':'var(--border)'}`, background:item.tipo==='combo'?'rgba(201,168,76,0.1)':'rgba(255,255,255,0.03)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:12 }}>
+                <div style={{ fontSize:isMobile?32:40 }}>🥤</div>
+                <div>
+                  <div style={{ fontSize:16, fontWeight:900, color:'var(--text)' }}>COMBO</div>
+                  <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>+ Fries (100g) + Bebida 250ml</div>
+                  <div style={{ fontSize:10, color:'var(--gold)', marginTop:1 }}>+$7.000</div>
+                </div>
+              </div>
+              <div style={{ fontSize:22, fontWeight:900, color:'var(--gold)' }}>{cop((item.burger?.precio||0) + 7000)}</div>
+            </div>
           </div>
         )}
         {cat === 'burger' && item.paso === 4 && (
