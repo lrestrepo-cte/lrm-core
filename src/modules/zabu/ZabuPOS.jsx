@@ -134,40 +134,85 @@ const PALETAS = [
 ]
 
 // ════════════════════════════════════════════════════════════════════════════
-// CATÁLOGO — KIDS ZABÚ $18.000 — menú infantil unificado.
-// Tres opciones al mismo precio. Incluye papas + Jugo Hit 200ml + sorpresa.
-// ⚠️ Mini hot dog: pendiente conseguir salchicha americana de tamaño pequeño.
+// KIDS ZABÚ $18.000 — menú infantil unificado. Incluye papas + bebida (a
+// elegir: Hit 200ml o Agua 236ml, mismo precio) + sorpresa.
+// Cada opción tiene sus propios toppings/salsas discriminados.
 // ════════════════════════════════════════════════════════════════════════════
 const KIDS_OPCIONES = [
-  { id:'kids_hotdog',  nombre:'Mini Hot Dog', desc:'Salchicha · ZaBún · queso · Salsa ZABÚ · papas · Hit 200ml · sorpresa', emoji:'🌭' },
-  { id:'kids_burger',  nombre:'Mini Burger',  desc:'Carne · queso · Salsa ZABÚ · papas · Hit 200ml · sorpresa',            emoji:'🍔' },
-  { id:'kids_nuggets', nombre:'Nuggets x8',   desc:'8 nuggets de pollo · papas · Hit 200ml · sorpresa',                    emoji:'🍗' },
+  { id:'kids_hotdog',  nombre:'Mini Hot Dog',  desc:'Salchicha · ZaBún · queso · salsas',      emoji:'🌭' },
+  { id:'kids_burger',  nombre:'Mini Burger',   desc:'Carne · ZaBún · queso · salsas',           emoji:'🍔' },
+  { id:'kids_nuggets', nombre:'Nuggets x8',    desc:'8 nuggets de pollo · sin toppings',        emoji:'🍗' },
 ]
 const KIDS_PRECIO = 18000
 
+// Toppings/salsas para el Mini Hot Dog y Mini Burger del Kids
+// El cliente puede quitar lo que no quiere. Nuggets no tienen toppings.
+const TOPPINGS_KIDS_HOTDOG = [
+  { id:'creamcode',    nombre:'Cream Code™',        emoji:'🧈', porDefecto:true  },
+  { id:'salsatomate',  nombre:'Salsa de tomate',    emoji:'🍅', porDefecto:false },
+  { id:'mayoajo',      nombre:'Mayo de ajo ahumada',emoji:'🧄', porDefecto:false },
+  { id:'mostajaDijon', nombre:'Mostaza Dijon',      emoji:'💛', porDefecto:false },
+  { id:'pina',         nombre:'Piña caramelizada',  emoji:'🍍', porDefecto:false },
+]
+const TOPPINGS_KIDS_BURGER = [
+  { id:'creamcode',    nombre:'Cream Code™',        emoji:'🧈', porDefecto:true  },
+  { id:'salsatomate',  nombre:'Salsa de tomate',    emoji:'🍅', porDefecto:false },
+  { id:'mayoajo',      nombre:'Mayo de ajo ahumada',emoji:'🧄', porDefecto:false },
+  { id:'mostajaDijon', nombre:'Mostaza Dijon',      emoji:'💛', porDefecto:false },
+]
+
 // ════════════════════════════════════════════════════════════════════════════
-// CATÁLOGO — CÓCTELES GRANIZADOS $20.000 c/u (500ml) · Extra shot +$7.000
-// Luna Azul: Maracuyá + Whisky
-// Código Rojo: Fruit Punch + Ron
+// CÓCTELES GRANIZADOS $20.000 c/u (500ml) · Extra shot +$7.000
+// Luna Azul: Maracuyá + Whisky · Código Rojo: Fruit Punch + Ron
+// Blend: combinación de los dos al mismo precio $20.000
 // ════════════════════════════════════════════════════════════════════════════
 const GRANIZADOS = [
-  { id:'luna_azul',    nombre:'Luna Azul',    desc:'Maracuyá + Whisky · 500ml',   precio:20000, emoji:'🧊' },
-  { id:'codigo_rojo',  nombre:'Código Rojo',  desc:'Fruit Punch + Ron · 500ml',   precio:20000, emoji:'🧊' },
+  { id:'luna_azul',   nombre:'Luna Azul',   desc:'Maracuyá + Whisky · 500ml',          precio:20000, emoji:'🧊' },
+  { id:'codigo_rojo', nombre:'Código Rojo', desc:'Fruit Punch + Ron · 500ml',           precio:20000, emoji:'🧊' },
+  { id:'blend',       nombre:'Blend',       desc:'Luna Azul + Código Rojo · 500ml',     precio:20000, emoji:'🧊' },
 ]
 const EXTRA_SHOT = { precio:7000, nombre:'Extra Shot' }
 
 // ════════════════════════════════════════════════════════════════════════════
-// BEBIDAS Y EXTRAS
+// BEBIDAS DEL COMBO — 250ml, EXCLUSIVAS para combo. NO disponibles para
+// venta individual. Solo aparecen cuando el cliente elige combo en hot dog
+// o hamburguesa.
 // ════════════════════════════════════════════════════════════════════════════
+const BEBIDAS_COMBO = [
+  { id:'coca_combo',   nombre:'Coca Cola 250ml',   precio:0, emoji:'🥤', color:'#e05252' },
+  { id:'cokazero_combo',nombre:'Coca Zero 250ml',  precio:0, emoji:'🥤', color:'#333'    },
+  { id:'aguamanz_combo',nombre:'Agua Manzana 250ml',precio:0,emoji:'💧', color:'#4caf50' },
+  { id:'agualim_combo', nombre:'Agua Limón 250ml', precio:0, emoji:'💧', color:'#C9A84C' },
+]
+
+// BEBIDAS DE VENTA INDIVIDUAL — disponibles como item suelto o bebida
+// suelta adicional. Las del combo NO están aquí.
 const BEBIDAS = [
-  { id:'coca',      nombre:'Coca Cola 350ml',  precio:4000, emoji:'🥤', color:'#e05252' },
-  { id:'colaroman', nombre:'Cola Román 350ml', precio:4000, emoji:'🥤', color:'#9C27B0' },
-  { id:'quatro',    nombre:'Quatro 350ml',     precio:4000, emoji:'🥤', color:'#FF9800' },
-  { id:'cokazero',  nombre:'Coca Zero 350ml',  precio:4000, emoji:'🥤', color:'#333'    },
-  { id:'colombiana',nombre:'Colombiana 350ml', precio:4000, emoji:'🥤', color:'#C9A84C' },
-  { id:'hitjugo',   nombre:'Jugo Hit 200ml',   precio:4000, emoji:'🧃', color:'#FF9800' },
-  { id:'hatsu',     nombre:'Té Hatsu 400ml',   precio:6000, emoji:'🍵', color:'#4caf50' },
-  { id:'agua',      nombre:'Agua Mineral 500ml',precio:4000, emoji:'💧', color:'#378ADD' },
+  { id:'coca',       nombre:'Coca Cola 350ml',    precio:4000, emoji:'🥤', color:'#e05252' },
+  { id:'colaroman',  nombre:'Cola Román 350ml',   precio:4000, emoji:'🥤', color:'#9C27B0' },
+  { id:'quatro',     nombre:'Quatro 350ml',       precio:4000, emoji:'🥤', color:'#FF9800' },
+  { id:'cokazero',   nombre:'Coca Zero 350ml',    precio:4000, emoji:'🥤', color:'#333'    },
+  { id:'colombiana', nombre:'Colombiana 350ml',   precio:4000, emoji:'🥤', color:'#C9A84C' },
+  { id:'hatsu',      nombre:'Té Hatsu 400ml',     precio:6000, emoji:'🍵', color:'#4caf50' },
+  { id:'agua500',    nombre:'Agua MS 500ml',      precio:4000, emoji:'💧', color:'#378ADD' },
+]
+
+// BEBIDAS DEL MENÚ KIDS — a elegir sin costo extra (incluido en los $18.000)
+const BEBIDAS_KIDS = [
+  { id:'hit_kids',   nombre:'Jugo Hit 200ml',    emoji:'🧃', color:'#FF9800' },
+  { id:'agua_kids',  nombre:'Agua 236ml',         emoji:'💧', color:'#378ADD' },
+]
+
+// ════════════════════════════════════════════════════════════════════════════
+// SALSAS DISPONIBLES — para personalizar hot dog, burger y kids.
+// El cliente quita/agrega según preferencia. Cream Code™ viene por defecto.
+// ════════════════════════════════════════════════════════════════════════════
+const SALSAS = [
+  { id:'creamcode',  nombre:'Cream Code™',        emoji:'🧈', porDefecto:true  },
+  { id:'salsatomate',nombre:'Salsa de tomate',    emoji:'🍅', porDefecto:false },
+  { id:'mayoajo',    nombre:'Mayo de ajo ahumada',emoji:'🧄', porDefecto:false },
+  { id:'mostajaDijon',nombre:'Mostaza Dijon',     emoji:'💛', porDefecto:false },
+  { id:'pina',       nombre:'Piña caramelizada',  emoji:'🍍', porDefecto:true  },
 ]
 
 const EXTRAS = [
@@ -262,7 +307,7 @@ function precioItem(item) {
   if (item.categoria === 'fries')      return item.friesItem?.precio || FRIES_ITEMS[0].precio
   if (item.categoria === 'paleta')     return item.paleta?.precio || 0
   if (item.categoria === 'kids')       return KIDS_PRECIO
-  if (item.categoria === 'granizado')  return item.granizado?.precio || 0
+  if (item.categoria === 'granizado')  return (item.granizado?.precio || 0) + (item.extraShot ? EXTRA_SHOT.precio : 0)
   if (item.categoria === 'bebida')     return item.bebidaItem?.precio || 0
   if (item.categoria === 'extra')      return item.extraItem?.precio || 0
   return 0
@@ -371,16 +416,62 @@ function CardSeleccion({ sel, color, isMobile, onClick, children }) {
 // editar") sea siempre la misma mecánica sin importar el producto.
 // ════════════════════════════════════════════════════════════════════════════
 function pasosDe(categoria) {
-  if (categoria === 'hotdog')     return [{paso:1,label:'Producto'},{paso:2,label:'Salchicha'},{paso:'queso',label:'Queso'},{paso:3,label:'Tipo'},{paso:4,label:'Toppings'}]
+  if (categoria === 'hotdog')     return [{paso:1,label:'Producto'},{paso:2,label:'Salchicha'},{paso:'queso',label:'Queso'},{paso:3,label:'Solo/Combo'},{paso:4,label:'Toppings'}]
   if (categoria === 'burger')     return [{paso:1,label:'Producto'},{paso:3,label:'Solo/Combo'},{paso:4,label:'Toppings'}]
   if (categoria === 'salchipapa') return [{paso:1,label:'Queso'}]
   if (categoria === 'fries')      return [{paso:1,label:'Tipo'}]
   if (categoria === 'paleta')     return [{paso:1,label:'Sabor'}]
-  if (categoria === 'kids')       return [{paso:1,label:'Opción'}]
-  if (categoria === 'granizado')  return [{paso:1,label:'Sabor'}]
+  if (categoria === 'kids')       return [{paso:1,label:'Opción'},{paso:'kids_toppings',label:'Salsas'},{paso:'kids_bebida',label:'Bebida'}]
+  if (categoria === 'granizado')  return [{paso:1,label:'Sabor'},{paso:'gran_extra',label:'Extra Shot'}]
   if (categoria === 'bebida')     return [{paso:1,label:'Bebida'}]
   if (categoria === 'extra')      return [{paso:1,label:'Extra'}]
   return []
+}
+
+// Calcula el paso anterior según la categoría y el paso actual.
+// Permite que cada paso tenga un botón ← Volver coherente.
+function volverPaso(item) {
+  const cat = item.categoria
+  const paso = item.paso
+  if (cat === 'hotdog') {
+    if (paso === 2)         return { paso:1 }
+    if (paso === 'queso')   return { paso:2 }
+    if (paso === 3)         return { paso:'queso' }
+    if (paso === 'bebida')  return { paso:3 }
+    if (paso === 4)         return { paso: item.tipo==='combo' ? 'bebida' : 3 }
+  }
+  if (cat === 'burger') {
+    if (paso === 3)         return { paso:1 }
+    if (paso === 'bebida')  return { paso:3 }
+    if (paso === 4)         return { paso: item.tipo==='combo' ? 'bebida' : 3 }
+  }
+  if (cat === 'kids') {
+    if (paso === 'kids_toppings') return { paso:1 }
+    if (paso === 'kids_bebida')   return { paso: item.kidsOpcion?.id==='kids_nuggets' ? 1 : 'kids_toppings' }
+  }
+  if (cat === 'granizado') {
+    if (paso === 'gran_extra') return { paso:1 }
+  }
+  // Para los demás: volver siempre a categoría (paso 0 = reset de categoría)
+  return { categoria: null, paso:0 }
+}
+
+function BtnVolver({ item, onChange, isMobile }) {
+  const anterior = volverPaso(item)
+  // Si no hay paso anterior definido (paso:0), volver a elegir categoría
+  const handleVolver = () => {
+    if (anterior.paso === 0) {
+      onChange({ ...item, categoria:null, paso:0, producto:null, salchicha:null, quesoElegido:null, burger:null, tipo:null, bebida:null, toppings:null, kidsOpcion:null, granizado:null, extraShot:false })
+    } else {
+      onChange({ ...item, ...anterior })
+    }
+  }
+  return (
+    <button onClick={handleVolver}
+      style={{ width:'100%', marginTop:12, padding:isMobile?12:10, borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'rgba(255,255,255,0.05)', border:'1px solid var(--border)', color:'var(--text3)', fontFamily:'inherit', display:'flex', alignItems:'center', justifyContent:'center', gap:8 }}>
+      ← Volver
+    </button>
+  )
 }
 
 function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMobile }) {
@@ -430,9 +521,12 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
   }
 
   const PASOS = pasosDe(cat)
-  // 'bebida' y 'queso' son pasos string — se mapean a su valor real para
-  // que findIndex los encuentre correctamente en el array de PASOS.
-  const pasoVisual = item.paso === 'bebida' ? 3 : item.paso
+  const pasoVisual = item.paso === 'bebida'        ? 'bebida'
+                   : item.paso === 'queso'         ? 'queso'
+                   : item.paso === 'gran_extra'    ? 'gran_extra'
+                   : item.paso === 'kids_toppings' ? 'kids_toppings'
+                   : item.paso === 'kids_bebida'   ? 'kids_bebida'
+                   : item.paso
   const idxActual = item.paso === 5 ? PASOS.length : PASOS.findIndex(p => p.paso === pasoVisual)
 
   return (
@@ -500,14 +594,17 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
           </div>
         )}
         {cat === 'hotdog' && item.paso === 2 && (
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-            {SALCHICHAS.map(s => (
-              <CardSeleccion key={s.id} isMobile={isMobile} sel={item.salchicha?.id===s.id} onClick={() => onChange({...item, salchicha:s, paso:'queso'})}>
-                <div style={{ fontSize:isMobile?24:28 }}>{s.emoji}</div>
-                <div style={{ fontSize:12, fontWeight:700, color:'var(--text)' }}>{s.nombre}</div>
-                <div style={{ fontSize:10, color:'var(--text3)' }}>{s.desc}</div>
-              </CardSeleccion>
-            ))}
+          <div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+              {SALCHICHAS.map(s => (
+                <CardSeleccion key={s.id} isMobile={isMobile} sel={item.salchicha?.id===s.id} onClick={() => onChange({...item, salchicha:s, paso:'queso'})}>
+                  <div style={{ fontSize:isMobile?24:28 }}>{s.emoji}</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:'var(--text)' }}>{s.nombre}</div>
+                  <div style={{ fontSize:10, color:'var(--text3)' }}>{s.desc}</div>
+                </CardSeleccion>
+              ))}
+            </div>
+            <BtnVolver item={item} onChange={onChange} isMobile={isMobile} />
           </div>
         )}
         {cat === 'hotdog' && item.paso === 'queso' && (
@@ -521,13 +618,12 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
                 </CardSeleccion>
               ))}
             </div>
+            <BtnVolver item={item} onChange={onChange} isMobile={isMobile} />
           </div>
         )}
         {cat === 'hotdog' && item.paso === 3 && (
           <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
             <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:2 }}>¿CÓMO LO QUIERE?</div>
-            {/* Botones grandes para minimizar error — es la decisión de precio
-                más importante del pedido */}
             <div onClick={() => onChange({...item, tipo:'solo', bebida:null, paso:4})}
               style={{ padding:isMobile?16:20, borderRadius:14, cursor:'pointer', border:`2px solid ${item.tipo==='solo'?'var(--gold-border)':'var(--border)'}`, background:item.tipo==='solo'?'rgba(201,168,76,0.1)':'rgba(255,255,255,0.03)', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
               <div style={{ display:'flex', alignItems:'center', gap:12 }}>
@@ -551,40 +647,51 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
               </div>
               <div style={{ fontSize:22, fontWeight:900, color:'var(--gold)' }}>{cop(item.producto?.precioCombo)}</div>
             </div>
+            <BtnVolver item={item} onChange={onChange} isMobile={isMobile} />
           </div>
         )}
+
+        {/* ── BEBIDA DEL COMBO (hotdog y burger) — solo las 4 exclusivas del combo ── */}
         {(cat === 'hotdog' || cat === 'burger') && item.paso === 'bebida' && (
           <div>
-            <div style={{ fontSize:11, color:'var(--gold)', letterSpacing:1, fontWeight:700, marginBottom:10 }}>SELECCIONA LA BEBIDA DEL COMBO (250ml)</div>
-            <div style={{ display:'grid', gridTemplateColumns:`repeat(${isMobile?3:4},1fr)`, gap:8, marginBottom:12 }}>
-              {BEBIDAS.filter(b => b.precio <= 4000).map(b => (
+            <div style={{ fontSize:11, color:'var(--gold)', letterSpacing:1, fontWeight:700, marginBottom:4 }}>ELIGE LA BEBIDA DEL COMBO</div>
+            <div style={{ fontSize:10, color:'var(--text4)', marginBottom:10 }}>250ml · incluida en el combo</div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginBottom:4 }}>
+              {BEBIDAS_COMBO.map(b => (
                 <CardSeleccion key={b.id} isMobile={isMobile} sel={item.bebida?.id===b.id} color={b.color} onClick={() => onChange({...item, bebida:b, paso:4})}>
-                  <div style={{ fontSize:isMobile?20:24 }}>{b.emoji}</div>
-                  <div style={{ fontSize:10, fontWeight:600, color:'var(--text)', lineHeight:1.3 }}>{b.nombre}</div>
-                  <div style={{ fontSize:10, color:b.color, fontWeight:700 }}>{cop(b.precio)}</div>
+                  <div style={{ fontSize:isMobile?24:28 }}>{b.emoji}</div>
+                  <div style={{ fontSize:11, fontWeight:700, color:'var(--text)', lineHeight:1.3 }}>{b.nombre}</div>
                 </CardSeleccion>
               ))}
             </div>
-            <button style={{ width:'100%', padding:'10px', borderRadius:10, cursor:'pointer', fontSize:13, fontWeight:700, background:'rgba(255,255,255,0.06)', border:'1px solid var(--border)', color:'var(--text2)', fontFamily:'inherit' }} onClick={() => onChange({...item, paso:3})}>← Volver</button>
+            <BtnVolver item={item} onChange={onChange} isMobile={isMobile} />
           </div>
         )}
+
         {cat === 'hotdog' && item.paso === 4 && (
-          <PasoToppingsExtra item={item} isMobile={isMobile} onChange={onChange} toggleTopping={toggleTopping} toggleExtra={toggleExtra} toppings={TOPPINGS_HOTDOG} conExtras />
+          <div>
+            <PasoToppingsExtra item={item} isMobile={isMobile} onChange={onChange} toggleTopping={toggleTopping} toggleExtra={toggleExtra} toppings={TOPPINGS_HOTDOG} conExtras />
+            <BtnVolver item={item} onChange={onChange} isMobile={isMobile} />
+          </div>
         )}
 
         {/* ── HAMBURGUESA ── */}
         {cat === 'burger' && item.paso === 1 && (
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-            {BURGERS.map(b => (
-              <CardSeleccion key={b.id} isMobile={isMobile} sel={false} onClick={() => onChange({...item, burger:b, paso:3})}>
-                <div style={{ fontSize:isMobile?28:36 }}>{b.emoji}</div>
-                <div style={{ fontSize:13, fontWeight:800, color:'var(--text)' }}>{b.nombre}</div>
-                <div style={{ fontSize:10, color:'var(--text3)' }}>{b.desc}</div>
-                <div style={{ fontSize:13, color:'var(--gold)', fontWeight:700 }}>{cop(b.precio)}</div>
-              </CardSeleccion>
-            ))}
+          <div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
+              {BURGERS.map(b => (
+                <CardSeleccion key={b.id} isMobile={isMobile} sel={false} onClick={() => onChange({...item, burger:b, paso:3})}>
+                  <div style={{ fontSize:isMobile?28:36 }}>{b.emoji}</div>
+                  <div style={{ fontSize:13, fontWeight:800, color:'var(--text)' }}>{b.nombre}</div>
+                  <div style={{ fontSize:10, color:'var(--text3)' }}>{b.desc}</div>
+                  <div style={{ fontSize:13, color:'var(--gold)', fontWeight:700 }}>{cop(b.precio)}</div>
+                </CardSeleccion>
+              ))}
+            </div>
+            <BtnVolver item={item} onChange={onChange} isMobile={isMobile} />
           </div>
         )}
+
         {/* ── BURGER — Solo o Combo ── */}
         {cat === 'burger' && item.paso === 3 && (
           <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
@@ -612,10 +719,15 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
               </div>
               <div style={{ fontSize:22, fontWeight:900, color:'var(--gold)' }}>{cop((item.burger?.precio||0) + 7000)}</div>
             </div>
+            <BtnVolver item={item} onChange={onChange} isMobile={isMobile} />
           </div>
         )}
+
         {cat === 'burger' && item.paso === 4 && (
-          <PasoToppingsExtra item={item} isMobile={isMobile} onChange={onChange} toggleTopping={toggleTopping} toggleExtra={toggleExtra} toppings={toppingsDeBurger(item.burger?.id)} conExtras={false} />
+          <div>
+            <PasoToppingsExtra item={item} isMobile={isMobile} onChange={onChange} toggleTopping={toggleTopping} toggleExtra={toggleExtra} toppings={toppingsDeBurger(item.burger?.id)} conExtras={false} />
+            <BtnVolver item={item} onChange={onChange} isMobile={isMobile} />
+          </div>
         )}
 
         {/* ── PALETA Z ── */}
@@ -671,17 +783,22 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
                 </CardSeleccion>
               ))}
             </div>
+            <BtnVolver item={item} onChange={onChange} isMobile={isMobile} />
           </div>
         )}
 
-        {/* ── KIDS ZABÚ — elige opción (mini hot dog / mini burger / nuggets) ── */}
+        {/* ── KIDS ZABÚ — paso 1: elige opción ── */}
         {cat === 'kids' && item.paso === 1 && (
           <div>
             <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>ELIGE LA OPCIÓN</div>
-            <div style={{ fontSize:10, color:'var(--text4)', marginBottom:10 }}>Todas incluyen papas + bebida cajita + sorpresa · {cop(KIDS_PRECIO)}</div>
+            <div style={{ fontSize:10, color:'var(--text4)', marginBottom:10 }}>Todas incluyen papas + bebida + sorpresa · {cop(KIDS_PRECIO)}</div>
             <div style={{ display:'grid', gridTemplateColumns:'1fr', gap:8 }}>
               {KIDS_OPCIONES.map(o => (
-                <CardSeleccion key={o.id} isMobile={isMobile} sel={false} onClick={() => onChange({...item, kidsOpcion:o, paso:5})}>
+                <CardSeleccion key={o.id} isMobile={isMobile} sel={false}
+                  onClick={() => onChange({...item, kidsOpcion:o,
+                    toppingsKids: o.id==='kids_nuggets' ? [] :
+                      o.id==='kids_hotdog' ? TOPPINGS_KIDS_HOTDOG.map(t=>({...t})) : TOPPINGS_KIDS_BURGER.map(t=>({...t})),
+                    paso: o.id==='kids_nuggets' ? 'kids_bebida' : 'kids_toppings'})}>
                   <div style={{ display:'flex', alignItems:'center', gap:12, width:'100%', textAlign:'left' }}>
                     <div style={{ fontSize:isMobile?28:32 }}>{o.emoji}</div>
                     <div>
@@ -692,23 +809,93 @@ function ItemConstructor({ item, onChange, onAgregar, onEliminar, esUltimo, isMo
                 </CardSeleccion>
               ))}
             </div>
+            <BtnVolver item={item} onChange={onChange} isMobile={isMobile} />
           </div>
         )}
 
-        {/* ── GRANIZADO — elige Luna Azul o Código Rojo ── */}
-        {cat === 'granizado' && item.paso === 1 && (
+        {/* ── KIDS — paso toppings/salsas ── */}
+        {cat === 'kids' && item.paso === 'kids_toppings' && (
           <div>
-            <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>ELIGE EL CÓCTEL · 500ml · Extra shot +{cop(EXTRA_SHOT.precio)}</div>
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10 }}>
-              {GRANIZADOS.map(g => (
-                <CardSeleccion key={g.id} isMobile={isMobile} sel={false} onClick={() => onChange({...item, granizado:g, paso:5})}>
-                  <div style={{ fontSize:isMobile?28:36 }}>{g.emoji}</div>
-                  <div style={{ fontSize:13, fontWeight:800, color:'var(--text)' }}>{g.nombre}</div>
-                  <div style={{ fontSize:10, color:'var(--text3)' }}>{g.desc}</div>
-                  <div style={{ fontSize:14, color:'var(--gold)', fontWeight:800 }}>{cop(g.precio)}</div>
+            <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>SALSAS Y TOPPINGS</div>
+            <div style={{ fontSize:10, color:'var(--text4)', marginBottom:10 }}>Activados = incluidos. Toca para quitar lo que no quiere.</div>
+            <div style={{ display:'flex', flexDirection:'column', gap:6, marginBottom:8 }}>
+              {(item.toppingsKids||[]).map((t,i) => (
+                <div key={t.id} onClick={() => {
+                  const updated = [...(item.toppingsKids||[])]
+                  updated[i] = {...updated[i], porDefecto:!updated[i].porDefecto}
+                  onChange({...item, toppingsKids:updated})
+                }} style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'10px 14px', borderRadius:10, cursor:'pointer', background:t.porDefecto?'rgba(201,168,76,0.08)':'rgba(255,255,255,0.02)', border:`1px solid ${t.porDefecto?'var(--gold-border)':'var(--border)'}` }}>
+                  <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                    <span style={{ fontSize:18 }}>{t.emoji}</span>
+                    <span style={{ fontSize:13, color:t.porDefecto?'var(--text)':'var(--text4)', fontWeight:t.porDefecto?600:400 }}>{t.nombre}</span>
+                  </div>
+                  <span style={{ fontSize:18 }}>{t.porDefecto?'✅':'⬜'}</span>
+                </div>
+              ))}
+            </div>
+            <button onClick={() => onChange({...item, paso:'kids_bebida'})}
+              style={{ width:'100%', padding:'12px', borderRadius:10, cursor:'pointer', fontSize:14, fontWeight:800, background:'rgba(201,168,76,0.15)', border:'1px solid var(--gold-border)', color:'var(--gold)', fontFamily:'inherit', marginBottom:8 }}>
+              Siguiente → Bebida
+            </button>
+            <BtnVolver item={item} onChange={onChange} isMobile={isMobile} />
+          </div>
+        )}
+
+        {/* ── KIDS — paso bebida ── */}
+        {cat === 'kids' && item.paso === 'kids_bebida' && (
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>ELIGE LA BEBIDA</div>
+            <div style={{ fontSize:10, color:'var(--text4)', marginBottom:10 }}>Incluida en el combo · {cop(KIDS_PRECIO)}</div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:8 }}>
+              {BEBIDAS_KIDS.map(b => (
+                <CardSeleccion key={b.id} isMobile={isMobile} sel={item.bebidaKids?.id===b.id} color={b.color} onClick={() => onChange({...item, bebidaKids:b, paso:5})}>
+                  <div style={{ fontSize:isMobile?28:32 }}>{b.emoji}</div>
+                  <div style={{ fontSize:12, fontWeight:700, color:'var(--text)' }}>{b.nombre}</div>
                 </CardSeleccion>
               ))}
             </div>
+            <BtnVolver item={item} onChange={onChange} isMobile={isMobile} />
+          </div>
+        )}
+
+        {/* ── GRANIZADO — paso 1: elige sabor ── */}
+        {cat === 'granizado' && item.paso === 1 && (
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:8 }}>ELIGE EL CÓCTEL · 500ml</div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:8, marginBottom:8 }}>
+              {GRANIZADOS.map(g => (
+                <CardSeleccion key={g.id} isMobile={isMobile} sel={item.granizado?.id===g.id} onClick={() => onChange({...item, granizado:g, paso:'gran_extra'})}>
+                  <div style={{ fontSize:isMobile?26:32 }}>{g.emoji}</div>
+                  <div style={{ fontSize:11, fontWeight:800, color:'var(--text)' }}>{g.nombre}</div>
+                  <div style={{ fontSize:10, color:'var(--text3)' }}>{g.desc}</div>
+                  <div style={{ fontSize:13, color:'var(--gold)', fontWeight:800 }}>{cop(g.precio)}</div>
+                </CardSeleccion>
+              ))}
+            </div>
+            <BtnVolver item={item} onChange={onChange} isMobile={isMobile} />
+          </div>
+        )}
+
+        {/* ── GRANIZADO — paso extra shot ── */}
+        {cat === 'granizado' && item.paso === 'gran_extra' && (
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)', letterSpacing:1, marginBottom:4 }}>¿EXTRA SHOT?</div>
+            <div style={{ fontSize:10, color:'var(--text4)', marginBottom:12 }}>{item.granizado?.nombre} · 500ml · {cop(item.granizado?.precio)}</div>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:8 }}>
+              <div onClick={() => onChange({...item, extraShot:false, paso:5})}
+                style={{ padding:isMobile?14:18, borderRadius:14, cursor:'pointer', textAlign:'center', border:`2px solid ${item.extraShot===false?'var(--gold-border)':'var(--border)'}`, background:item.extraShot===false?'rgba(201,168,76,0.1)':'rgba(255,255,255,0.03)' }}>
+                <div style={{ fontSize:isMobile?30:36 }}>🧊</div>
+                <div style={{ fontSize:14, fontWeight:900, color:'var(--text)', marginTop:6 }}>Sin extra</div>
+                <div style={{ fontSize:18, fontWeight:900, color:'var(--gold)', marginTop:4 }}>{cop(item.granizado?.precio)}</div>
+              </div>
+              <div onClick={() => onChange({...item, extraShot:true, paso:5})}
+                style={{ padding:isMobile?14:18, borderRadius:14, cursor:'pointer', textAlign:'center', border:`2px solid ${item.extraShot===true?'var(--gold-border)':'var(--border)'}`, background:item.extraShot===true?'rgba(201,168,76,0.1)':'rgba(255,255,255,0.03)' }}>
+                <div style={{ fontSize:isMobile?30:36 }}>🥃</div>
+                <div style={{ fontSize:14, fontWeight:900, color:'var(--text)', marginTop:6 }}>+ Extra Shot</div>
+                <div style={{ fontSize:18, fontWeight:900, color:'var(--gold)', marginTop:4 }}>{cop((item.granizado?.precio||0) + EXTRA_SHOT.precio)}</div>
+              </div>
+            </div>
+            <BtnVolver item={item} onChange={onChange} isMobile={isMobile} />
           </div>
         )}
 
