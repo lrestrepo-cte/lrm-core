@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Login from './pages/Login'
 import Sidebar from './components/Sidebar'
 import Topbar from './components/Topbar'
@@ -101,7 +101,7 @@ function CocinaApp({ usuario, onCerrarSesion }) {
 }
 
 export default function App() {
-  useEffect(() => { localStorage.removeItem('lrm_usuario') }, [])
+  useState(() => { localStorage.removeItem('lrm_usuario') })
 
   const [usuario,     setUsuario]     = useState(null)
   const [vista,       setVista]       = useState('lrm')
