@@ -39,7 +39,7 @@ const CATS_OPCION = [
 
 // ─── FUENTES DE INGRESO ───────────────────────────────────────────────────────
 const FUENTES = [
-  { id:'salario',   label:'💼 Salario Oh Wow',       tipo:'fijo'    },
+  { id:'honorarios',label:'💼 Independiente / Honorarios', tipo:'variable'},
   { id:'zabu',      label:'🌭 Dividendos ZABÚ',       tipo:'negocio' },
   { id:'rv',        label:'⚽ Dividendos RV Sports',   tipo:'negocio' },
   { id:'bombas',    label:'💣 Dividendos Las Bombas',  tipo:'negocio' },
