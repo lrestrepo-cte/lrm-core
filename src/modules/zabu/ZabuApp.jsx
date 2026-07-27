@@ -16,6 +16,7 @@ import ZabuPlanNegocio from './ZabuPlanNegocio'
 import ZabuCampanaApertura from './ZabuCampanaApertura'
 import ZabuCompras      from './ZabuCompras'
 import ZabuCarrito      from './ZabuCarrito'
+import MySpace from './MySpace'
 
 const NAV = [
   { id:'dashboard',    label:'Dashboard'         },
@@ -35,6 +36,7 @@ const NAV = [
   { id:'campana',      label:'🚀 Campaña Apertura' },
   { id:'compras',      label:'🛒 Compras'       },
   { id:'carrito',      label:'🚗 Carrito ZABÚ'  },
+  { id:'myspace',      label:'🌌 My Space'  },
 ]
 
 export default function ZabuApp({ rolForzado, navExterno, onNavChange, usuario }) {
@@ -59,6 +61,7 @@ export default function ZabuApp({ rolForzado, navExterno, onNavChange, usuario }
       case 'campana':       return <ZabuCampanaApertura />
       case 'compras':       return <ZabuCompras />
       case 'carrito':       return <ZabuCarrito />
+      case 'myspace':       return <MySpace />
       default: return (
         <div className="panel" style={{ maxWidth: 500 }}>
           <div className="panel-title">{NAV.find(n => n.id === nav)?.label?.toUpperCase()}</div>
