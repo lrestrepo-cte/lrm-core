@@ -15,31 +15,28 @@ import ZabuConfiguracion from './ZabuConfiguracion'
 import ZabuPlanNegocio from './ZabuPlanNegocio'
 import ZabuCampanaApertura from './ZabuCampanaApertura'
 import ZabuCompras      from './ZabuCompras'
+import ZabuCarrito      from './ZabuCarrito'
 
 const NAV = [
-  { id:'dashboard',    label:'Dashboard'       },
-  { id:'pos',          label:'Ventas POS'      },
-  { id:'recetario',    label:'Recetario'       },
-  { id:'fichatecnica', label:'Ficha Técnica'   },
-  { id:'inventario',   label:'Inventario'      },
-  { id:'fifo',         label:'FIFO'            },
-  { id:'costos',       label:'Costos'          },
-  { id:'comandero',    label:'Comandero'       },
-  { id:'proyeccion',   label:'Proyecciones'    },
-  { id:'personal',     label:'Personal'        },
-  { id:'contabilidad', label:'Contabilidad'    },
-  { id:'vencimientos', label:'Vencimientos'    },
-  { id:'configuracion',label:'⚙ Configuración' },
-  { id:'plan',         label:'📋 Plan Negocio' },
+  { id:'dashboard',    label:'Dashboard'         },
+  { id:'pos',          label:'Ventas POS'        },
+  { id:'recetario',    label:'Recetario'         },
+  { id:'fichatecnica', label:'Ficha Técnica'     },
+  { id:'inventario',   label:'Inventario'        },
+  { id:'fifo',         label:'FIFO'              },
+  { id:'costos',       label:'Costos'            },
+  { id:'comandero',    label:'Comandero'         },
+  { id:'proyeccion',   label:'Proyecciones'      },
+  { id:'personal',     label:'Personal'          },
+  { id:'contabilidad', label:'Contabilidad'      },
+  { id:'vencimientos', label:'Vencimientos'      },
+  { id:'configuracion',label:'⚙ Configuración'  },
+  { id:'plan',         label:'📋 Plan Negocio'  },
   { id:'campana',      label:'🚀 Campaña Apertura' },
-  { id:'compras',      label:'🛒 Compras' },
+  { id:'compras',      label:'🛒 Compras'       },
+  { id:'carrito',      label:'🚗 Carrito ZABÚ'  },
 ]
 
-// La navegación de ZABÚ vive 100% en el Sidebar (izquierda).
-// ANTES: useState(rolForzado || navExterno || 'dashboard') solo lee navExterno
-// la primera vez que el componente se monta — los clicks del sidebar nunca
-// se reflejaban porque ese estado quedaba "congelado". AHORA: nav es
-// directamente el prop navExterno, sin estado propio, sin sub-nav duplicada.
 export default function ZabuApp({ rolForzado, navExterno, onNavChange, usuario }) {
   const nav = rolForzado || navExterno || 'dashboard'
 
@@ -58,9 +55,10 @@ export default function ZabuApp({ rolForzado, navExterno, onNavChange, usuario }
       case 'fichatecnica':  return <ZabuFichaTecnica usuario={usuario} />
       case 'fifo':          return <ZabuFIFO />
       case 'configuracion': return <ZabuConfiguracion />
-      case 'plan':           return <ZabuPlanNegocio />
-      case 'campana':        return <ZabuCampanaApertura />
-      case 'compras':        return <ZabuCompras />
+      case 'plan':          return <ZabuPlanNegocio />
+      case 'campana':       return <ZabuCampanaApertura />
+      case 'compras':       return <ZabuCompras />
+      case 'carrito':       return <ZabuCarrito />
       default: return (
         <div className="panel" style={{ maxWidth: 500 }}>
           <div className="panel-title">{NAV.find(n => n.id === nav)?.label?.toUpperCase()}</div>
