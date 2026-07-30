@@ -4,17 +4,16 @@ import { supabase } from '../lib/supabase'
 function cop(n) { return '$' + Math.round(Math.abs(n||0)).toLocaleString('es-CO') }
 
 const NEGOCIOS_INFO = [
-  { id:'zabu',        nombre:'ZABÚ',            tipo:'Hot dogs premium · C01/C02',   estado:'activo', color:'#C9A84C' },
-  { id:'rv',          nombre:'RV Sports',       tipo:'Calcetines deportivos',         estado:'activo', color:'#378ADD' },
-  { id:'inversiones', nombre:'LRM Inversiones', tipo:'Gota a gota · Empeños · Libranzas', estado:'activo', color:'#9C27B0' },
-  { id:'bombas',      nombre:'Las Bombas',      tipo:'Guineo verde · toppings',       estado:'dev',    color:'#4caf50' },
-  { id:'coco',        nombre:'Coco Shake',      tipo:'Shakes de coco premium',        estado:'pronto', color:'#555'    },
-  { id:'quesolote',   nombre:'Quesolote',       tipo:'Elotes · maíz premium',         estado:'pronto', color:'#555'    },
-  { id:'puffys',      nombre:'Puffys',          tipo:'Mini panquecas premium',        estado:'pronto', color:'#444'    },
+  { id:'zabu',      nombre:'ZABÚ',       tipo:'Hot dogs premium · C01/C02', estado:'activo', color:'#C9A84C' },
+  { id:'rv',        nombre:'RV Sports',  tipo:'Calcetines deportivos',       estado:'activo', color:'#378ADD' },
+  { id:'bombas',    nombre:'Las Bombas', tipo:'Guineo verde · toppings',     estado:'dev',    color:'#4caf50' },
+  { id:'coco',      nombre:'Coco Shake', tipo:'Shakes de coco premium',      estado:'pronto', color:'#555'    },
+  { id:'quesolote', nombre:'Quesolote',  tipo:'Elotes · maíz premium',       estado:'pronto', color:'#555'    },
+  { id:'puffys',    nombre:'Puffys',     tipo:'Mini panquecas premium',      estado:'pronto', color:'#444'    },
 ]
 
 const PROGRESO = {
-  zabu: 75, rv: 45, inversiones: 60, bombas: 35, coco: 10, quesolote: 10, puffys: 5,
+  zabu: 75, rv: 45, bombas: 35, coco: 10, quesolote: 10, puffys: 5,
 }
 
 export default function LRMDashboard({ onEntrarNegocio }) {
@@ -22,8 +21,6 @@ export default function LRMDashboard({ onEntrarNegocio }) {
   const [ventasRV,   setVentasRV]   = useState(0)
   const [ordenesZabu,setOrdenesZabu]= useState(0)
   const [ordenesRV,  setOrdenesRV]  = useState(0)
-  const [capitalInvActivo, setCapitalInvActivo] = useState(0)
-  const [prestamosMora,    setPrestamosMora]    = useState(0)
   const [actividad,  setActividad]  = useState([])
   const [loading,    setLoading]    = useState(true)
 
@@ -33,10 +30,9 @@ export default function LRMDashboard({ onEntrarNegocio }) {
 
   const cargar = async () => {
     setLoading(true)
-    const [{ data:oz }, { data:rv }, { data:prestamos }] = await Promise.all([
+    const [{ data:oz }, { data:rv }] = await Promise.all([
       supabase.from('ordenes').select('total, created_at, carrito_id, nombre_cliente').eq('fecha', hoy).order('created_at', { ascending:false }),
       supabase.from('rv_ordenes').select('total, created_at, nombre_cliente, canal').eq('fecha', hoy).order('created_at', { ascending:false }),
-      supabase.from('inv_prestamos').select('saldo_capital, estado, cliente_nombre, created_at'),
     ])
 
     if (oz) {
@@ -63,50 +59,30 @@ export default function LRMDashboard({ onEntrarNegocio }) {
       setActividad(prev => [...actRV, ...prev].slice(0,8))
     }
 
-    if (prestamos) {
-      const activos = prestamos.filter(p => p.estado === 'activo' || p.estado === 'mora')
-      setCapitalInvActivo(activos.reduce((s,p)=>s+(p.saldo_capital||0),0))
-      setPrestamosMora(prestamos.filter(p => p.estado === 'mora').length)
-
-      const recientes = [...prestamos].sort((a,b)=>new Date(b.created_at)-new Date(a.created_at)).slice(0,2)
-      const actInv = recientes.map(p => ({
-        neg: 'LRM Inversiones',
-        msg: `Préstamo · ${p.cliente_nombre}`,
-        time: new Date(p.created_at).toLocaleTimeString('es-CO',{hour:'2-digit',minute:'2-digit'}),
-        color: '#9C27B0',
-      }))
-      setActividad(prev => [...actInv, ...prev].slice(0,8))
-    }
-
     setLoading(false)
   }
 
-  const totalHoy     = ventasZabu + ventasRV
+  const totalHoy    = ventasZabu + ventasRV
   const totalOrdenes = ordenesZabu + ordenesRV
 
   const statNegocio = (id) => {
     if (id === 'zabu') return ventasZabu > 0 ? cop(ventasZabu) + ' hoy' : 'Sin ventas hoy'
     if (id === 'rv')   return ventasRV > 0   ? cop(ventasRV)   + ' hoy' : 'Sin ventas hoy'
-    if (id === 'inversiones') {
-      if (capitalInvActivo === 0) return 'Sin capital activo'
-      return prestamosMora > 0 ? `${cop(capitalInvActivo)} activo · ${prestamosMora} en mora` : `${cop(capitalInvActivo)} activo`
-    }
     if (NEGOCIOS_INFO.find(n=>n.id===id)?.estado === 'dev') return 'En desarrollo'
     return 'Próximamente'
   }
 
-  const esClickeable = (id) => id === 'zabu' || id === 'rv' || id === 'inversiones'
-  const negociosActivos = NEGOCIOS_INFO.filter(n => n.estado === 'activo').length
+  const esClickeable = (id) => id === 'zabu' || id === 'rv'
 
   return (
     <>
       {/* KPIs */}
       <div className="grid-4" style={{ marginBottom:20 }}>
         {[
-          { label:'Ventas hoy',        val: loading ? '...' : cop(totalHoy),        color:'var(--gold)',  sub:`${totalOrdenes} órdenes totales` },
-          { label:'ZABÚ',              val: loading ? '...' : cop(ventasZabu),      color:'#C9A84C',     sub:`${ordenesZabu} órdenes` },
-          { label:'RV Sports',         val: loading ? '...' : cop(ventasRV),        color:'#378ADD',     sub:`${ordenesRV} órdenes` },
-          { label:'Negocios activos',  val:`${negociosActivos} / ${NEGOCIOS_INFO.length}`, color:'var(--green)', sub:'ZABÚ + RV Sports + Inversiones' },
+          { label:'Ventas hoy',        val: loading ? '...' : cop(totalHoy),        color:'var(--gold)',  sub:`${totalOrdenes} órdenes totales`    },
+          { label:'ZABÚ',              val: loading ? '...' : cop(ventasZabu),      color:'#C9A84C',     sub:`${ordenesZabu} órdenes`             },
+          { label:'RV Sports',         val: loading ? '...' : cop(ventasRV),        color:'#378ADD',     sub:`${ordenesRV} órdenes`               },
+          { label:'Negocios activos',  val:'2 / 6',                                 color:'var(--green)', sub:'ZABÚ + RV Sports'                   },
         ].map(k => (
           <div key={k.label} className="kpi-card">
             <div className="kpi-label">{k.label}</div>
