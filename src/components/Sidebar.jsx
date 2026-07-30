@@ -1,12 +1,13 @@
 const NEGOCIOS = [
-  { id:'zabu',      nombre:'ZABÚ',       color:'#C9A84C', estado:'activo'  },
-  { id:'bombas',    nombre:'Las Bombas', color:'#4caf50', estado:'dev'     },
-  { id:'rv',        nombre:'RV Sports',  color:'#378ADD', estado:'dev'     },
-  { id:'coco',      nombre:'Coco Shake', color:'#00BCD4', estado:'pronto'  },
-  { id:'quesolote', nombre:'Quesolote',  color:'#FF9800', estado:'pronto'  },
-  { id:'puffys',    nombre:'Puffys',     color:'#9C27B0', estado:'pronto'  },
+  { id:'zabu',        nombre:'ZABÚ',            color:'#C9A84C', estado:'activo'  },
+  { id:'rv',          nombre:'RV Sports',       color:'#378ADD', estado:'activo'  },
+  { id:'inversiones', nombre:'LRM Trade Consulting', color:'#9C27B0', estado:'activo'  },
+  { id:'bombas',      nombre:'Las Bombas',      color:'#4caf50', estado:'dev'     },
+  { id:'coco',        nombre:'Coco Shake',      color:'#00BCD4', estado:'pronto'  },
+  { id:'quesolote',   nombre:'Quesolote',       color:'#FF9800', estado:'pronto'  },
+  { id:'puffys',      nombre:'Puffys',          color:'#9C27B0', estado:'pronto'  },
 ]
-
+const ACTIVOS = ['zabu', 'rv', 'inversiones']
 const NAV_LRM = [
   {
     seccion:'General',
@@ -20,16 +21,16 @@ const NAV_LRM = [
   {
     seccion:'Comercial',
     items:[
-      { id:'crm',        label:'CRM',              activo:false },
-      { id:'marketing',  label:'Marketing',        activo:false },
+      { id:'crm',       label:'CRM',       activo:false },
+      { id:'marketing', label:'Marketing', activo:false },
     ]
   },
   {
     seccion:'Operación',
     items:[
-      { id:'personal',   label:'Personal',         activo:false },
-      { id:'calidad',    label:'Calidad',          activo:false },
-      { id:'agenda',     label:'Agenda',           activo:false },
+      { id:'personal', label:'Personal', activo:false },
+      { id:'calidad',  label:'Calidad',  activo:false },
+      { id:'agenda',   label:'Agenda',   activo:false },
     ]
   },
   {
@@ -42,33 +43,35 @@ const NAV_LRM = [
   {
     seccion:'Sistema',
     items:[
-      { id:'configuracion', label:'Configuración',  activo:false },
+      { id:'configuracion', label:'Configuración', activo:true },
     ]
   },
 ]
-
 const NAV_ZABU = [
   {
     seccion:'Operación',
     items:[
-      { id:'dashboard',    label:'Dashboard'    },
-      { id:'pos',          label:'Ventas POS'   },
-      { id:'comandero',    label:'Comandero'    },
+      { id:'dashboard',  label:'Dashboard'  },
+      { id:'pos',        label:'Ventas POS' },
+      { id:'comandero',  label:'Comandero'  },
+      { id:'plan', label:'📋 Plan de Negocio' },
+      { id:'campana', label:'🚀 Campaña Apertura' },
     ]
   },
   {
     seccion:'Producto',
     items:[
-      { id:'recetario',    label:'Recetario'    },
-      { id:'peps',         label:'PEPs'         },
+      { id:'recetario',    label:'Recetario'      },
+      { id:'fichatecnica', label:'Ficha Técnica'  },
     ]
   },
   {
     seccion:'Inventario',
     items:[
-      { id:'inventario',   label:'Inventario'   },
-      { id:'vencimientos', label:'Vencimientos' },
-      { id:'fifo',         label:'FIFO'         },
+      { id:'inventario',  label:'Inventario'   },
+      { id:'vencimientos',label:'Vencimientos' },
+      { id:'fifo',        label:'FIFO'         },
+      { id:'compras',     label:'Compras'      },
     ]
   },
   {
@@ -87,31 +90,67 @@ const NAV_ZABU = [
     ]
   },
 ]
-
+const NAV_RV = [
+  {
+    seccion:'Operación',
+    items:[
+      { id:'dashboard', label:'Dashboard' },
+      { id:'pos',       label:'POS'       },
+      { id:'pedidos',   label:'Pedidos'   },
+    ]
+  },
+  {
+    seccion:'Producto',
+    items:[
+      { id:'catalogo',   label:'Catálogo'   },
+      { id:'inventario', label:'Inventario' },
+      { id:'importaciones', label:'Importaciones' },
+    ]
+  },
+  {
+    seccion:'Clientes',
+    items:[
+      { id:'clientes', label:'Clientes' },
+    ]
+  },
+]
 export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onEntrarNegocio, usuario, onCerrarSesion }) {
-  const isZabu  = vista === 'zabu'
-  const isLuis  = usuario?.email === 'luis@zabu.co'
-
+  const isZabu = vista === 'zabu'
+  const isRV   = vista === 'rv'
+  const isInv  = vista === 'inversiones'
+  const isNeg  = isZabu || isRV || isInv
+  const isLuis = usuario?.email === 'luis@zabu.co'
+  const navNegocio = isZabu ? NAV_ZABU : isRV ? NAV_RV : []
+  const tituloNeg  = isZabu ? 'ZABÚ' : isRV ? 'RV Sports' : isInv ? 'LRM Trade Consulting' : ''
+  const colorNeg   = isZabu ? '#C9A84C' : isRV ? '#378ADD' : isInv ? '#9C27B0' : 'var(--gold)'
   return (
     <div className="sidebar">
       <div className="sb-logo">
         <div className="sb-trade">LRM TRADE</div>
-        <div className="sb-name">Core</div>
+        <div className="sb-name" style={{ color: isNeg ? colorNeg : 'var(--text)' }}>
+          {isNeg ? tituloNeg : 'Core'}
+        </div>
       </div>
-
-      <nav style={{ flex:1, overflowY:'auto', paddingBottom:8 }}>
-        {!isZabu ? (
+      <nav style={{ flex:1, overflowY:'auto', paddingBottom:8, minHeight:0 }}>
+        {!isNeg ? (
           <>
             {NAV_LRM.map(grupo => (
               <div key={grupo.seccion}>
                 <div className="sb-section-label">{grupo.seccion}</div>
                 {grupo.items.map(item => (
                   <div key={item.id}
-                    className={`sb-item${navActivo===item.id ? ' active' : ''}`}
+                    className={`sb-item${navActivo===item.id?' active':''}`}
                     onClick={() => item.activo && onNavLRM && onNavLRM(item.id)}
-                    style={{ opacity: item.activo ? 1 : 0.45, cursor: item.activo ? 'pointer' : 'default' }}
+                    style={{
+                      opacity: item.activo ? 1 : 0.45,
+                      cursor:  item.activo ? 'pointer' : 'default',
+                      ...(item.id==='configuracion' ? { color:'var(--red)' } : {}),
+                    }}
                   >
-                    <span className="sb-item-txt">{item.label}</span>
+                    <span className="sb-item-txt"
+                      style={item.id==='configuracion' ? { color: navActivo==='configuracion'?'var(--gold)':'rgba(224,82,82,0.7)' } : {}}>
+                      {item.label}
+                    </span>
                     {!item.activo && (
                       <span style={{ fontSize:9, padding:'1px 6px', borderRadius:6, background:'rgba(255,255,255,0.06)', color:'rgba(255,255,255,0.2)', border:'0.5px solid rgba(255,255,255,0.08)' }}>
                         Pronto
@@ -121,13 +160,11 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onEnt
                 ))}
               </div>
             ))}
-
-            {/* My Space — solo visible para Luis */}
             {isLuis && (
               <>
                 <div className="sb-section-label">Personal</div>
                 <div
-                  className={`sb-item${navActivo==='myspace' ? ' active' : ''}`}
+                  className={`sb-item${navActivo==='myspace'?' active':''}`}
                   onClick={() => onNavLRM && onNavLRM('myspace')}
                   style={{ cursor:'pointer' }}
                 >
@@ -139,16 +176,18 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onEnt
         ) : (
           <>
             <div style={{ padding:'8px 8px 4px' }}>
-              <div onClick={onVolverLRM} style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, color:'rgba(255,255,255,0.3)', cursor:'pointer', padding:'6px 10px', borderRadius:8, transition:'color .15s' }}
+              <div onClick={onVolverLRM}
+                style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, color:'rgba(255,255,255,0.3)', cursor:'pointer', padding:'6px 10px', borderRadius:8, transition:'color .15s' }}
                 onMouseOver={e => e.currentTarget.style.color='rgba(255,255,255,0.7)'}
-                onMouseOut={e => e.currentTarget.style.color='rgba(255,255,255,0.3)'}
+                onMouseOut={e  => e.currentTarget.style.color='rgba(255,255,255,0.3)'}
               >← LRM Trade</div>
             </div>
-            {NAV_ZABU.map(grupo => (
+            {navNegocio.map(grupo => (
               <div key={grupo.seccion}>
                 <div className="sb-section-label">{grupo.seccion}</div>
                 {grupo.items.map(item => (
-                  <div key={item.id} className={`sb-item${navActivo===item.id ? ' active' : ''}`}
+                  <div key={item.id}
+                    className={`sb-item${navActivo===item.id?' active':''}`}
                     onClick={() => onNavLRM && onNavLRM(item.id)}
                   >
                     <span className="sb-item-txt">{item.label}</span>
@@ -158,38 +197,37 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onEnt
             ))}
           </>
         )}
-
         <div className="sb-section-label">Negocios</div>
         {NEGOCIOS.map(n => (
-          <div key={n.id} className="sb-item"
-            onClick={() => n.id==='zabu' && onEntrarNegocio && onEntrarNegocio(n.id)}
-            style={{ cursor: n.id==='zabu' ? 'pointer' : 'default', opacity: n.id==='zabu' ? 1 : 0.5 }}
+          <div key={n.id}
+            className="sb-item"
+            onClick={() => ACTIVOS.includes(n.id) && onEntrarNegocio && onEntrarNegocio(n.id)}
+            style={{ cursor: ACTIVOS.includes(n.id) ? 'pointer' : 'default', opacity: ACTIVOS.includes(n.id) ? 1 : 0.5 }}
           >
             <div style={{ width:7, height:7, borderRadius:'50%', background:n.color, flexShrink:0 }} />
             <span className="sb-item-txt">{n.nombre}</span>
             <span className={`badge badge-${n.estado}`}>
-              {n.estado==='activo' ? 'Activo' : n.estado==='dev' ? 'Dev' : 'Pronto'}
+              {n.estado==='activo'?'Activo':n.estado==='dev'?'Dev':'Pronto'}
             </span>
           </div>
         ))}
       </nav>
-
       <div className="sb-user" style={{ flexDirection:'column', alignItems:'flex-start', gap:8 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10, width:'100%' }}>
-          <div className="sb-avatar">{usuario?.nombre?.charAt(0) || 'U'}</div>
+          <div className="sb-avatar">{usuario?.nombre?.charAt(0)||'U'}</div>
           <div style={{ flex:1, minWidth:0 }}>
             <div style={{ fontSize:12, color:'rgba(255,255,255,0.7)', fontWeight:500, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-              {usuario?.nombre || 'Usuario'}
+              {usuario?.nombre||'Usuario'}
             </div>
             <div style={{ fontSize:10, color:'var(--gold)', textTransform:'capitalize' }}>
-              {usuario?.rol || 'CEO'} · LRM Trade
+              {usuario?.rol||'CEO'} · LRM Trade
             </div>
           </div>
         </div>
         <div onClick={onCerrarSesion}
           style={{ width:'100%', padding:'7px 10px', borderRadius:8, background:'rgba(224,82,82,0.08)', border:'0.5px solid rgba(224,82,82,0.2)', color:'#e05252', fontSize:11, cursor:'pointer', textAlign:'center', fontWeight:600, transition:'all .15s' }}
           onMouseOver={e => e.currentTarget.style.background='rgba(224,82,82,0.15)'}
-          onMouseOut={e => e.currentTarget.style.background='rgba(224,82,82,0.08)'}
+          onMouseOut={e  => e.currentTarget.style.background='rgba(224,82,82,0.08)'}
         >
           Cerrar sesión
         </div>
