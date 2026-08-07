@@ -123,7 +123,7 @@ function Resumen() {
     const [{ data:ing }, { data:gas }, { data:deu }, { data:met }] = await Promise.all([
       supabase.from('my_space_ingresos_v2').select('*').gte('fecha', mes+'-01'),
       supabase.from('my_space_gastos_v2').select('*').gte('fecha', mes+'-01'),
-      supabase.from('my_space_metas_v2').select('*').eq('estado','activa'),
+      supabase.from('my_space_deudas').select('*'),
       supabase.from('my_space_metas_v2').select('*').eq('estado','activa').gt('cuota_mensual',0),
     ])
     setData({ ingresos:ing||[], gastos:gas||[], deudas:deu||[], metas:met||[] })
@@ -134,8 +134,8 @@ function Resumen() {
   const totalGastos     = data.gastos.reduce((s,g)=>s+g.monto,0)
   const totalCuotas     = data.metas.reduce((s,m)=>s+m.cuota_mensual,0)
   const saldo           = totalIngresos - totalGastos - totalCuotas
-  const totalDebo       = data.deudas.filter(d=>d.cuota_mensual===0&&d.financiado===false).reduce((s,m)=>s+m.valor_total,0)
-  const totalMeDeben    = 0 // placeholder — viene de deudas con tipo me_deben
+  const totalDebo       = data.deudas.filter(d=>d.tipo==='debo').reduce((s,d)=>s+d.saldo_total,0)
+  const totalMeDeben    = data.deudas.filter(d=>d.tipo==='me_deben').reduce((s,d)=>s+d.saldo_total,0)
 
   const porPersona = PERSONAS.map(p => ({
     p, gastado: data.gastos.filter(g=>g.persona===p).reduce((s,g)=>s+g.monto,0)
