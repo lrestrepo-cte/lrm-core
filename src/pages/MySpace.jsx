@@ -1179,6 +1179,16 @@ function Deudas() {
   const [vence,    setVence]    = useState('')
   const [desc,     setDesc]     = useState('')
 
+  // Abonos
+  const [modalAbono,   setModalAbono]   = useState(null) // deuda seleccionada, o null
+  const [montoAbono,   setMontoAbono]   = useState('')
+  const [fechaAbono,   setFechaAbono]   = useState(new Date().toISOString().split('T')[0])
+  const [notaAbono,    setNotaAbono]    = useState('')
+  const [guardandoAbono, setGuardandoAbono] = useState(false)
+  const [abonosAbiertos, setAbonosAbiertos] = useState(null) // id de deuda con historial visible
+  const [abonosPorDeuda, setAbonosPorDeuda] = useState({})   // cache: { [deudaId]: [abonos] }
+  const [cargandoAbonos, setCargandoAbonos] = useState(false)
+
   useEffect(() => { cargar() }, [])
 
   const cargar = async () => {
@@ -1200,10 +1210,93 @@ function Deudas() {
     setDeudas(prev=>prev.filter(d=>d.id!==id))
   }
 
+  // ── Abonos ──
+  const abrirAbono = (deuda) => {
+    setModalAbono(deuda)
+    setMontoAbono(''); setNotaAbono('')
+    setFechaAbono(new Date().toISOString().split('T')[0])
+  }
+
+  const guardarAbono = async () => {
+    if (!modalAbono || !montoAbono) return
+    setGuardandoAbono(true)
+    const monto = parseInt(montoAbono)
+    const nuevoSaldo = Math.max(0, modalAbono.saldo_total - monto)
+
+    await supabase.from('my_space_pagos_deuda').insert({
+      deuda_id: modalAbono.id, monto, fecha: fechaAbono, notas: notaAbono||null,
+    })
+    await supabase.from('my_space_deudas').update({ saldo_total: nuevoSaldo }).eq('id', modalAbono.id)
+
+    setDeudas(prev => prev.map(d => d.id===modalAbono.id ? { ...d, saldo_total:nuevoSaldo } : d))
+    // Invalida el cache de historial de esa deuda para que se recargue al abrirlo
+    setAbonosPorDeuda(prev => { const n = {...prev}; delete n[modalAbono.id]; return n })
+
+    setGuardandoAbono(false)
+    setModalAbono(null); setMontoAbono(''); setNotaAbono('')
+  }
+
+  const toggleHistorialAbonos = async (deudaId) => {
+    if (abonosAbiertos === deudaId) { setAbonosAbiertos(null); return }
+    setAbonosAbiertos(deudaId)
+    if (!abonosPorDeuda[deudaId]) {
+      setCargandoAbonos(true)
+      const { data } = await supabase.from('my_space_pagos_deuda').select('*').eq('deuda_id', deudaId).order('fecha', { ascending:false })
+      setAbonosPorDeuda(prev => ({ ...prev, [deudaId]: data||[] }))
+      setCargandoAbonos(false)
+    }
+  }
+
   const debo    = deudas.filter(d=>d.tipo==='debo')
   const meDeben = deudas.filter(d=>d.tipo==='me_deben')
   const totalDebo    = debo.reduce((s,d)=>s+d.saldo_total,0)
   const totalMeDeben = meDeben.reduce((s,d)=>s+d.saldo_total,0)
+
+  const renderTarjetaDeuda = (d, colorTema) => {
+    const pagada = d.saldo_total <= 0
+    return (
+      <div key={d.id} className="panel" style={{ border:`1px solid ${pagada?'var(--green-border)':colorTema}`, opacity:pagada?0.75:1 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
+          <div>
+            <div style={{ fontSize:14, fontWeight:700, color:'var(--text)' }}>
+              {d.acreedor} {pagada && <span style={{ fontSize:10, color:'var(--green)', fontWeight:700 }}>✓ Pagada</span>}
+            </div>
+            {d.descripcion && <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>{d.descripcion}</div>}
+            {d.cuota_mensual>0 && <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>Cuota: {cop(d.cuota_mensual)}/mes</div>}
+            {d.fecha_vencimiento && <div style={{ fontSize:11, color:'var(--gold)', marginTop:2 }}>Vence: {d.fecha_vencimiento}</div>}
+          </div>
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <div style={{ fontSize:18, fontWeight:900, color:pagada?'var(--green)':(d.tipo==='debo'?'var(--red)':'var(--green)') }}>{cop(d.saldo_total)}</div>
+            <div onClick={() => eliminar(d.id)} style={{ cursor:'pointer', fontSize:12, color:'var(--text4)' }}>×</div>
+          </div>
+        </div>
+        <div style={{ display:'flex', gap:14, marginTop:10, alignItems:'center', flexWrap:'wrap' }}>
+          {!pagada && (
+            <div onClick={() => abrirAbono(d)} style={{ fontSize:11, color:'var(--gold)', cursor:'pointer', fontWeight:600 }}>
+              💵 {d.tipo==='debo' ? 'Abonar / Pagar' : 'Registrar pago recibido'}
+            </div>
+          )}
+          <div onClick={() => toggleHistorialAbonos(d.id)} style={{ fontSize:11, color:'var(--text3)', cursor:'pointer' }}>
+            📋 {abonosAbiertos===d.id ? 'Ocultar abonos' : 'Ver abonos'}
+          </div>
+        </div>
+        {abonosAbiertos === d.id && (
+          <div style={{ marginTop:10, paddingTop:10, borderTop:'1px solid var(--border)' }}>
+            {cargandoAbonos ? (
+              <div style={{ fontSize:12, color:'var(--text4)' }}>Cargando...</div>
+            ) : (abonosPorDeuda[d.id]||[]).length === 0 ? (
+              <div style={{ fontSize:12, color:'var(--text4)' }}>Sin abonos registrados todavía</div>
+            ) : (abonosPorDeuda[d.id]||[]).map(a => (
+              <div key={a.id} style={{ display:'flex', justifyContent:'space-between', padding:'6px 0', fontSize:12 }}>
+                <span style={{ color:'var(--text3)' }}>{a.fecha}{a.notas ? ` · ${a.notas}` : ''}</span>
+                <span style={{ color:'var(--gold)', fontWeight:700 }}>{cop(a.monto)}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -1238,22 +1331,7 @@ function Deudas() {
             <div style={{ marginBottom:20 }}>
               <div style={{ fontSize:13, fontWeight:700, color:'var(--red)', marginBottom:10, letterSpacing:1 }}>LO QUE DEBO</div>
               <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                {debo.map(d => (
-                  <div key={d.id} className="panel" style={{ border:'1px solid rgba(224,82,82,0.2)' }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-                      <div>
-                        <div style={{ fontSize:14, fontWeight:700, color:'var(--text)' }}>{d.acreedor}</div>
-                        {d.descripcion && <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>{d.descripcion}</div>}
-                        {d.cuota_mensual>0 && <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>Cuota: {cop(d.cuota_mensual)}/mes</div>}
-                        {d.fecha_vencimiento && <div style={{ fontSize:11, color:'var(--gold)', marginTop:2 }}>Vence: {d.fecha_vencimiento}</div>}
-                      </div>
-                      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                        <div style={{ fontSize:18, fontWeight:900, color:'var(--red)' }}>{cop(d.saldo_total)}</div>
-                        <div onClick={() => eliminar(d.id)} style={{ cursor:'pointer', fontSize:12, color:'var(--text4)' }}>×</div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                {debo.map(d => renderTarjetaDeuda(d, 'rgba(224,82,82,0.2)'))}
               </div>
             </div>
           )}
@@ -1263,21 +1341,7 @@ function Deudas() {
             <div>
               <div style={{ fontSize:13, fontWeight:700, color:'var(--green)', marginBottom:10, letterSpacing:1 }}>ME DEBEN A MÍ</div>
               <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
-                {meDeben.map(d => (
-                  <div key={d.id} className="panel" style={{ border:'1px solid var(--green-border)' }}>
-                    <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
-                      <div>
-                        <div style={{ fontSize:14, fontWeight:700, color:'var(--text)' }}>{d.acreedor}</div>
-                        {d.descripcion && <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>{d.descripcion}</div>}
-                        {d.fecha_vencimiento && <div style={{ fontSize:11, color:'var(--gold)', marginTop:2 }}>Vence: {d.fecha_vencimiento}</div>}
-                      </div>
-                      <div style={{ display:'flex', alignItems:'center', gap:10 }}>
-                        <div style={{ fontSize:18, fontWeight:900, color:'var(--green)' }}>{cop(d.saldo_total)}</div>
-                        <div onClick={() => eliminar(d.id)} style={{ cursor:'pointer', fontSize:12, color:'var(--text4)' }}>×</div>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+                {meDeben.map(d => renderTarjetaDeuda(d, 'var(--green-border)'))}
               </div>
             </div>
           )}
@@ -1286,6 +1350,7 @@ function Deudas() {
         </>
       )}
 
+      {/* Modal: nueva deuda */}
       {modal && (
         <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:20 }}>
           <div style={{ background:'var(--bg2)', borderRadius:16, padding:28, width:'100%', maxWidth:400, border:'1px solid var(--border)' }}>
@@ -1314,6 +1379,44 @@ function Deudas() {
             <div style={{ display:'flex', gap:10, marginTop:8 }}>
               <button onClick={guardar} disabled={!acreedor||!total} className="btn-green" style={{ flex:1 }}>Guardar</button>
               <button onClick={() => setModal(false)} className="btn">Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: abonar */}
+      {modalAbono && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:20 }}>
+          <div style={{ background:'var(--bg2)', borderRadius:16, padding:28, width:'100%', maxWidth:400, border:'1px solid var(--border)' }}>
+            <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:4 }}>
+              {modalAbono.tipo==='debo' ? 'Abonar a' : 'Registrar pago de'} {modalAbono.acreedor}
+            </div>
+            <div style={{ fontSize:12, color:'var(--text3)', marginBottom:20 }}>Saldo actual: {cop(modalAbono.saldo_total)}</div>
+
+            <div style={{ marginBottom:12 }}>
+              <div style={{ fontSize:11, color:'var(--text3)' }}>Monto del abono</div>
+              <input type="number" value={montoAbono} onChange={e=>setMontoAbono(e.target.value)} placeholder="Ej: 500000" style={iStyle} autoFocus />
+            </div>
+            <div style={{ marginBottom:12 }}>
+              <div style={{ fontSize:11, color:'var(--text3)' }}>Fecha</div>
+              <input type="date" value={fechaAbono} onChange={e=>setFechaAbono(e.target.value)} style={iStyle} />
+            </div>
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:11, color:'var(--text3)' }}>Nota (opcional)</div>
+              <input type="text" value={notaAbono} onChange={e=>setNotaAbono(e.target.value)} placeholder="Ej: Transferencia Bancolombia" style={iStyle} />
+            </div>
+
+            {montoAbono && (
+              <div style={{ padding:'10px 14px', background:'var(--gold-dim)', border:'1px solid var(--gold-border)', borderRadius:10, fontSize:12, color:'var(--gold)', marginBottom:16 }}>
+                Nuevo saldo: {cop(Math.max(0, modalAbono.saldo_total - (parseInt(montoAbono)||0)))}
+              </div>
+            )}
+
+            <div style={{ display:'flex', gap:10 }}>
+              <button onClick={guardarAbono} disabled={!montoAbono||guardandoAbono} className="btn-green" style={{ flex:1 }}>
+                {guardandoAbono ? 'Guardando...' : 'Confirmar abono'}
+              </button>
+              <button onClick={() => setModalAbono(null)} className="btn">Cancelar</button>
             </div>
           </div>
         </div>
