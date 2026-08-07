@@ -42,6 +42,7 @@ const FUENTES = [
   { id:'honorarios',label:'💼 Independiente / Honorarios', tipo:'variable'},
   { id:'zabu',      label:'🌭 Dividendos ZABÚ',       tipo:'negocio' },
   { id:'rv',        label:'⚽ Dividendos RV Sports',   tipo:'negocio' },
+  { id:'inversiones',label:'📈 Dividendos LRM Trade Consulting', tipo:'negocio' },
   { id:'bombas',    label:'💣 Dividendos Las Bombas',  tipo:'negocio' },
   { id:'freelance', label:'💻 Freelance / Consultoría',tipo:'variable'},
   { id:'arriendo',  label:'🏠 Arriendo recibido',     tipo:'variable'},

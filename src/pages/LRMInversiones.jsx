@@ -837,6 +837,12 @@ const CATEGORIAS_LRM = ['Perfumes','Celulares','Ropa','Cosméticos','Electrónic
 function TabDashboardLRM() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
+  const [modalTraslado, setModalTraslado] = useState(false)
+  const [montoTraslado, setMontoTraslado] = useState('')
+  const [fechaTraslado, setFechaTraslado] = useState(new Date().toISOString().split('T')[0])
+  const [notaTraslado, setNotaTraslado] = useState('')
+  const [guardandoTraslado, setGuardandoTraslado] = useState(false)
+  const [trasladoOk, setTrasladoOk] = useState(false)
 
   const cargar = async () => {
     setLoading(true)
@@ -859,9 +865,36 @@ function TabDashboardLRM() {
 
   const maxCategoria = porCategoria.length>0 ? Math.max(...porCategoria.map(c=>c.total)) : 1
 
+  const abrirTraslado = () => {
+    setMontoTraslado(totalCobrado>0 ? String(totalCobrado) : '')
+    setNotaTraslado('')
+    setFechaTraslado(new Date().toISOString().split('T')[0])
+    setTrasladoOk(false)
+    setModalTraslado(true)
+  }
+
+  const confirmarTraslado = async () => {
+    if (!montoTraslado) return
+    setGuardandoTraslado(true)
+    await supabase.from('my_space_ingresos_v2').insert({
+      fecha: fechaTraslado,
+      fuente: 'inversiones',
+      descripcion: notaTraslado || 'Utilidad LRM Trade Consulting',
+      monto: parseInt(montoTraslado),
+      tipo: 'negocio',
+      recurrente: false,
+    })
+    setGuardandoTraslado(false)
+    setTrasladoOk(true)
+    setTimeout(() => { setModalTraslado(false) }, 1500)
+  }
+
   return (
     <div>
-      <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:16 }}>Dashboard LRM Trade</div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16, flexWrap:'wrap', gap:10 }}>
+        <div style={{ fontSize:16, fontWeight:800, color:'var(--text)' }}>Dashboard LRM Trade</div>
+        <button onClick={abrirTraslado} className="btn-gold" style={{ padding:'8px 16px', fontSize:12 }}>💸 Trasladar utilidad a My Space</button>
+      </div>
       <div className="grid-3" style={{ marginBottom:20 }}>
         <div className="kpi-card"><div className="kpi-label">Total ingresos</div><div className="kpi-val" style={{ color:'var(--gold)' }}>{cop(totalIngresos)}</div></div>
         <div className="kpi-card"><div className="kpi-label">Cobrado</div><div className="kpi-val" style={{ color:'var(--green)' }}>{cop(totalCobrado)}</div></div>
@@ -883,6 +916,42 @@ function TabDashboardLRM() {
               </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {modalTraslado && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:20 }}>
+          <div style={{ background:'var(--bg2)', borderRadius:16, padding:28, width:'100%', maxWidth:400, border:'1px solid var(--border)' }}>
+            <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:4 }}>Trasladar utilidad a My Space</div>
+            <div style={{ fontSize:12, color:'var(--text3)', marginBottom:20 }}>Se registra como ingreso "Dividendos LRM Trade Consulting"</div>
+
+            <div style={{ marginBottom:12 }}>
+              <div style={{ fontSize:11, color:'var(--text3)' }}>Monto a trasladar (COP)</div>
+              <input type="number" value={montoTraslado} onChange={e=>setMontoTraslado(e.target.value)} style={iStyle} autoFocus />
+              <div style={{ fontSize:10, color:'var(--text4)', marginTop:4 }}>Sugerido según lo cobrado: {cop(totalCobrado)}</div>
+            </div>
+            <div style={{ marginBottom:12 }}>
+              <div style={{ fontSize:11, color:'var(--text3)' }}>Fecha</div>
+              <input type="date" value={fechaTraslado} onChange={e=>setFechaTraslado(e.target.value)} style={iStyle} />
+            </div>
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:11, color:'var(--text3)' }}>Nota (opcional)</div>
+              <input type="text" value={notaTraslado} onChange={e=>setNotaTraslado(e.target.value)} placeholder="Ej: Utilidad julio" style={iStyle} />
+            </div>
+
+            {trasladoOk ? (
+              <div style={{ padding:'12px 14px', background:'var(--green-dim)', border:'1px solid var(--green-border)', borderRadius:10, fontSize:13, color:'var(--green)', fontWeight:600, textAlign:'center' }}>
+                ✅ Trasladado a My Space
+              </div>
+            ) : (
+              <div style={{ display:'flex', gap:10 }}>
+                <button onClick={confirmarTraslado} disabled={!montoTraslado||guardandoTraslado} className="btn-green" style={{ flex:1 }}>
+                  {guardandoTraslado ? 'Guardando...' : 'Confirmar traslado'}
+                </button>
+                <button onClick={()=>setModalTraslado(false)} className="btn">Cancelar</button>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
