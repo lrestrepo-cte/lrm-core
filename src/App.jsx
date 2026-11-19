@@ -106,7 +106,7 @@ function CocinaApp({ usuario, onCerrarSesion }) {
 export default function App() {
   useEffect(() => { localStorage.removeItem('lrm_usuario') }, [])
   const [usuario,     setUsuario]     = useState(null)
-  const [vista,       setVista]       = useState('core')   // core | lrm | zabu | rv | inversiones | myspace | capitan
+  const [vista,       setVista]       = useState('core')   // core | lrm | zabu | rv | inversiones | lrm-inversiones | myspace | capitan
   const [navActivo,   setNavActivo]   = useState('dashboard')
   const [negNav,      setNegNav]      = useState('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -164,9 +164,7 @@ export default function App() {
     </div>
   )
 
-  // IMPORTANTE: estas variables se usan dentro de renderContenido() y del JSX de retorno.
-  // 'inversiones' se trata exactamente igual que zabu/rv: una vista de negocio con su propio
-  // layout completo (sidebar + topbar), NO un return temprano fuera del layout.
+  // Cada negocio es una vista con su propio layout (sidebar + topbar)
   const isZabu = vista === 'zabu'
   const isRV   = vista === 'rv'
   const isInversiones = vista === 'inversiones'
@@ -179,11 +177,7 @@ export default function App() {
     : (TITULOS[navActivo] || 'Business')
 
   const renderContenido = () => {
-    // "configuracion" y "myspace" son rutas de LRM Trade general — solo se
-    // muestran cuando NO estás dentro de un negocio (ZABÚ/RV/Inversiones).
-    // Antes esta condición se evaluaba SIEMPRE, así que el clic en
-    // "Configuración" dentro de ZABÚ también caía aquí y mostraba el panel
-    // de LRM en vez de abrir ZabuApp con su propio case 'configuracion'.
+    // "configuracion" y "myspace" solo existen fuera de los negocios
     if (!isZabu && !isRV && !isInversiones && !isLRMInv) {
       if (navActivo === 'myspace')       return <MySpace />
       if (navActivo === 'configuracion') return <LRMConfiguracion />
