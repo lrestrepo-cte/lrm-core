@@ -1,0 +1,551 @@
+// @ts-nocheck
+// LRM Trade Consulting · Cargas y guías
+// Recibos de bodega (warehouse receipt) tal cual llegan de RD Star u otra bodega,
+// piezas con medidas, cálculo de cobro/costo/margen y trazabilidad con un clic por etapa.
+// Tablas: lrm_bodegas, lrm_cargas, lrm_carga_piezas, lrm_carga_eventos, lrm_movimientos (SQL 06)
+import { useEffect, useMemo, useState } from 'react'
+import { supabase } from '../../lib/supabase'
+import { hoyISO, fechaCorta, NICHOS_LRM } from './LRMClientes'
+import { ETAPAS } from './Dashboard'
+import { useDivisas } from '../../lib/divisas'
+
+const cop = n => '$' + Math.round(Math.abs(n || 0)).toLocaleString('es-CO')
+const n2 = v => Number(String(v ?? '').replace(',', '.')) || 0
+const fmt = (v, d = 1) => Number(v || 0).toLocaleString('es-CO', { maximumFractionDigits: d })
+const LB_A_KG = 0.45359237
+const PIE3_A_M3 = 0.0283168
+const pies3Pieza = p => (n2(p.largo) * n2(p.ancho) * n2(p.alto)) / 1728
+
+const iStyle = {
+  width:'100%', padding:'8px 10px', borderRadius:8, background:'rgba(255,255,255,0.06)',
+  border:'1px solid var(--border)', color:'var(--text)', fontSize:13, fontFamily:'inherit', outline:'none', marginTop:4,
+}
+const Etiqueta = ({ children }) => <div style={{ fontSize:11, color:'var(--text3)' }}>{children}</div>
+const Vacio = ({ children }) => <div style={{ fontSize:12, color:'var(--text4)', padding:'30px 0', textAlign:'center' }}>{children}</div>
+const etapaDe = id => ETAPAS.find(e => e.id === id) || ETAPAS[0]
+const siguiente = id => ETAPAS[ETAPAS.findIndex(e => e.id === id) + 1]
+const anterior  = id => ETAPAS[ETAPAS.findIndex(e => e.id === id) - 1]
+
+// Costo de la bodega en US$/kg según la categoría (ej. RD Star: Perfumes = 5)
+export const usdDe = (bodega, categoria) => Number(bodega?.tarifas_usd?.[categoria] || 0)
+
+export function totalesPiezas(piezas) {
+  const piezasTot = piezas.reduce((s, p) => s + n2(p.cantidad), 0)
+  const lb = piezas.reduce((s, p) => s + n2(p.cantidad) * n2(p.peso_lb), 0)
+  const pies3 = piezas.reduce((s, p) => s + n2(p.cantidad) * (n2(p.pies3) || pies3Pieza(p)), 0)
+  return { piezas: piezasTot, lb, kg: lb * LB_A_KG, pies3, m3: pies3 * PIE3_A_M3 }
+}
+
+export default function Cargas() {
+  const [cargas, setCargas] = useState([])
+  const [bodegas, setBodegas] = useState([])
+  const [clientes, setClientes] = useState([])
+  const [cargando, setCargando] = useState(true)
+  const [faltaTabla, setFaltaTabla] = useState(false)
+  const [filtroEtapa, setFiltroEtapa] = useState('activas')
+  const [filtroBodega, setFiltroBodega] = useState('')
+  const [buscar, setBuscar] = useState('')
+  const [nuevo, setNuevo] = useState(false)
+  const [detalle, setDetalle] = useState(null)
+  const [verBodegas, setVerBodegas] = useState(false)
+
+  const cargar = async () => {
+    const [ca, bo, cl] = await Promise.all([
+      supabase.from('lrm_cargas').select('*').order('orden', { ascending:false }),
+      supabase.from('lrm_bodegas').select('*').order('created_at'),
+      supabase.from('lrm_clientes').select('id,nombre,empresa,codigo,tarifa_kg,nicho').order('nombre'),
+    ])
+    if ([ca, bo, cl].some(r => r.error)) { setFaltaTabla(true); setCargando(false); return }
+    setCargas(ca.data || []); setBodegas(bo.data || []); setClientes(cl.data || []); setCargando(false)
+  }
+  useEffect(() => { cargar() }, [])
+
+  const nombreCliente = id => clientes.find(c => c.id === id)?.nombre
+  const nombreBodega = id => bodegas.find(b => b.id === id)?.nombre || '—'
+
+  const lista = useMemo(() => cargas.filter(c =>
+    (filtroEtapa === 'todas' || (filtroEtapa === 'activas' ? c.etapa !== 'entregada' : c.etapa === filtroEtapa)) &&
+    (!filtroBodega || c.bodega_id === filtroBodega) &&
+    (!buscar || [c.guia, c.referencia, c.remitente, c.descripcion, nombreCliente(c.cliente_id), String(c.orden)].join(' ').toLowerCase().includes(buscar.toLowerCase()))
+  ), [cargas, filtroEtapa, filtroBodega, buscar, clientes])
+
+  const avanzar = async (c, etapa) => {
+    if (!etapa) return
+    setCargas(prev => prev.map(x => x.id === c.id ? { ...x, etapa } : x))
+    const extra = etapa === 'entregada' ? { fecha_entrega: hoyISO() } : etapa === 'transito' ? { fecha_salida: hoyISO() } : {}
+    await supabase.from('lrm_cargas').update({ etapa, ...extra }).eq('id', c.id)
+    await supabase.from('lrm_carga_eventos').insert({ carga_id: c.id, etapa })
+    cargar()
+  }
+
+  if (faltaTabla) return (
+    <div className="panel" style={{ maxWidth:560, border:'1px solid rgba(224,82,82,0.3)' }}>
+      <div style={{ fontSize:15, fontWeight:700, color:'var(--text)', marginBottom:8 }}>Falta crear las tablas de Logística</div>
+      <div style={{ fontSize:13, color:'var(--text3)', lineHeight:1.7 }}>Corre en Supabase (SQL Editor) el archivo <b>06_lrm_logistica.sql</b> y recarga la página.</div>
+    </div>
+  )
+  if (cargando) return <div style={{ textAlign:'center', padding:'50px 0', color:'var(--text3)' }}>Cargando…</div>
+
+  const activas = cargas.filter(c => c.etapa !== 'entregada')
+
+  return (
+    <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+      {/* Barra de acciones */}
+      <div style={{ display:'flex', justifyContent:'space-between', gap:10, flexWrap:'wrap' }}>
+        <div style={{ display:'flex', gap:6, flexWrap:'wrap', alignItems:'center' }}>
+          <button onClick={() => setFiltroBodega('')} className={!filtroBodega ? 'btn-gold' : 'btn'} style={{ fontSize:11 }}>Todas las bodegas</button>
+          {bodegas.filter(b => b.activa).map(b => (
+            <button key={b.id} onClick={() => setFiltroBodega(b.id)} className={filtroBodega === b.id ? 'btn-gold' : 'btn'} style={{ fontSize:11 }}>{b.nombre}</button>
+          ))}
+          <button onClick={() => setVerBodegas(true)} className="btn" style={{ fontSize:11 }}>⚙ Bodegas</button>
+        </div>
+        <button onClick={() => setNuevo(true)} className="btn-gold" style={{ padding:'9px 18px' }}>+ Recibo de bodega</button>
+      </div>
+
+      {/* Etapas */}
+      <div className="panel" style={{ padding:'14px 16px' }}>
+        <div style={{ display:'flex', gap:4 }}>
+          {[{ id:'activas', label:'En camino', color:'var(--gold)', n: activas.length }, ...ETAPAS.map(e => ({ ...e, n: cargas.filter(c => c.etapa === e.id).length }))].map(e => (
+            <button key={e.id} onClick={() => setFiltroEtapa(filtroEtapa === e.id ? 'todas' : e.id)}
+              style={{ flex:1, background: filtroEtapa === e.id ? 'var(--bg4)' : 'transparent', border:'1px solid ' + (filtroEtapa === e.id ? 'var(--border2)' : 'transparent'), borderRadius:10, padding:'8px 4px', cursor:'pointer', fontFamily:'inherit' }}>
+              <div style={{ height:4, borderRadius:2, background: e.n ? e.color : 'rgba(255,255,255,0.06)', marginBottom:6 }} />
+              <div style={{ fontSize:18, fontWeight:800, color: e.n ? 'var(--text)' : 'var(--text4)' }}>{e.n}</div>
+              <div style={{ fontSize:10, color:'var(--text3)', lineHeight:1.2 }}>{e.label}</div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <input value={buscar} onChange={e => setBuscar(e.target.value)} placeholder="Buscar por recibo, cliente, referencia o remitente…" style={{ ...iStyle, marginTop:0, padding:'10px 12px' }} />
+
+      {/* Lista */}
+      {lista.length === 0 ? <Vacio>{cargas.length === 0 ? 'Todavía no hay cargas. Dale a "+ Recibo de bodega" para registrar la primera.' : 'Ninguna carga coincide con el filtro.'}</Vacio> : (
+        <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+          {lista.map(c => {
+            const e = etapaDe(c.etapa), sig = siguiente(c.etapa)
+            const cobro = n2(c.peso_cobrable_kg) * n2(c.tarifa_cliente), costo = c.tarifa_costo_usd ? n2(c.peso_kg) * n2(c.tarifa_costo_usd) * n2(c.trm) : n2(c.peso_cobrable_kg) * n2(c.tarifa_costo)
+            const idx = ETAPAS.findIndex(x => x.id === c.etapa)
+            return (
+              <div key={c.id} className="panel" style={{ padding:'14px 16px', borderLeft:`3px solid ${e.color}` }}>
+                <div style={{ display:'flex', justifyContent:'space-between', gap:12, flexWrap:'wrap', cursor:'pointer' }} onClick={() => setDetalle(c)}>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize:11, color:'var(--text3)' }}>Orden #{c.orden} · WR {c.guia} · {nombreBodega(c.bodega_id)} · {fechaCorta(c.fecha_recibo)}</div>
+                    <div style={{ fontSize:15, fontWeight:800, color:'var(--text)', marginTop:2 }}>{nombreCliente(c.cliente_id) || c.referencia || 'Sin cliente'}</div>
+                    <div style={{ fontSize:12, color:'var(--text3)', marginTop:2 }}>
+                      {[c.descripcion, c.remitente && `de ${c.remitente}`].filter(Boolean).join(' · ')}
+                    </div>
+                    <div style={{ fontSize:12, color:'var(--text2)', marginTop:6 }}>
+                      {c.piezas} pzs · {fmt(c.libras, 0)} lb · {fmt(c.peso_kg)} kg · {fmt(c.pies3, 2)} ft³ · {c.modalidad === 'aereo' ? 'Aéreo' : 'Marítimo'}
+                    </div>
+                  </div>
+                  <div style={{ textAlign:'right' }}>
+                    <div style={{ fontSize:14, fontWeight:800, color:'var(--gold)' }}>{cop(cobro)}</div>
+                    <div style={{ fontSize:11, color:'var(--green)' }}>margen {cop(cobro - costo)}</div>
+                    {!c.facturada && cobro > 0 && <div style={{ fontSize:10, color:'#E8A23A', marginTop:2 }}>sin pasar a Caja</div>}
+                  </div>
+                </div>
+                {/* Trazabilidad */}
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginTop:12, flexWrap:'wrap' }}>
+                  <div style={{ display:'flex', gap:3, flex:1, minWidth:200 }}>
+                    {ETAPAS.map((x, i) => (
+                      <div key={x.id} title={x.label} style={{ flex:1 }}>
+                        <div style={{ height:5, borderRadius:3, background: i <= idx ? e.color : 'rgba(255,255,255,0.07)' }} />
+                        <div style={{ fontSize:9, color: i === idx ? e.color : 'var(--text4)', marginTop:3, textAlign:'center', fontWeight: i === idx ? 700 : 400 }}>{x.label}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {sig && <button onClick={() => avanzar(c, sig.id)} className="btn" style={{ fontSize:11, borderColor:sig.color, color:sig.color }}>→ {sig.label}</button>}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {nuevo && <ModalRecibo bodegas={bodegas.filter(b => b.activa)} clientes={clientes} onCerrar={() => setNuevo(false)} onGuardado={() => { setNuevo(false); cargar() }} />}
+      {detalle && <ModalDetalle carga={detalle} cliente={nombreCliente(detalle.cliente_id)} bodega={bodegas.find(b => b.id === detalle.bodega_id)}
+        onAvanzar={avanzar} onCerrar={() => setDetalle(null)} onCambio={() => { setDetalle(null); cargar() }} />}
+      {verBodegas && <ModalBodegas bodegas={bodegas} onCerrar={() => setVerBodegas(false)} onCambio={cargar} />}
+    </div>
+  )
+}
+
+// ── Pegar datos: convierte el bloque de texto (sacado de la foto con Claude) en el formulario ──
+// Formato:
+//   WR: 191360
+//   Fecha: 2026-09-10            (también 9/10/2026 como viene en el recibo)
+//   Bodega: RD Star 1
+//   Referencia: MOHAMED ANKA / 608
+//   Remitente: ORIENTAL AROMA PERFUMERIA
+//   Consignatario: SPC SERVICIOS LOGISTICOS SAS
+//   Descripcion: 6 CRTN CON PERFUMES
+//   Modalidad: Maritimo          (o Aereo)
+//   Flete: Collect               (o Prepaid)
+//   Piezas:
+//   4 | CART | 24 | 18 | 13 | 48     (cantidad | tipo | largo | ancho | alto | peso lb por pieza)
+const sinTildes = t => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+export function leerBloqueRecibo(texto) {
+  const datos = {}, piezas = []
+  let enPiezas = false
+  for (const linea of String(texto || '').split(/\r?\n/)) {
+    const l = linea.trim()
+    if (!l) continue
+    const m = l.match(/^([A-Za-zÁÉÍÓÚáéíóúñÑ .()º°#]+?)\s*:\s*(.*)$/)
+    if (m && !/^\d/.test(l)) {
+      const clave = sinTildes(m[1]).replace(/[^a-z]/g, '')
+      enPiezas = clave.startsWith('pieza')
+      if (!enPiezas) datos[clave] = m[2].trim()
+      continue
+    }
+    if (enPiezas) {
+      const partes = l.split(/\s*[|;,\t]\s*|\s+x\s+|\s{2,}/i).map(x => x.trim()).filter(Boolean)
+      const numeros = partes.map(x => (x.match(/^[\d.,]+/) || [])[0]).filter(Boolean)
+      const tipo = (partes.find(x => /^[a-z]+$/i.test(x)) || 'CART').toUpperCase()
+      if (numeros.length >= 5) {
+        const [cantidad, largo, ancho, alto, peso_lb] = numeros.map(x => x.replace(',', '.'))
+        piezas.push({ cantidad, tipo: ['CART','BOX','PALLET','BAG'].includes(tipo) ? tipo : 'OTRO', largo, ancho, alto, peso_lb })
+      }
+    }
+  }
+  let fecha = datos.fecha || ''
+  const us = fecha.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/)
+  if (us) fecha = `${us[3]}-${us[1].padStart(2, '0')}-${us[2].padStart(2, '0')}`
+  else fecha = (fecha.match(/\d{4}-\d{2}-\d{2}/) || [''])[0]
+  const mod = sinTildes(datos.modalidad || '')
+  return {
+    guia: datos.wr || datos.recibo || datos.numero || datos.warehousereceipt || '',
+    fecha_recibo: fecha,
+    bodega: datos.bodega || '',
+    referencia: datos.referencia || datos.reference || '',
+    remitente: datos.remitente || datos.receivedfrom || '',
+    consignatario: datos.consignatario || datos.receivedfor || '',
+    descripcion: datos.descripcion || datos.description || '',
+    modalidad: mod.startsWith('aer') || mod.startsWith('air') ? 'aereo' : mod ? 'maritimo' : '',
+    flete: sinTildes(datos.flete || '').startsWith('pre') ? 'prepaid' : datos.flete ? 'collect' : '',
+    piezas,
+  }
+}
+
+// ── Nuevo recibo de bodega ─────────────────────────────────────────────────
+const PIEZA_VACIA = { cantidad:'1', tipo:'CART', largo:'', ancho:'', alto:'', peso_lb:'' }
+
+function ModalRecibo({ bodegas, clientes, onCerrar, onGuardado }) {
+  const [f, setF] = useState({
+    bodega_id: bodegas[0]?.id || '', guia:'', fecha_recibo: hoyISO(), cliente_id:'', referencia:'', remitente:'', consignatario:'',
+    descripcion:'', categoria:'Perfumes', modalidad:'maritimo', flete:'collect', peso_cobrable_kg:'',
+    aiu_lb_pieza: String(bodegas[0]?.aiu_lb_pieza ?? 2), tarifa_costo_usd: String(usdDe(bodegas[0], 'Perfumes')), trm:'',
+    tarifa_cliente:'', notas:'',
+  })
+  const divisas = useDivisas()
+  const trmHoy = divisas?.find(d => d.id === 'USD')?.hoy
+  useEffect(() => { if (trmHoy && !f.trm) setF(p => ({ ...p, trm: String(Math.round(trmHoy * 100) / 100) })) }, [trmHoy])
+  const [piezas, setPiezas] = useState([{ ...PIEZA_VACIA }])
+  const [pasarACaja, setPasarACaja] = useState(true)
+  const [error, setError] = useState('')
+  const [guardando, setGuardando] = useState(false)
+  const set = k => e => setF(p => ({ ...p, [k]: e.target.value }))
+
+  // AIU interno: solo perfumes, X lb por pieza. Va en el peso que se le cobra al cliente, nunca se le muestra.
+  const tot = totalesPiezas(piezas)
+  const conAiu = f.categoria === 'Perfumes'
+  const aiuPieza = conAiu ? n2(f.aiu_lb_pieza) : 0
+  const aiuLb = aiuPieza * tot.piezas
+  const lbConAiu = tot.lb + aiuLb
+  const kgCliente = f.peso_cobrable_kg !== '' ? n2(f.peso_cobrable_kg) : Math.round(lbConAiu * LB_A_KG * 10) / 10
+  const costoUsd = tot.kg * n2(f.tarifa_costo_usd)            // la bodega cobra el peso real
+  const costo = costoUsd * n2(f.trm)
+  const cobro = kgCliente * n2(f.tarifa_cliente)
+
+  // La referencia trae el código del cliente (ej. "MOHAMED ANKA / 608"): si coincide, lo elige solo
+  const alCambiarReferencia = (e) => {
+    const ref = e.target.value
+    const codigo = (ref.match(/(\d+)\s*$/) || [])[1]
+    const cli = codigo && clientes.find(c => String(c.codigo || '').trim() === codigo)
+    setF(p => ({ ...p, referencia: ref, ...(cli ? { cliente_id: cli.id, tarifa_cliente: p.tarifa_cliente || String(cli.tarifa_kg || '') } : {}) }))
+  }
+  const alCambiarCliente = (e) => {
+    const cli = clientes.find(c => c.id === e.target.value)
+    const categoria = cli?.nicho && NICHOS_LRM.includes(cli.nicho) ? cli.nicho : f.categoria
+    setF(p => ({ ...p, cliente_id: e.target.value, tarifa_cliente: cli?.tarifa_kg ? String(cli.tarifa_kg) : p.tarifa_cliente, categoria, tarifa_costo_usd: String(usdDe(bodegas.find(b => b.id === p.bodega_id), categoria) || p.tarifa_costo_usd) }))
+  }
+  const alCambiarBodega = (e) => {
+    const b = bodegas.find(x => x.id === e.target.value)
+    setF(p => ({ ...p, bodega_id: e.target.value, tarifa_costo_usd: String(usdDe(b, p.categoria) || p.tarifa_costo_usd), aiu_lb_pieza: String(b?.aiu_lb_pieza ?? p.aiu_lb_pieza) }))
+  }
+  const setPieza = (i, k) => e => setPiezas(prev => prev.map((p, j) => j === i ? { ...p, [k]: e.target.value } : p))
+  const [bloque, setBloque] = useState('')
+  const [aviso, setAviso] = useState('')
+  const llenarDesdeBloque = () => {
+    const d = leerBloqueRecibo(bloque)
+    if (!d.guia && d.piezas.length === 0) return setAviso('No reconocí el formato. Pega el bloque tal cual te lo entregó Claude.')
+    const bod = d.bodega && bodegas.find(b => sinTildes(b.nombre).includes(sinTildes(d.bodega)) || sinTildes(d.bodega).includes(sinTildes(b.nombre)))
+    const codigo = (d.referencia.match(/(\d+)\s*$/) || [])[1]
+    const cli = codigo && clientes.find(c => String(c.codigo || '').trim() === codigo)
+    setF(p => ({
+      ...p,
+      ...(d.guia && { guia: d.guia }), ...(d.fecha_recibo && { fecha_recibo: d.fecha_recibo }),
+      ...(d.referencia && { referencia: d.referencia }), ...(d.remitente && { remitente: d.remitente }),
+      ...(d.consignatario && { consignatario: d.consignatario }), ...(d.descripcion && { descripcion: d.descripcion }),
+      ...(d.modalidad && { modalidad: d.modalidad }), ...(d.flete && { flete: d.flete }),
+      ...(bod && { bodega_id: bod.id, aiu_lb_pieza: String(bod.aiu_lb_pieza ?? p.aiu_lb_pieza), tarifa_costo_usd: String(usdDe(bod, p.categoria) || p.tarifa_costo_usd) }),
+      ...(cli && { cliente_id: cli.id, tarifa_cliente: p.tarifa_cliente || String(cli.tarifa_kg || ''), categoria: NICHOS_LRM.includes(cli.nicho) ? cli.nicho : p.categoria }),
+    }))
+    if (d.piezas.length) setPiezas(d.piezas)
+    setAviso(`Listo: ${d.piezas.length} renglón(es) de piezas${cli ? `, cliente ${cli.nombre}` : codigo ? `. Ningún cliente tiene el código ${codigo}: elígelo a mano` : ''}. Revisa los totales contra el papel.`)
+    setBloque('')
+  }
+
+  const guardar = async () => {
+    if (!f.guia.trim()) return setError('Escribe el número del recibo (WR).')
+    if (!f.bodega_id) return setError('Elige la bodega.')
+    if (tot.piezas === 0) return setError('Agrega al menos una pieza.')
+    setGuardando(true)
+    const bodega = bodegas.find(b => b.id === f.bodega_id)
+    const { data: carga, error: e } = await supabase.from('lrm_cargas').insert({
+      guia: f.guia.trim(), bodega_id: f.bodega_id, fecha_recibo: f.fecha_recibo, cliente_id: f.cliente_id || null,
+      referencia: f.referencia || null, remitente: f.remitente || null, consignatario: f.consignatario || null,
+      descripcion: f.descripcion || null, categoria: f.categoria, modalidad: f.modalidad, flete: f.flete,
+      proveedor: bodega?.operador || bodega?.nombre, origen: bodega?.ciudad || null,
+      piezas: tot.piezas, libras: Math.round(tot.lb * 100) / 100, peso_kg: Math.round(tot.kg * 10) / 10,
+      pies3: Math.round(tot.pies3 * 1000) / 1000, cbm: Math.round(tot.m3 * 1000) / 1000,
+      aiu_lb: aiuLb, libras_aiu: Math.round(lbConAiu * 100) / 100, peso_cobrable_kg: kgCliente,
+      tarifa_cliente: n2(f.tarifa_cliente), tarifa_costo_usd: n2(f.tarifa_costo_usd), trm: n2(f.trm),
+      tarifa_costo: Math.round(n2(f.tarifa_costo_usd) * n2(f.trm) * tot.kg / Math.max(kgCliente, 0.0001)),
+      etapa:'bodega', facturada: pasarACaja && (cobro > 0 || costo > 0), notas: f.notas || null,
+    }).select().single()
+    if (e) { setGuardando(false); return setError('No se pudo guardar: ' + e.message) }
+
+    await supabase.from('lrm_carga_piezas').insert(piezas.filter(p => n2(p.cantidad) > 0).map(p => ({
+      carga_id: carga.id, cantidad: n2(p.cantidad), tipo: p.tipo || 'CART', largo: n2(p.largo), ancho: n2(p.ancho), alto: n2(p.alto),
+      peso_lb: n2(p.peso_lb), pies3: Math.round(pies3Pieza(p) * 1000) / 1000,
+    })))
+    await supabase.from('lrm_carga_eventos').insert({ carga_id: carga.id, etapa:'bodega', nota:`Recibida en ${bodega?.nombre || 'bodega'}` })
+
+    // Pasa a Caja: cuenta de cobro al cliente y factura del proveedor
+    if (pasarACaja && (cobro > 0 || costo > 0)) {
+      const ref = `WR ${f.guia.trim()}`
+      // Nota para el cliente: solo kilos × tarifa (el AIU no se menciona)
+      const movs = [{ tipo:'cobro_cliente', concepto:'flete', cliente_id: f.cliente_id || null, carga_id: carga.id, monto: Math.round(cobro), fecha: hoyISO(), referencia: ref, notas: `${fmt(kgCliente)} kg × ${cop(f.tarifa_cliente)}` }]
+      if (costo > 0) movs.push({ tipo:'costo_proveedor', concepto:'flete', proveedor: bodega?.operador || bodega?.nombre, carga_id: carga.id, monto: Math.round(costo), fecha: hoyISO(), referencia: ref, notas: `${fmt(tot.kg)} kg × US$${fmt(f.tarifa_costo_usd, 2)} = US$${fmt(costoUsd, 2)} · TRM ${fmt(f.trm, 2)}` })
+      await supabase.from('lrm_movimientos').insert(movs)
+    }
+    setGuardando(false); onGuardado()
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:12 }}>
+      <div style={{ background:'var(--bg2)', borderRadius:16, padding:22, width:'100%', maxWidth:760, border:'1px solid var(--border)', maxHeight:'94vh', overflowY:'auto' }}>
+        <div style={{ fontSize:17, fontWeight:800, color:'var(--text)' }}>Recibo de bodega</div>
+        <div style={{ fontSize:12, color:'var(--text3)', marginBottom:14 }}>Pega el bloque que te entrega Claude con la foto del recibo, o llénalo a mano.</div>
+        <div style={{ padding:12, borderRadius:10, background:'var(--gold-dim)', border:'1px solid var(--gold-border)', marginBottom:16 }}>
+          <div style={{ fontSize:12, fontWeight:700, color:'var(--gold)', marginBottom:6 }}>📋 Pegar datos del recibo</div>
+          <textarea id="wr-bloque" value={bloque} onChange={e => setBloque(e.target.value)} placeholder={'WR: 191360\nFecha: 9/10/2026\nReferencia: MOHAMED ANKA / 608\n…\nPiezas:\n4 | CART | 24 | 18 | 13 | 48'}
+            style={{ ...iStyle, minHeight:70, resize:'vertical', fontFamily:'ui-monospace, Menlo, monospace', fontSize:12 }} />
+          <div style={{ display:'flex', gap:10, alignItems:'center', marginTop:8, flexWrap:'wrap' }}>
+            <button id="wr-llenar" onClick={llenarDesdeBloque} disabled={!bloque.trim()} className="btn-gold" style={{ fontSize:12 }}>Llenar formulario</button>
+            {aviso && <span style={{ fontSize:11, color:'var(--text2)' }}>{aviso}</span>}
+          </div>
+        </div>
+
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(160px, 100%), 1fr))', gap:10, marginBottom:10 }}>
+          <div><Etiqueta>Bodega</Etiqueta><select id="wr-bodega" value={f.bodega_id} onChange={alCambiarBodega} style={iStyle}>{bodegas.map(b => <option key={b.id} value={b.id}>{b.nombre}</option>)}</select></div>
+          <div><Etiqueta>N.º recibo (WR)</Etiqueta><input id="wr-numero" value={f.guia} onChange={set('guia')} placeholder="191360" style={iStyle} autoFocus /></div>
+          <div><Etiqueta>Fecha</Etiqueta><input type="date" value={f.fecha_recibo} onChange={set('fecha_recibo')} style={iStyle} /></div>
+          <div><Etiqueta>Modalidad</Etiqueta><select value={f.modalidad} onChange={set('modalidad')} style={iStyle}><option value="maritimo">Marítimo (Ocean)</option><option value="aereo">Aéreo (Air)</option></select></div>
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap:10, marginBottom:10 }}>
+          <div><Etiqueta>Referencia (Reference)</Etiqueta><input id="wr-referencia" value={f.referencia} onChange={alCambiarReferencia} placeholder="MOHAMED ANKA / 608" style={iStyle} /></div>
+          <div><Etiqueta>Cliente LRM</Etiqueta>
+            <select id="wr-cliente" value={f.cliente_id} onChange={alCambiarCliente} style={iStyle}>
+              <option value="">Sin asignar</option>
+              {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}{c.codigo ? ` · ${c.codigo}` : ''}</option>)}
+            </select></div>
+          <div><Etiqueta>Remitente (Received from)</Etiqueta><input id="wr-remitente" value={f.remitente} onChange={set('remitente')} placeholder="ORIENTAL AROMA PERFUMERIA" style={iStyle} /></div>
+          <div><Etiqueta>Consignatario (Received for)</Etiqueta><input value={f.consignatario} onChange={set('consignatario')} placeholder="SPC SERVICIOS LOGISTICOS SAS" style={iStyle} /></div>
+          <div><Etiqueta>Descripción</Etiqueta><input id="wr-descripcion" value={f.descripcion} onChange={set('descripcion')} placeholder="6 CRTN CON PERFUMES" style={iStyle} /></div>
+          <div className="grid-2" style={{ gap:10 }}>
+            <div><Etiqueta>Categoría</Etiqueta><select id="wr-categoria" value={f.categoria} onChange={e => { const categoria = e.target.value; setF(p => ({ ...p, categoria, tarifa_costo_usd: String(usdDe(bodegas.find(b => b.id === p.bodega_id), categoria) || '') })) }} style={iStyle}>{NICHOS_LRM.map(n => <option key={n}>{n}</option>)}</select></div>
+            <div><Etiqueta>Flete</Etiqueta><select value={f.flete} onChange={set('flete')} style={iStyle}><option value="collect">Collect</option><option value="prepaid">Prepaid</option></select></div>
+          </div>
+        </div>
+
+        {/* Piezas */}
+        <div style={{ fontSize:12, fontWeight:700, color:'var(--text)', margin:'16px 0 6px' }}>Piezas <span style={{ fontWeight:400, color:'var(--text3)' }}>· medidas en pulgadas, peso por pieza en libras</span></div>
+        <div style={{ overflowX:'auto' }}>
+          <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12, minWidth:560 }}>
+            <thead><tr style={{ color:'var(--text3)', textAlign:'left' }}>
+              {['Cant.','Tipo','Largo','Ancho','Alto','Peso lb', ...(conAiu ? ['+ AIU'] : []),'ft³ c/u',''].map(h => <th key={h} style={{ fontWeight:500, padding:'4px 4px' }}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {piezas.map((p, i) => (
+                <tr key={i}>
+                  {['cantidad','tipo','largo','ancho','alto','peso_lb'].map(k => (
+                    <td key={k} style={{ padding:'2px 4px' }}>
+                      {k === 'tipo'
+                        ? <select value={p.tipo} onChange={setPieza(i, k)} style={{ ...iStyle, marginTop:0, padding:'6px', minWidth:84 }}>{['CART','BOX','PALLET','BAG','OTRO'].map(t => <option key={t}>{t}</option>)}</select>
+                        : <input className={`wr-pieza-${k}`} inputMode="decimal" value={p[k]} onChange={setPieza(i, k)} style={{ ...iStyle, marginTop:0, padding:'6px' }} />}
+                    </td>
+                  ))}
+                  {conAiu && <td style={{ padding:'2px 6px', color:'#E8A23A', whiteSpace:'nowrap', fontSize:11 }}>+{fmt(aiuPieza)} = {fmt(n2(p.peso_lb) + aiuPieza)}</td>}
+                  <td style={{ padding:'2px 6px', color:'var(--text2)' }}>{fmt(pies3Pieza(p), 3)}</td>
+                  <td>{piezas.length > 1 && <button onClick={() => setPiezas(prev => prev.filter((_, j) => j !== i))} style={{ background:'none', border:'none', color:'var(--text3)', cursor:'pointer' }}>✕</button>}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <button id="wr-agregar-pieza" onClick={() => setPiezas(prev => [...prev, { ...PIEZA_VACIA }])} className="btn" style={{ fontSize:11, marginTop:6 }}>+ Pieza</button>
+
+        {/* Totales como en el recibo */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(100px, 100%), 1fr))', gap:8, margin:'14px 0' }}>
+          {[['Piezas', fmt(tot.piezas, 0)], ['Libras', fmt(tot.lb, 1)], ['Kilos', fmt(tot.kg, 1)], ['Pies³', fmt(tot.pies3, 3)], ['m³', fmt(tot.m3, 3)], ...(conAiu ? [['Lb + AIU', fmt(lbConAiu, 1)], ['Kg + AIU', fmt(lbConAiu * LB_A_KG, 1)]] : [])].map(([l, v]) => (
+            <div key={l} style={{ padding:'8px 10px', borderRadius:8, background:'var(--bg4)' }}>
+              <div style={{ fontSize:10, color:'var(--text3)', textTransform:'uppercase', letterSpacing:1 }}>{l}</div>
+              <div style={{ fontSize:15, fontWeight:800, color:'var(--text)' }}>{v}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Costo (bodega, peso real en US$) y cobro (cliente, peso con AIU interno) */}
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(150px, 100%), 1fr))', gap:10, marginBottom:10 }}>
+          {conAiu && <div><Etiqueta>AIU interno (lb por pieza)</Etiqueta><input id="wr-aiu" inputMode="decimal" value={f.aiu_lb_pieza} onChange={set('aiu_lb_pieza')} style={iStyle} /></div>}
+          <div><Etiqueta>Costo bodega (US$/kg)</Etiqueta><input id="wr-costo-usd" inputMode="decimal" value={f.tarifa_costo_usd} onChange={set('tarifa_costo_usd')} placeholder="5" style={iStyle} /></div>
+          <div><Etiqueta>TRM</Etiqueta><input id="wr-trm" inputMode="decimal" value={f.trm} onChange={set('trm')} placeholder="3326.96" style={iStyle} /></div>
+          <div><Etiqueta>Kg al cliente</Etiqueta><input id="wr-cobrable" inputMode="decimal" value={f.peso_cobrable_kg} onChange={set('peso_cobrable_kg')} placeholder={fmt(lbConAiu * LB_A_KG)} style={iStyle} /></div>
+          <div><Etiqueta>Le cobras (COP/kg)</Etiqueta><input id="wr-tarifa-cliente" inputMode="numeric" value={f.tarifa_cliente} onChange={set('tarifa_cliente')} placeholder="20000" style={iStyle} /></div>
+        </div>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', gap:8, padding:'12px 14px', borderRadius:10, background:'var(--bg4)', marginBottom:12, fontSize:12, color:'var(--text2)' }}>
+          <div>Costo RD <b style={{ color:'var(--red)', fontSize:14 }}>{cop(costo)}</b><div style={{ fontSize:11, color:'var(--text3)' }}>{fmt(tot.kg)} kg reales × US${fmt(f.tarifa_costo_usd, 2)} = US${fmt(costoUsd, 2)}</div></div>
+          <div>Cobro al cliente <b style={{ color:'var(--gold)', fontSize:14 }}>{cop(cobro)}</b><div style={{ fontSize:11, color:'var(--text3)' }}>{fmt(kgCliente)} kg × {cop(f.tarifa_cliente)}</div></div>
+          <div>Margen <b style={{ color:'var(--green)', fontSize:14 }}>{cop(cobro - costo)}</b>{conAiu && aiuLb > 0 && <div style={{ fontSize:11, color:'#E8A23A' }}>incluye AIU interno: {fmt(aiuLb)} lb ({fmt(aiuLb * LB_A_KG)} kg)</div>}</div>
+        </div>
+        <label style={{ display:'flex', gap:8, alignItems:'center', fontSize:12, color:'var(--text2)', marginBottom:12, cursor:'pointer' }}>
+          <input type="checkbox" checked={pasarACaja} onChange={e => setPasarACaja(e.target.checked)} />
+          Crear en Caja la cuenta de cobro al cliente y la factura del proveedor
+        </label>
+        <div style={{ marginBottom:14 }}><Etiqueta>Notas</Etiqueta><input value={f.notas} onChange={set('notas')} style={iStyle} /></div>
+        {error && <div style={{ fontSize:12, color:'var(--red)', marginBottom:10 }}>{error}</div>}
+        <div style={{ display:'flex', gap:10 }}>
+          <button id="wr-guardar" onClick={guardar} disabled={guardando} className="btn-green" style={{ flex:1 }}>{guardando ? 'Guardando…' : 'Guardar recibo'}</button>
+          <button onClick={onCerrar} className="btn">Cancelar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Detalle: piezas, trazabilidad y borrar ─────────────────────────────────
+function ModalDetalle({ carga, cliente, bodega, onAvanzar, onCerrar, onCambio }) {
+  const [piezas, setPiezas] = useState([])
+  const [eventos, setEventos] = useState([])
+  const [confirmar, setConfirmar] = useState(false)
+  useEffect(() => {
+    supabase.from('lrm_carga_piezas').select('*').eq('carga_id', carga.id).then(r => setPiezas(r.data || []))
+    supabase.from('lrm_carga_eventos').select('*').eq('carga_id', carga.id).order('fecha').then(r => setEventos(r.data || []))
+  }, [carga.id])
+  const ant = anterior(carga.etapa), sig = siguiente(carga.etapa)
+
+  const retroceder = async () => {
+    await supabase.from('lrm_cargas').update({ etapa: ant.id }).eq('id', carga.id)
+    await supabase.from('lrm_carga_eventos').insert({ carga_id: carga.id, etapa: ant.id, nota:'Corrección: se devolvió de etapa' })
+    onCambio()
+  }
+  const borrar = async () => {
+    if (!confirmar) return setConfirmar(true)
+    await supabase.from('lrm_movimientos').delete().eq('carga_id', carga.id)
+    await supabase.from('lrm_cargas').delete().eq('id', carga.id)
+    onCambio()
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:12 }}>
+      <div style={{ background:'var(--bg2)', borderRadius:16, padding:22, width:'100%', maxWidth:620, border:'1px solid var(--border)', maxHeight:'94vh', overflowY:'auto' }}>
+        <div style={{ fontSize:11, color:'var(--text3)' }}>Orden #{carga.orden} · {bodega?.nombre}</div>
+        <div style={{ fontSize:18, fontWeight:800, color:'var(--text)' }}>WR {carga.guia} · {cliente || carga.referencia || 'Sin cliente'}</div>
+        <div style={{ fontSize:12, color:'var(--text3)', marginBottom:14 }}>{[carga.descripcion, carga.remitente && `de ${carga.remitente}`, carga.consignatario && `para ${carga.consignatario}`].filter(Boolean).join(' · ')}</div>
+
+        <div style={{ fontSize:12, fontWeight:700, color:'var(--text)', marginBottom:6 }}>Piezas</div>
+        <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12, marginBottom:6 }}>
+          <thead><tr style={{ color:'var(--text3)', textAlign:'left' }}>{['Cant.','Tipo','Medidas (in)','Peso c/u','ft³ c/u'].map(h => <th key={h} style={{ fontWeight:500, padding:4 }}>{h}</th>)}</tr></thead>
+          <tbody>{piezas.map(p => (
+            <tr key={p.id} style={{ color:'var(--text2)', borderTop:'1px solid var(--border)' }}>
+              <td style={{ padding:4 }}>{p.cantidad}</td><td style={{ padding:4 }}>{p.tipo}</td>
+              <td style={{ padding:4 }}>{fmt(p.largo, 1)} × {fmt(p.ancho, 1)} × {fmt(p.alto, 1)}</td>
+              <td style={{ padding:4 }}>{fmt(p.peso_lb, 1)} lb</td><td style={{ padding:4 }}>{fmt(p.pies3, 3)}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+        <div style={{ fontSize:12, color:'var(--text2)', marginBottom:16 }}>Total: {carga.piezas} pzs · {fmt(carga.libras, 0)} lb · {fmt(carga.peso_kg)} kg · {fmt(carga.pies3, 3)} ft³ · {fmt(carga.cbm, 3)} m³ · al cliente {fmt(carga.peso_cobrable_kg)} kg{carga.aiu_lb ? ` (AIU interno ${fmt(carga.aiu_lb)} lb)` : ''}{carga.tarifa_costo_usd ? ` · costo US$${fmt(carga.tarifa_costo_usd, 2)}/kg, TRM ${fmt(carga.trm, 2)}` : ''}</div>
+
+        <div style={{ fontSize:12, fontWeight:700, color:'var(--text)', marginBottom:8 }}>Trazabilidad</div>
+        <div style={{ borderLeft:'2px solid var(--border2)', marginLeft:6, paddingLeft:14, marginBottom:14 }}>
+          {eventos.map(ev => {
+            const e = etapaDe(ev.etapa)
+            return (
+              <div key={ev.id} style={{ position:'relative', marginBottom:10 }}>
+                <div style={{ position:'absolute', left:-20, top:4, width:10, height:10, borderRadius:'50%', background:e.color }} />
+                <div style={{ fontSize:13, fontWeight:700, color:e.color }}>{e.label}</div>
+                <div style={{ fontSize:11, color:'var(--text3)' }}>{new Date(ev.fecha).toLocaleString('es-CO', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}{ev.nota ? ` · ${ev.nota}` : ''}</div>
+              </div>
+            )
+          })}
+        </div>
+
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+          {sig && <button onClick={async () => { await onAvanzar(carga, sig.id); onCambio() }} className="btn-gold">→ {sig.label}</button>}
+          {ant && <button onClick={retroceder} className="btn">← Devolver a {ant.label}</button>}
+          <button onClick={borrar} onBlur={() => setConfirmar(false)} className="btn" style={{ color:'var(--red)', borderColor:'rgba(224,82,82,0.4)' }}>
+            {confirmar ? '¿Seguro? Se borra con su cobro y costo' : 'Borrar carga'}
+          </button>
+          <button onClick={onCerrar} className="btn" style={{ marginLeft:'auto' }}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Bodegas ───────────────────────────────────────────────────────────────
+const BODEGA_VACIA = { nombre:'', operador:'', pais:'Estados Unidos', ciudad:'', direccion:'', telefono:'', email:'', usd_perfumes:'5', aiu_lb_pieza:'2', tarifas_usd:{} }
+function ModalBodegas({ bodegas, onCerrar, onCambio }) {
+  const [editando, setEditando] = useState(null)
+  const guardar = async () => {
+    const d = { ...editando, aiu_lb_pieza: n2(editando.aiu_lb_pieza), tarifas_usd: { ...(editando.tarifas_usd || {}), Perfumes: n2(editando.usd_perfumes) } }
+    delete d.usd_perfumes; delete d.tarifa_costo
+    delete d.id; delete d.created_at
+    if (editando.id) await supabase.from('lrm_bodegas').update(d).eq('id', editando.id)
+    else await supabase.from('lrm_bodegas').insert(d)
+    setEditando(null); onCambio()
+  }
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:12 }}>
+      <div style={{ background:'var(--bg2)', borderRadius:16, padding:22, width:'100%', maxWidth:520, border:'1px solid var(--border)', maxHeight:'94vh', overflowY:'auto' }}>
+        <div style={{ fontSize:17, fontWeight:800, color:'var(--text)', marginBottom:14 }}>Bodegas</div>
+        {!editando ? (
+          <>
+            {bodegas.map(b => (
+              <div key={b.id} onClick={() => setEditando({ ...b, usd_perfumes: String(usdDe(b, 'Perfumes') || ''), aiu_lb_pieza: String(b.aiu_lb_pieza ?? 2) })} style={{ padding:'10px 12px', borderRadius:10, background:'var(--bg4)', marginBottom:6, cursor:'pointer', opacity: b.activa ? 1 : 0.5 }}>
+                <div style={{ fontSize:14, fontWeight:700, color:'var(--text)' }}>{b.nombre}{!b.activa && ' (archivada)'}</div>
+                <div style={{ fontSize:11, color:'var(--text3)' }}>{[b.operador, b.ciudad, b.pais, usdDe(b, 'Perfumes') && `perfumes US$${usdDe(b, 'Perfumes')}/kg`, b.aiu_lb_pieza && `AIU ${b.aiu_lb_pieza} lb/pza`].filter(Boolean).join(' · ')}</div>
+              </div>
+            ))}
+            <div style={{ display:'flex', gap:8, marginTop:12 }}>
+              <button onClick={() => setEditando({ ...BODEGA_VACIA })} className="btn-gold">+ Bodega</button>
+              <button onClick={onCerrar} className="btn" style={{ marginLeft:'auto' }}>Cerrar</button>
+            </div>
+          </>
+        ) : (
+          <>
+            {[['nombre','Nombre','Ej: Bodega Panamá'],['operador','A quién se le paga','Ej: RD Star - Ok Cargo'],['pais','País',''],['ciudad','Ciudad',''],['direccion','Dirección',''],['telefono','Teléfono',''],['email','Correo',''],['usd_perfumes','Costo perfumes (US$ por kg)','5'],['aiu_lb_pieza','AIU interno perfumes (lb por pieza)','2']].map(([k, l, ph]) => (
+              <div key={k} style={{ marginBottom:8 }}><Etiqueta>{l}</Etiqueta><input value={editando[k] ?? ''} onChange={e => setEditando(p => ({ ...p, [k]: e.target.value }))} placeholder={ph} style={iStyle} /></div>
+            ))}
+            <div style={{ display:'flex', gap:8, marginTop:12 }}>
+              <button onClick={guardar} disabled={!editando.nombre?.trim()} className="btn-green" style={{ flex:1 }}>Guardar</button>
+              {editando.id && <button onClick={async () => { await supabase.from('lrm_bodegas').update({ activa: !editando.activa }).eq('id', editando.id); setEditando(null); onCambio() }} className="btn">{editando.activa ? 'Archivar' : 'Activar'}</button>}
+              <button onClick={() => setEditando(null)} className="btn">Volver</button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  )
+}

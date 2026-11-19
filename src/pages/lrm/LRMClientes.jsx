@@ -20,7 +20,7 @@ const iStyle = {
   width:'100%', padding:'9px 12px', borderRadius:8, background:'rgba(255,255,255,0.06)',
   border:'1px solid var(--border)', color:'var(--text)', fontSize:13, fontFamily:'inherit', outline:'none', marginTop:4,
 }
-const FORM_VACIO = { nombre:'', empresa:'', telefono:'', nicho:'Otro', estado:'prospecto', proxima_accion:'', fecha_accion:'', origen:'Estados Unidos', volumen_mes:'', tarifa:'', referido_por:'', notas:'', valor_mes:'' }
+const FORM_VACIO = { nombre:'', empresa:'', telefono:'', nicho:'Otro', estado:'prospecto', proxima_accion:'', fecha_accion:'', origen:'Estados Unidos', volumen_mes:'', tarifa:'', referido_por:'', notas:'', valor_mes:'', codigo:'', tarifa_kg:'' }
 
 export const hoyISO = () => new Date().toLocaleDateString('en-CA', { timeZone:'America/Bogota' })
 const estadoDe = (id) => ESTADOS_CLIENTE.find(e => e.id === id) || ESTADOS_CLIENTE[0]
@@ -69,7 +69,7 @@ export default function LRMClientes() {
   const guardar = async () => {
     if (!form.nombre.trim()) return
     setGuardando(true)
-    const payload = { ...form, fecha_accion: form.fecha_accion || null, valor_mes: Number(String(form.valor_mes).replace(/\D/g, '')) || 0 }
+    const payload = { ...form, fecha_accion: form.fecha_accion || null, valor_mes: Number(String(form.valor_mes).replace(/\D/g, '')) || 0, tarifa_kg: Number(String(form.tarifa_kg).replace(/\D/g, '')) || 0, codigo: String(form.codigo || '').trim() || null }
     if (editando) await supabase.from('lrm_clientes').update(payload).eq('id', editando.id)
     else await supabase.from('lrm_clientes').insert(payload)
     setGuardando(false); setModal(false); cargar()
@@ -167,7 +167,7 @@ export default function LRMClientes() {
                       </div>
                     )}
                     <div style={{ fontSize:11, color:'var(--text4)', marginTop:4 }}>
-                      {[c.origen, c.volumen_mes, c.tarifa, c.referido_por && `Referido por ${c.referido_por}`].filter(Boolean).join(' · ')}
+                      {[c.codigo && `Casillero ${c.codigo}`, c.origen, c.volumen_mes, c.tarifa, c.referido_por && `Referido por ${c.referido_por}`].filter(Boolean).join(' · ')}
                     </div>
                   </div>
                   <select value={c.estado} onChange={e => cambiarEstado(c, e.target.value)}
@@ -210,6 +210,12 @@ export default function LRMClientes() {
                 <div key={k}><div style={{ fontSize:11, color:'var(--text3)' }}>{l}</div>
                   <input id={`cli-${k}`} value={form[k]} onChange={e => setForm(p => ({ ...p, [k]:e.target.value }))} style={iStyle} /></div>
               ))}
+            </div>
+            <div className="grid-2" style={{ gap:10, marginBottom:10 }}>
+              <div><div style={{ fontSize:11, color:'var(--text3)' }}>Código de casillero (ej. 608)</div>
+                <input id="cli-codigo" value={form.codigo} onChange={e => setForm(p => ({ ...p, codigo:e.target.value }))} style={iStyle} /></div>
+              <div><div style={{ fontSize:11, color:'var(--text3)' }}>Le cobras por kg (COP)</div>
+                <input id="cli-tarifa-kg" inputMode="numeric" value={form.tarifa_kg} onChange={e => setForm(p => ({ ...p, tarifa_kg:e.target.value }))} placeholder="20000" style={iStyle} /></div>
             </div>
             <div style={{ marginBottom:10 }}><div style={{ fontSize:11, color:'var(--text3)' }}>Lo que te deja al mes (COP) · para la proyección</div>
               <input id="cli-valor" inputMode="numeric" value={form.valor_mes} onChange={e => setForm(p => ({ ...p, valor_mes:e.target.value }))} placeholder="Ej: 2000000" style={iStyle} /></div>

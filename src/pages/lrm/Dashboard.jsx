@@ -1,7 +1,6 @@
 // @ts-nocheck
 // LRM Trade Consulting · Dashboard — lo primero que se ve al entrar a la empresa.
 // Lee de Supabase: lrm_clientes, lrm_cargas, lrm_movimientos, lrm_contactos, lrm_temas, lrm_ajustes
-// (SQL: supabase/03_lrm_clientes.sql y supabase/04_lrm_dashboard.sql)
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { linkWhatsApp, hoyISO, fechaCorta } from './LRMClientes'
@@ -13,8 +12,8 @@ const diasDesde = (iso) => iso ? Math.round((new Date(hoyISO()) - new Date(iso))
 const masDias = (iso, n) => { const d = new Date(iso); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10) }
 
 export const ETAPAS = [
-  { id:'bodega',    label:'Bodega Miami',    color:'#8A94A6' },
-  { id:'transito',  label:'En vuelo',        color:'#378ADD' },
+  { id:'bodega',    label:'En bodega',       color:'#8A94A6' },
+  { id:'transito',  label:'En tránsito',     color:'#378ADD' },
   { id:'aduana',    label:'Aduana',          color:'#E8A23A' },
   { id:'destino',   label:'En Barranquilla', color:'#C9A84C' },
   { id:'entregada', label:'Entregada',       color:'#4caf50' },
@@ -28,8 +27,7 @@ const EMBUDO = [
 const ICONO = { contactar:'📞', cobrar:'💵', pagar:'🧾', carga:'📦' }
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 
-// Saldo abierto aplicando los pagos a lo más viejo primero (FIFO).
-// Devuelve el saldo y el documento abierto más antiguo (para la antigüedad y el vencimiento).
+// Saldo abierto aplicando los pagos a lo más viejo primero (FIFO)
 function saldoFIFO(cargos, pagos) {
   let pagado = sumar(pagos)
   const ordenados = [...cargos].sort((a, b) => a.fecha.localeCompare(b.fecha))
@@ -49,21 +47,18 @@ function calcular({ clientes, cargas, movs, contactos, temas, ajustes }) {
   const cli = Object.fromEntries(clientes.map(c => [c.id, c]))
   const nombreCli = (id) => cli[id]?.nombre || 'Sin cliente'
 
-  // Cartera por cliente
   const idsCliente = [...new Set(movs.filter(m => m.cliente_id && (m.tipo === 'cobro_cliente' || m.tipo === 'abono_cliente')).map(m => m.cliente_id))]
   const cartera = idsCliente.map(id => {
     const r = saldoFIFO(movs.filter(m => m.cliente_id === id && m.tipo === 'cobro_cliente'), movs.filter(m => m.cliente_id === id && m.tipo === 'abono_cliente'))
     return { id, cliente: nombreCli(id), telefono: cli[id]?.telefono, saldo: r.saldo, dias: diasDesde(r.masViejo?.fecha), vence: r.masViejo?.vence, ref: r.masViejo?.referencia }
   }).filter(c => c.saldo > 0).sort((a, b) => b.dias - a.dias)
 
-  // Por pagar por proveedor
   const provs = [...new Set(movs.filter(m => m.proveedor && (m.tipo === 'costo_proveedor' || m.tipo === 'pago_proveedor')).map(m => m.proveedor))]
   const porPagar = provs.map(p => {
     const r = saldoFIFO(movs.filter(m => m.proveedor === p && m.tipo === 'costo_proveedor'), movs.filter(m => m.proveedor === p && m.tipo === 'pago_proveedor'))
     return { proveedor: p, saldo: r.saldo, vence: r.masViejo?.vence }
   }).filter(p => p.saldo > 0).sort((a, b) => (a.vence || '9999').localeCompare(b.vence || '9999'))
 
-  // Resultado del mes: solo honorarios y margen son ingreso propio
   const delMes = movs.filter(m => (m.fecha || '').startsWith(mesActual))
   const de = (tipo, concepto) => sumar(delMes.filter(m => m.tipo === tipo && (!concepto || m.concepto === concepto)))
   const mes = {
@@ -73,7 +68,6 @@ function calcular({ clientes, cargas, movs, contactos, temas, ajustes }) {
     gastos:      de('gasto'),
   }
 
-  // CRM y proyección
   const vivos = clientes.filter(c => c.estado !== 'perdido')
   const embudo = Object.fromEntries(EMBUDO.map(e => {
     const lista = vivos.filter(c => c.estado === e.id)
@@ -85,7 +79,6 @@ function calcular({ clientes, cargas, movs, contactos, temas, ajustes }) {
     meta: Number(ajustes.find(a => a.clave === 'meta_mensual')?.valor || 0),
   }
 
-  // Hoy: todo lo que pide acción
   const hoyLista = []
   vivos.filter(c => c.fecha_accion && c.fecha_accion <= hoy).forEach(c => hoyLista.push({
     tipo:'contactar', quien:c.nombre, cliente_id:c.id, telefono:c.telefono,
@@ -137,7 +130,7 @@ function Kpi({ label, valor, sub, color = 'var(--text)', subColor = 'var(--text3
   )
 }
 
-export default function LRMTradeDashboard() {
+export default function Dashboard() {
   const [datos, setDatos] = useState(null)
   const [faltaTabla, setFaltaTabla] = useState(false)
   const [nuevoTema, setNuevoTema] = useState('')
@@ -157,7 +150,6 @@ export default function LRMTradeDashboard() {
   }
   useEffect(() => { cargar() }, [])
 
-  // Abre WhatsApp y deja el contacto registrado
   const escribir = async (h) => {
     const link = linkWhatsApp(h.telefono, h.quien)
     if (link) window.open(link, '_blank')
@@ -181,7 +173,7 @@ export default function LRMTradeDashboard() {
     <div className="panel" style={{ maxWidth:560, border:'1px solid rgba(224,82,82,0.3)' }}>
       <div style={{ fontSize:15, fontWeight:700, color:'var(--text)', marginBottom:8 }}>Faltan las tablas del dashboard</div>
       <div style={{ fontSize:13, color:'var(--text3)', lineHeight:1.7 }}>
-        Corre en Supabase (SQL Editor) los archivos <b>03_lrm_clientes.sql</b> y <b>04_lrm_dashboard.sql</b>, en ese orden, y recarga la página.
+        Corre en Supabase (SQL Editor) el archivo <b>LRM_TRADE_TODO.sql</b> y recarga la página.
       </div>
     </div>
   )
@@ -201,7 +193,6 @@ export default function LRMTradeDashboard() {
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
 
-      {/* 1 · Franja superior */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(150px, 100%), 1fr))', gap:12 }}>
         <Kpi label="Cartera por cobrar" valor={millones(totalCartera)} color="var(--gold)" sub={`${datos.cartera.length} clientes`} />
         <Kpi label="Por pagar proveedores" valor={millones(totalPagar)} color="var(--red)" sub={`${datos.porPagar.length} proveedores`} />
@@ -210,7 +201,6 @@ export default function LRMTradeDashboard() {
         <Kpi label="Proyección del mes" valor={millones(proyTotal)} sub={proyeccion.meta ? `Meta ${millones(proyeccion.meta)} · cambiar` : 'Poner meta'} onClick={cambiarMeta} />
       </div>
 
-      {/* 2 · Hoy + Cargas */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(340px, 100%), 1fr))', gap:14 }}>
         <Bloque titulo="Hoy" extra={`${datos.hoy.length} pendientes · ${datos.hoy.filter(h => h.alerta).length} atrasados`}>
           {datos.hoy.length === 0 ? <Vacio>Nada pendiente para hoy.</Vacio> : (
@@ -265,7 +255,6 @@ export default function LRMTradeDashboard() {
         </Bloque>
       </div>
 
-      {/* 3 · Plata */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap:14 }}>
         <Bloque titulo="Cartera" extra="por antigüedad">
           {datos.cartera.length === 0 ? <Vacio>Nadie te debe.</Vacio> : datos.cartera.map(c => {
@@ -317,7 +306,6 @@ export default function LRMTradeDashboard() {
         </Bloque>
       </div>
 
-      {/* 4 · CRM, proyección y temas */}
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap:14 }}>
         <Bloque titulo="CRM · embudo" extra={`${datos.contactosSemana} contactos esta semana`}>
           {EMBUDO.map(e => {

@@ -2,7 +2,10 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import LRMClientes from './lrm/LRMClientes'
-import LRMTradeDashboard from './lrm/LRMTradeDashboard'
+import Dashboard from './lrm/Dashboard'
+import Caja from './lrm/Caja'
+import Cargas from './lrm/Cargas'
+import Ajustes from './lrm/Ajustes'
 import { useDivisas } from '../lib/divisas'
 function cop(n) { return '$' + Math.round(Math.abs(n||0)).toLocaleString('es-CO') }
 const iStyle = {
@@ -1606,6 +1609,9 @@ export default function LRMInversiones({ modo = 'trade', tab: tabExterno, onTab 
     operaciones: { titulo:'Operaciones',      sub:'Registro de operaciones' },
     cuentas:     { titulo:'Cuentas de cobro', sub:'Cobros pendientes a clientes' },
     comex:       { titulo:'Cotizador',        sub:'Rutas, tarifas y cotizaciones' },
+    logistica:   { titulo:'Cargas y guías',   sub:'Recibos de bodega y trazabilidad de cada carga' },
+    caja:        { titulo:'Caja',             sub:'Lo que entra, lo que sale y el cierre de cada mes' },
+    ajustes:     { titulo:'Ajustes',          sub:'Limpieza de datos de LRM Trade' },
   }
   const pedido = tabExterno ?? tabInterno
   const tab = SECCIONES[pedido] ? pedido : 'dashboard'
@@ -1619,11 +1625,14 @@ export default function LRMInversiones({ modo = 'trade', tab: tabExterno, onTab 
         </div>
         <BurbujasDivisas />
       </div>
-      {tab==='dashboard'   && <LRMTradeDashboard />}
+      {tab==='dashboard'   && <Dashboard />}
       {tab==='clientes'    && <LRMClientes />}
       {tab==='operaciones' && <TabOperaciones />}
       {tab==='cuentas'     && <TabCuentasCobro />}
       {tab==='comex'       && <TabComexModulo />}
+      {tab==='logistica'   && <Cargas />}
+      {tab==='caja'        && <Caja />}
+      {tab==='ajustes'     && <Ajustes />}
     </div>
   )
 }
