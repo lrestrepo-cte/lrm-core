@@ -230,7 +230,9 @@ export function leerBloqueRecibo(texto) {
 // ── Nuevo recibo de bodega ─────────────────────────────────────────────────
 const PIEZA_VACIA = { cantidad:'1', tipo:'CART', largo:'', ancho:'', alto:'', peso_lb:'' }
 
-function ModalRecibo({ bodegas, clientes: clientesIniciales, onCerrar, onGuardado }) {
+function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, onCerrar, onGuardado }) {
+  const [bodegas, setBodegas] = useState(bodegasIniciales)
+  const [nuevaBod, setNuevaBod] = useState(null)          // { nombre, operador, usd, aiu } mientras se crea una bodega aquí
   const [clientes, setClientes] = useState(clientesIniciales)
   const [porCodigo, setPorCodigo] = useState(false)       // true si el cliente se eligió solo por el casillero
   const [nuevoCli, setNuevoCli] = useState(null)          // nombre del cliente que se está creando aquí mismo
@@ -278,6 +280,17 @@ function ModalRecibo({ bodegas, clientes: clientesIniciales, onCerrar, onGuardad
     const b = bodegas.find(x => x.id === e.target.value)
     setF(p => ({ ...p, bodega_id: e.target.value, tarifa_costo_usd: String(usdDe(b, p.categoria) || p.tarifa_costo_usd), aiu_lb_pieza: String(b?.aiu_lb_pieza ?? p.aiu_lb_pieza) }))
   }
+  const crearBodega = async () => {
+    if (!nuevaBod?.nombre.trim()) return
+    const { data, error: e } = await supabase.from('lrm_bodegas').insert({
+      nombre: nuevaBod.nombre.trim(), operador: nuevaBod.operador.trim() || nuevaBod.nombre.trim(),
+      tarifas_usd: { Perfumes: n2(nuevaBod.usd) }, aiu_lb_pieza: n2(nuevaBod.aiu),
+    }).select().single()
+    if (e) return setError('No se pudo crear la bodega: ' + e.message)
+    setBodegas(prev => [...prev, data])
+    setF(p => ({ ...p, bodega_id: data.id, aiu_lb_pieza: String(data.aiu_lb_pieza ?? p.aiu_lb_pieza), tarifa_costo_usd: String(usdDe(data, p.categoria) || p.tarifa_costo_usd) }))
+    setNuevaBod(null)
+  }
   const crearCliente = async () => {
     if (!nuevoCli?.trim()) return
     const codigo = (f.referencia.match(/(\d+)\s*$/) || [])[1] || null
@@ -305,6 +318,7 @@ function ModalRecibo({ bodegas, clientes: clientesIniciales, onCerrar, onGuardad
       ...(cli && { cliente_id: cli.id, tarifa_cliente: p.tarifa_cliente || String(cli.tarifa_kg || ''), categoria: NICHOS_LRM.includes(cli.nicho) ? cli.nicho : p.categoria }),
     }))
     if (d.piezas.length) setPiezas(d.piezas)
+    if (d.bodega && !bod) setNuevaBod({ nombre: d.bodega, operador:'', usd:'5', aiu:'2' })   // la bodega del recibo no existe: se propone crearla
     setPorCodigo(!!cli)
     setAviso(`Listo: ${d.piezas.length} renglón(es) de piezas${cli ? `, cliente ${cli.nombre}` : codigo ? `. Ningún cliente tiene el código ${codigo}: elígelo a mano` : ''}. Revisa los totales contra el papel.`)
     setBloque('')
@@ -364,11 +378,36 @@ function ModalRecibo({ bodegas, clientes: clientesIniciales, onCerrar, onGuardad
         </div>
 
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(160px, 100%), 1fr))', gap:10, marginBottom:10 }}>
-          <div><Etiqueta>Bodega</Etiqueta><select id="wr-bodega" value={f.bodega_id} onChange={alCambiarBodega} style={iStyle}>{bodegas.map(b => <option key={b.id} value={b.id}>{b.nombre}</option>)}</select></div>
+          <div><Etiqueta>Bodega</Etiqueta>
+            <div style={{ display:'flex', gap:6 }}>
+              <select id="wr-bodega" value={f.bodega_id} onChange={alCambiarBodega} style={{ ...iStyle, borderColor: f.bodega_id ? 'var(--border)' : 'rgba(232,162,58,0.6)' }}>
+                <option value="">Elegir bodega…</option>
+                {bodegas.map(b => <option key={b.id} value={b.id}>{b.nombre}</option>)}
+              </select>
+              <button type="button" onClick={() => setNuevaBod({ nombre:'', operador:'', usd:'5', aiu:'2' })} className="btn" style={{ marginTop:4, fontSize:11 }} title="Crear bodega">+</button>
+            </div>
+            {!f.bodega_id && <div style={{ fontSize:10, marginTop:3, color:'#E8A23A' }}>{bodegas.length ? 'Elige la bodega.' : 'No hay bodegas: créala con +'}</div>}
+          </div>
           <div><Etiqueta>N.º recibo (WR)</Etiqueta><input id="wr-numero" value={f.guia} onChange={set('guia')} placeholder="191360" style={iStyle} autoFocus /></div>
           <div><Etiqueta>Fecha</Etiqueta><input type="date" value={f.fecha_recibo} onChange={set('fecha_recibo')} style={iStyle} /></div>
           <div><Etiqueta>Modalidad</Etiqueta><select value={f.modalidad} onChange={set('modalidad')} style={iStyle}><option value="maritimo">Marítimo (Ocean)</option><option value="aereo">Aéreo (Air)</option></select></div>
         </div>
+        {nuevaBod && (
+          <div style={{ padding:12, borderRadius:10, background:'var(--bg4)', border:'1px solid var(--gold-border)', marginBottom:10 }}>
+            <div style={{ fontSize:12, fontWeight:700, color:'var(--gold)', marginBottom:6 }}>Nueva bodega</div>
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(150px, 100%), 1fr))', gap:8 }}>
+              <div><Etiqueta>Nombre</Etiqueta><input id="wr-bod-nombre" value={nuevaBod.nombre} onChange={e => setNuevaBod(p => ({ ...p, nombre:e.target.value }))} placeholder="Ej: RD Star 1" style={iStyle} autoFocus /></div>
+              <div><Etiqueta>A quién se le paga</Etiqueta><input value={nuevaBod.operador} onChange={e => setNuevaBod(p => ({ ...p, operador:e.target.value }))} placeholder="Ej: RD Star - Ok Cargo" style={iStyle} /></div>
+              <div><Etiqueta>Costo perfumes (US$/kg)</Etiqueta><input inputMode="decimal" value={nuevaBod.usd} onChange={e => setNuevaBod(p => ({ ...p, usd:e.target.value }))} style={iStyle} /></div>
+              <div><Etiqueta>AIU (lb por caja)</Etiqueta><input inputMode="decimal" value={nuevaBod.aiu} onChange={e => setNuevaBod(p => ({ ...p, aiu:e.target.value }))} style={iStyle} /></div>
+            </div>
+            <div style={{ display:'flex', gap:8, marginTop:8 }}>
+              <button type="button" onClick={crearBodega} disabled={!nuevaBod.nombre.trim()} className="btn-gold" style={{ fontSize:12 }}>Crear bodega</button>
+              <button type="button" onClick={() => setNuevaBod(null)} className="btn" style={{ fontSize:12 }}>Cancelar</button>
+              <span style={{ fontSize:11, color:'var(--text3)', alignSelf:'center' }}>Dirección y teléfono los completas luego en ⚙ Bodegas.</span>
+            </div>
+          </div>
+        )}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap:10, marginBottom:10 }}>
           <div><Etiqueta>Referencia / casillero (Reference)</Etiqueta><input id="wr-referencia" value={f.referencia} onChange={alCambiarReferencia} placeholder="MOHAMED ANKA / 608" style={iStyle} /></div>
           <div><Etiqueta>Seguimiento (nombre tuyo para esta carga)</Etiqueta><input id="wr-seguimiento" value={f.seguimiento} onChange={set('seguimiento')} placeholder="Ej: Andrés · perfumes pedido 3" style={iStyle} /></div>
