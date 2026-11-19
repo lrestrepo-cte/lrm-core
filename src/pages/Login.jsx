@@ -1,16 +1,8 @@
 // @ts-nocheck
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
-
-const NEGOCIOS = [
-  { id:'lrm',      nombre:'LRM Trade',   emoji:'🏢', color:'#C9A84C', desc:'Acceso corporativo',     activo:true  },
-  { id:'zabu',     nombre:'ZABÚ',        emoji:'🌭', color:'#C9A84C', desc:'Hot Dogs de Verdad',     activo:true  },
-  { id:'rv',       nombre:'RV Sports',   emoji:'⚽', color:'#378ADD', desc:'Calcetines deportivos',  activo:true  },
-  { id:'bombas',   nombre:'Las Bombas',  emoji:'💣', color:'#4caf50', desc:'Próximamente',           activo:false },
-  { id:'coco',     nombre:'Coco Shake',  emoji:'🥥', color:'#00BCD4', desc:'Próximamente',           activo:false },
-  { id:'quesolote',nombre:'Quesolote',   emoji:'🌽', color:'#FF9800', desc:'Próximamente',           activo:false },
-  { id:'puffys',   nombre:'Puffys',      emoji:'🥞', color:'#9C27B0', desc:'Próximamente',           activo:false },
-]
+import PuertasCore, { IconoEspacio } from '../components/PuertasCore'
+import { ESPACIOS, NEGOCIOS, negocioPorId, negocioPorSlug, slugDesdeHash, ponerHash } from '../lib/espacios'
 
 const ROLES_ZABU = [
   { id:'vendedor', nombre:'Vendedor', desc:'Punto de venta · Carrito', emoji:'🌭' },
@@ -18,15 +10,13 @@ const ROLES_ZABU = [
 ]
 
 const ROLES_RV = [
-  { id:'vendedor', nombre:'Vendedor', desc:'Punto de venta · Tienda', emoji:'⚽' },
+  { id:'vendedor', nombre:'Vendedor', desc:'Punto de venta · Tienda',   emoji:'⚽' },
   { id:'gerente',  nombre:'Gerente',  desc:'Administración y reportes', emoji:'📊' },
 ]
 
-// CEOs siguen siendo de acceso fijo (no son "empleados operativos" del POS).
-// Si más adelante quieres mover esto a Supabase Auth también, es un cambio aislado aquí.
+// Acceso del dueño. TEMPORAL: pasa a Supabase Auth en la fase de usuarios y roles.
 const CEOS = [
-  { id:1, nombre:'Luis Restrepo',  email:'luis@zabu.co',   password:'zabu2026', rol:'ceo', negocio:'lrm', carrito:null },
-  { id:2, nombre:'Emelyn Mendoza', email:'emelyn@zabu.co', password:'zabu2026', rol:'ceo', negocio:'lrm', carrito:null },
+  { id:1, nombre:'Luis Restrepo', email:'luis@zabu.co', password:'zabu2026', rol:'ceo', negocio:'lrm', carrito:null },
 ]
 
 // RV Sports todavía no tiene su propia tabla de empleados — se mantiene el PIN demo
@@ -35,8 +25,19 @@ const USUARIOS_RV_DEMO = [
   { id:6, nombre:'Vendedor RV', email:null, rol:'vendedor', pin:'5678', negocio:'rv', carrito:'RV01' },
 ]
 
+function estadoInicial() {
+  const n = negocioPorSlug(slugDesdeHash())
+  if (n && n.activo) return { paso:'acceso', espacio:'business', negocio:n.id, directo:true }
+  return { paso:'entrada', espacio:null, negocio:null, directo:false }
+}
+
 export default function Login({ onLogin }) {
-  const [negocio,  setNegocio]  = useState(null)
+  const [inicio]               = useState(estadoInicial)
+  const [paso,     setPaso]    = useState(inicio.paso)       // entrada | negocios | acceso
+  const [espacio,  setEspacio] = useState(inicio.espacio)    // business | myspace | capitan
+  const [negocio,  setNegocio] = useState(inicio.negocio)
+  const [directo]              = useState(inicio.directo)    // entró por link directo del negocio
+  const [modoDueno, setModoDueno] = useState(false)
   const [rol,      setRol]      = useState(null)
   const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
@@ -44,227 +45,224 @@ export default function Login({ onLogin }) {
   const [error,    setError]    = useState('')
   const [loading,  setLoading]  = useState(false)
 
-  const reset = () => { setNegocio(null); setRol(null); setEmail(''); setPassword(''); setPin(''); setError('') }
+  const negActual  = negocioPorId(negocio)
+  const espActual  = ESPACIOS.find(e => e.id === espacio)
+  const colorNeg   = negActual?.color || espActual?.color || '#C9A84C'
+  const rolesActual = negocio === 'zabu' ? ROLES_ZABU : negocio === 'rv' ? ROLES_RV : []
+  const pideCorreo = espacio !== 'business' || negActual?.acceso === 'ceo' || modoDueno
+
+  const limpiar = () => { setRol(null); setEmail(''); setPassword(''); setPin(''); setError(''); setModoDueno(false) }
+  const irEntrada  = () => { limpiar(); setNegocio(null); setEspacio(null); setPaso('entrada'); ponerHash('') }
+  const irNegocios = () => { limpiar(); setNegocio(null); setEspacio('business'); setPaso('negocios'); ponerHash('') }
+
+  const elegirEspacio = (id) => {
+    setEspacio(id); setError('')
+    setPaso(id === 'business' ? 'negocios' : 'acceso')
+  }
+
+  const elegirNegocio = (n) => {
+    if (!n.activo) return
+    limpiar(); setNegocio(n.id); setPaso('acceso'); ponerHash(n.slug)
+  }
+
+  const destino = () => ({ espacio: espacio || 'business', negocio })
 
   const loginCEO = () => {
     setLoading(true)
     setTimeout(() => {
-      const user = CEOS.find(u => u.email === email.toLowerCase() && u.password === password)
-      if (user) { onLogin(user) }
-      else { setError('Email o contraseña incorrectos') }
+      const user = CEOS.find(u => u.email === email.trim().toLowerCase() && u.password === password)
+      if (user) onLogin(user, destino())
+      else setError('Correo o contraseña incorrectos')
       setLoading(false)
-    }, 600)
+    }, 500)
   }
 
-  // Busca el PIN en zabu_empleados (real) para ZABÚ, o en el demo fijo para RV
-  // (RV todavía no tiene módulo de personal propio).
+  // Busca el PIN en zabu_empleados (real) para ZABÚ, o en el demo fijo para RV.
   const verificarPin = async (pinIngresado) => {
     if (negocio === 'zabu') {
       const { data: empleado, error: err } = await supabase
-        .from('zabu_empleados')
-        .select('*')
-        .eq('pin', pinIngresado)
-        .eq('estado', 'activo')
-        .maybeSingle()
-
+        .from('zabu_empleados').select('*')
+        .eq('pin', pinIngresado).eq('estado', 'activo').maybeSingle()
       if (err || !empleado) return null
-
-      // El rol elegido en el paso anterior (vendedor/cocina) debe ser coherente con el cargo,
-      // pero no bloqueamos por nombre exacto de cargo — el PIN + estado activo ya autentica.
-      return {
-        id: empleado.id, nombre: empleado.nombre, rol, negocio: 'zabu',
-        carrito: empleado.carrito_actual, cargo: empleado.cargo_actual,
-      }
+      return { id: empleado.id, nombre: empleado.nombre, rol, negocio:'zabu', carrito: empleado.carrito_actual, cargo: empleado.cargo_actual }
     }
-
-    if (negocio === 'rv') {
-      const user = USUARIOS_RV_DEMO.find(u => u.pin === pinIngresado && u.rol === rol)
-      return user || null
-    }
-
+    if (negocio === 'rv') return USUARIOS_RV_DEMO.find(u => u.pin === pinIngresado && u.rol === rol) || null
     return null
   }
 
   const addPin = (d) => {
     if (pin.length >= 4) return
     const nuevo = pin + d
-    setPin(nuevo)
-    setError('')
+    setPin(nuevo); setError('')
     if (nuevo.length === 4) {
       setTimeout(async () => {
         const user = await verificarPin(nuevo)
-        if (user) { onLogin(user) }
+        if (user) onLogin(user, destino())
         else { setError('PIN incorrecto o empleado inactivo'); setPin('') }
       }, 200)
     }
   }
 
-  const negActual   = NEGOCIOS.find(n => n.id === negocio)
-  const rolesActual = negocio === 'zabu' ? ROLES_ZABU : negocio === 'rv' ? ROLES_RV : []
-  const colorNeg    = negActual?.color || '#C9A84C'
+  // ── PASO 0 · Las tres puertas ────────────────────────────────────────────────
+  if (paso === 'entrada') return <PuertasCore onElegir={elegirEspacio} />
 
   const container = {
-    minHeight:'100vh', background:'#0a0a0a',
-    display:'flex', alignItems:'center', justifyContent:'center',
-    padding:20, fontFamily:"'Plus Jakarta Sans', sans-serif",
+    minHeight:'100vh', height:'100%', background:'#0a0a0a', display:'flex', alignItems:'flex-start', justifyContent:'center',
+    padding:'48px 20px 40px', fontFamily:"'Plus Jakarta Sans', sans-serif", overflowY:'auto',
   }
-
-  const cardStyle = (color, activo) => ({
-    padding:'16px 18px', borderRadius:14, cursor: activo ? 'pointer' : 'default',
-    background:'rgba(255,255,255,0.03)',
-    border:`1px solid ${activo ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)'}`,
-    transition:'all .15s', opacity: activo ? 1 : 0.4,
-    display:'flex', alignItems:'center', gap:14,
+  const cardStyle = (activo) => ({
+    padding:'16px 18px', borderRadius:14, cursor: activo ? 'pointer' : 'default', width:'100%', textAlign:'left', fontFamily:'inherit',
+    background:'rgba(255,255,255,0.03)', border:`1px solid ${activo ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.04)'}`,
+    transition:'all .15s', opacity: activo ? 1 : 0.4, display:'flex', alignItems:'center', gap:14, color:'#F0F4FF',
   })
-
   const inputStyle = {
-    width:'100%', padding:'13px 16px', borderRadius:10,
-    background:'rgba(255,255,255,0.06)', border:'1px solid rgba(255,255,255,0.1)',
-    color:'#F0F4FF', fontSize:14, fontFamily:'inherit', outline:'none',
+    width:'100%', padding:'13px 16px', borderRadius:10, background:'rgba(255,255,255,0.06)',
+    border:'1px solid rgba(255,255,255,0.1)', color:'#F0F4FF', fontSize:14, fontFamily:'inherit', outline:'none',
   }
-
-  const btnGold = (color) => ({
-    width:'100%', padding:'14px', borderRadius:12, cursor:'pointer',
-    background:`${color}25`, border:`1px solid ${color}66`,
-    color:color, fontSize:15, fontWeight:700, fontFamily:'inherit', transition:'all .15s',
+  const btnColor = (color) => ({
+    width:'100%', padding:'14px', borderRadius:12, cursor:'pointer', background:`${color}25`,
+    border:`1px solid ${color}66`, color, fontSize:15, fontWeight:700, fontFamily:'inherit', transition:'all .15s',
+  })
+  const back = (fn, texto = '← Volver') => (
+    <div onClick={fn} style={{ fontSize:12, color:'rgba(255,255,255,0.35)', cursor:'pointer', marginBottom:20, display:'inline-flex', alignItems:'center', gap:6 }}>{texto}</div>
+  )
+  const hover = (color) => ({
+    onMouseOver: e => { e.currentTarget.style.borderColor = color + '55'; e.currentTarget.style.background = color + '0d' },
+    onMouseOut:  e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)'; e.currentTarget.style.background = 'rgba(255,255,255,0.03)' },
   })
 
-  const back = (fn) => (
-    <div onClick={fn} style={{ fontSize:12, color:'rgba(255,255,255,0.3)', cursor:'pointer', marginBottom:20, display:'flex', alignItems:'center', gap:6 }}>
-      ← Volver
-    </div>
-  )
+  // Cabecera: marca del negocio, o del espacio (MySpace / Capitán), o "Business"
+  const cabecera = () => {
+    if (paso === 'negocios') return (
+      <div className="neg-marca">
+        <div className="neg-marca-emoji" style={{ background:'#C9A84C1a', color:'#C9A84C', border:'1px solid #C9A84C40' }}><IconoEspacio tipo="business" size={30} /></div>
+        <div className="neg-marca-nombre">Business</div>
+        <div className="neg-marca-desc">Elige el negocio</div>
+      </div>
+    )
+    if (negActual) return (
+      <div className="neg-marca">
+        <div className="neg-marca-emoji" style={{ background:negActual.color + '1a', border:`1px solid ${negActual.color}40` }}>{negActual.emoji}</div>
+        <div className="neg-marca-nombre">{negActual.nombre}</div>
+        <div className="neg-marca-desc">{negActual.desc}</div>
+        <div className="neg-marca-parte">Business · LRM Core</div>
+      </div>
+    )
+    return (
+      <div className="neg-marca">
+        <div className="neg-marca-emoji" style={{ background:espActual?.color + '1a', color:espActual?.color, border:`1px solid ${espActual?.color}40` }}><IconoEspacio tipo={espActual?.icono} size={30} /></div>
+        <div className="neg-marca-nombre">{espActual?.nombre}</div>
+        <div className="neg-marca-desc">Acceso privado</div>
+      </div>
+    )
+  }
+
+  // Volver desde el formulario de correo
+  const volverDesdeCorreo = () => {
+    if (modoDueno) { setModoDueno(false); setError(''); return }
+    if (espacio !== 'business') return irEntrada()
+    return irNegocios()
+  }
 
   return (
     <div style={container}>
       <div style={{ width:'100%', maxWidth:420 }}>
 
-        {/* Header */}
-        <div style={{ textAlign:'center', marginBottom:36 }}>
-          {negocio ? (
-            <div style={{ fontSize:48, marginBottom:8 }}>{negActual?.emoji}</div>
-          ) : (
-            <div style={{ fontSize:11, color:'#C9A84C', letterSpacing:4, fontWeight:600, marginBottom:8 }}>LRM TRADE</div>
-          )}
-          <div style={{ fontSize:36, fontWeight:900, color:'#F0F4FF', letterSpacing:-1 }}>
-            {negocio ? negActual?.nombre : 'Core'}
-          </div>
-          <div style={{ fontSize:13, color:'rgba(255,255,255,0.3)', marginTop:6 }}>
-            {negocio ? negActual?.desc : 'Sistema de gestión · LRM Trade'}
-          </div>
-        </div>
-
-        {/* PASO 1 — Selección negocio */}
-        {!negocio && (
+        {/* PASO 1 · Negocios de Business */}
+        {paso === 'negocios' && (
           <div>
-            <div style={{ fontSize:11, color:'rgba(255,255,255,0.3)', textAlign:'center', letterSpacing:1, marginBottom:16 }}>SELECCIONA TU NEGOCIO</div>
+            {back(irEntrada, '← LRM Core')}
+            {cabecera()}
             <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
               {NEGOCIOS.map(n => (
-                <div key={n.id}
-                  onClick={() => n.activo && setNegocio(n.id)}
-                  style={cardStyle(n.color, n.activo)}
-                  onMouseOver={e => { if(n.activo) { e.currentTarget.style.borderColor=n.color+'44'; e.currentTarget.style.background=n.color+'0a' }}}
-                  onMouseOut={e => { e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.background='rgba(255,255,255,0.03)' }}
-                >
-                  <div style={{ width:44, height:44, borderRadius:12, background:n.color+'15', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>
-                    {n.emoji}
-                  </div>
+                <button key={n.id} type="button" onClick={() => elegirNegocio(n)} style={cardStyle(n.activo)} {...(n.activo ? hover(n.color) : {})}>
+                  <div style={{ width:44, height:44, borderRadius:12, background:n.color + '18', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>{n.emoji}</div>
                   <div style={{ flex:1 }}>
-                    <div style={{ fontSize:15, fontWeight:700, color:'#F0F4FF', marginBottom:2 }}>{n.nombre}</div>
-                    <div style={{ fontSize:12, color:'rgba(255,255,255,0.3)' }}>{n.desc}</div>
+                    <div style={{ fontSize:15, fontWeight:700, marginBottom:2 }}>{n.nombre}</div>
+                    <div style={{ fontSize:12, color:'rgba(255,255,255,0.35)' }}>{n.activo ? n.desc : 'Próximamente'}</div>
                   </div>
-                  {n.activo && <div style={{ fontSize:18, color:'rgba(255,255,255,0.2)' }}>→</div>}
-                  {!n.activo && <div style={{ fontSize:10, padding:'2px 8px', borderRadius:8, background:'rgba(255,255,255,0.06)', color:'rgba(255,255,255,0.2)' }}>Pronto</div>}
-                </div>
+                  {n.activo
+                    ? <div style={{ fontSize:18, color:'rgba(255,255,255,0.2)' }}>→</div>
+                    : <div style={{ fontSize:10, padding:'2px 8px', borderRadius:8, background:'rgba(255,255,255,0.06)', color:'rgba(255,255,255,0.25)' }}>Pronto</div>}
+                </button>
               ))}
             </div>
           </div>
         )}
 
-        {/* PASO 2A — LRM → CEO email/password */}
-        {negocio === 'lrm' && (
+        {/* PASO 2A · Correo y contraseña (LRM Trade, Inversiones, MySpace, Capitán o dueño) */}
+        {paso === 'acceso' && pideCorreo && (
           <div>
-            {back(reset)}
-            <div style={{ fontSize:11, color:'rgba(255,255,255,0.3)', letterSpacing:1, marginBottom:16 }}>ACCESO CEO</div>
+            {!(directo && !modoDueno) && back(volverDesdeCorreo)}
+            {cabecera()}
             <div style={{ marginBottom:14 }}>
-              <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)', marginBottom:6 }}>Email</div>
-              <input type="email" value={email} onChange={e=>{setEmail(e.target.value);setError('')}}
-                placeholder="tu@lrmtrade.co" autoFocus onKeyDown={e=>e.key==='Enter'&&loginCEO()} style={inputStyle} />
+              <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)', marginBottom:6 }}>Correo</div>
+              <input id="login-email" type="email" value={email} onChange={e=>{setEmail(e.target.value);setError('')}}
+                placeholder="tu@correo.com" autoFocus onKeyDown={e=>e.key==='Enter'&&loginCEO()} style={inputStyle} />
             </div>
             <div style={{ marginBottom:20 }}>
               <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)', marginBottom:6 }}>Contraseña</div>
-              <input type="password" value={password} onChange={e=>{setPassword(e.target.value);setError('')}}
+              <input id="login-password" type="password" value={password} onChange={e=>{setPassword(e.target.value);setError('')}}
                 placeholder="••••••••" onKeyDown={e=>e.key==='Enter'&&loginCEO()} style={inputStyle} />
             </div>
             {error && <div style={{ padding:'10px 14px', background:'rgba(224,82,82,0.1)', border:'1px solid rgba(224,82,82,0.3)', borderRadius:8, fontSize:12, color:'#e05252', marginBottom:14 }}>{error}</div>}
-            <button onClick={loginCEO} disabled={loading} style={btnGold('#C9A84C')}>
+            <button onClick={loginCEO} disabled={loading} style={btnColor(colorNeg)}>
               {loading ? 'Verificando...' : 'Ingresar →'}
             </button>
           </div>
         )}
 
-        {/* PASO 2B — ZABÚ / RV → selección de rol */}
-        {(negocio === 'zabu' || negocio === 'rv') && !rol && (
+        {/* PASO 2B · ZABÚ / RV → elegir rol */}
+        {paso === 'acceso' && !pideCorreo && !rol && (
           <div>
-            {back(reset)}
+            {!directo && back(irNegocios, '← Business')}
+            {cabecera()}
             <div style={{ fontSize:11, color:'rgba(255,255,255,0.3)', textAlign:'center', letterSpacing:1, marginBottom:16 }}>¿CUÁL ES TU ROL?</div>
             <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
               {rolesActual.map(r => (
-                <div key={r.id} onClick={() => setRol(r.id)} style={cardStyle(colorNeg, true)}
-                  onMouseOver={e => { e.currentTarget.style.borderColor=colorNeg+'44'; e.currentTarget.style.background=colorNeg+'0a' }}
-                  onMouseOut={e => { e.currentTarget.style.borderColor='rgba(255,255,255,0.08)'; e.currentTarget.style.background='rgba(255,255,255,0.03)' }}
-                >
-                  <div style={{ width:44, height:44, borderRadius:12, background:colorNeg+'15', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>
-                    {r.emoji}
-                  </div>
+                <button key={r.id} type="button" onClick={() => setRol(r.id)} style={cardStyle(true)} {...hover(colorNeg)}>
+                  <div style={{ width:44, height:44, borderRadius:12, background:colorNeg + '18', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>{r.emoji}</div>
                   <div style={{ flex:1 }}>
-                    <div style={{ fontSize:15, fontWeight:700, color:'#F0F4FF', marginBottom:2 }}>{r.nombre}</div>
-                    <div style={{ fontSize:12, color:'rgba(255,255,255,0.3)' }}>{r.desc}</div>
+                    <div style={{ fontSize:15, fontWeight:700, marginBottom:2 }}>{r.nombre}</div>
+                    <div style={{ fontSize:12, color:'rgba(255,255,255,0.35)' }}>{r.desc}</div>
                   </div>
                   <div style={{ fontSize:18, color:'rgba(255,255,255,0.2)' }}>→</div>
-                </div>
+                </button>
               ))}
+              <button type="button" onClick={() => { setModoDueno(true); setError('') }}
+                style={{ marginTop:6, padding:'12px', borderRadius:12, cursor:'pointer', fontFamily:'inherit', fontSize:12, fontWeight:600,
+                  background:'transparent', border:'1px dashed rgba(255,255,255,0.12)', color:'rgba(255,255,255,0.45)' }}>
+                Dueño o administrador · entrar con correo
+              </button>
             </div>
           </div>
         )}
 
-        {/* PASO 3 — PIN */}
-        {(negocio === 'zabu' || negocio === 'rv') && rol && (
+        {/* PASO 3 · PIN */}
+        {paso === 'acceso' && !pideCorreo && rol && (
           <div>
-            {back(() => setRol(null))}
-            <div style={{ fontSize:11, color:'rgba(255,255,255,0.3)', textAlign:'center', letterSpacing:1, marginBottom:20 }}>
-              INGRESA TU PIN
-            </div>
-
+            {back(() => { setRol(null); setPin(''); setError('') })}
+            {cabecera()}
+            <div style={{ fontSize:11, color:'rgba(255,255,255,0.3)', textAlign:'center', letterSpacing:1, marginBottom:20 }}>INGRESA TU PIN</div>
             <div style={{ display:'flex', justifyContent:'center', gap:14, marginBottom:28 }}>
               {[0,1,2,3].map(i => (
                 <div key={i} style={{ width:16, height:16, borderRadius:'50%', transition:'all .2s',
-                  background: i < pin.length ? colorNeg : 'rgba(255,255,255,0.1)',
-                  border:`1px solid ${colorNeg}44`,
-                }} />
+                  background: i < pin.length ? colorNeg : 'rgba(255,255,255,0.1)', border:`1px solid ${colorNeg}44` }} />
               ))}
             </div>
-
             {error && <div style={{ padding:'10px 14px', background:'rgba(224,82,82,0.1)', border:'1px solid rgba(224,82,82,0.3)', borderRadius:8, fontSize:12, color:'#e05252', marginBottom:16, textAlign:'center' }}>{error}</div>}
-
             <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:10, maxWidth:280, margin:'0 auto' }}>
               {[1,2,3,4,5,6,7,8,9,'',0,'⌫'].map((d, i) => (
                 <div key={i} onClick={() => {
                   if (d === '⌫') { setPin(prev=>prev.slice(0,-1)); setError('') }
                   else if (d !== '') addPin(String(d))
                 }} style={{
-                  padding:'18px', borderRadius:12, textAlign:'center',
-                  cursor: d==='' ? 'default' : 'pointer',
+                  padding:'18px', borderRadius:12, textAlign:'center', cursor: d==='' ? 'default' : 'pointer',
                   visibility: d==='' ? 'hidden' : 'visible',
                   background: d==='⌫' ? 'rgba(224,82,82,0.1)' : 'rgba(255,255,255,0.06)',
                   border: d==='' ? 'none' : `1px solid ${d==='⌫' ? 'rgba(224,82,82,0.2)' : 'rgba(255,255,255,0.08)'}`,
-                  fontSize: d==='⌫' ? 20 : 22, fontWeight:700,
-                  color: d==='⌫' ? '#e05252' : '#F0F4FF',
-                  transition:'all .1s',
-                }}
-                  onMouseOver={e => { if(d!=='') e.currentTarget.style.background = d==='⌫' ? 'rgba(224,82,82,0.2)' : 'rgba(255,255,255,0.12)' }}
-                  onMouseOut={e => { if(d!=='') e.currentTarget.style.background = d==='⌫' ? 'rgba(224,82,82,0.1)' : 'rgba(255,255,255,0.06)' }}
-                >{d}</div>
+                  fontSize: d==='⌫' ? 20 : 22, fontWeight:700, color: d==='⌫' ? '#e05252' : '#F0F4FF', transition:'all .1s',
+                }}>{d}</div>
               ))}
             </div>
           </div>

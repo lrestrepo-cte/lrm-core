@@ -20,7 +20,6 @@ const NEGOCIOS_BASE = [
 
 const USUARIOS_BASE = [
   { id:1, nombre:'Luis Restrepo',  email:'luis@zabu.co',   rol:'ceo',      pin:null,   negocio:'lrm',  carrito:null,  activo:true  },
-  { id:2, nombre:'Emelyn Mendoza', email:'emelyn@zabu.co', rol:'ceo',      pin:null,   negocio:'lrm',  carrito:null,  activo:true  },
   { id:3, nombre:'Operador C01',   email:null,             rol:'vendedor', pin:'1234', negocio:'zabu', carrito:'C01', activo:true  },
   { id:4, nombre:'Operador C02',   email:null,             rol:'vendedor', pin:'2345', negocio:'zabu', carrito:'C02', activo:false },
   { id:5, nombre:'Cocina ZABÚ',    email:null,             rol:'cocina',   pin:'9999', negocio:'zabu', carrito:'C01', activo:true  },

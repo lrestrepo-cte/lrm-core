@@ -1579,8 +1579,8 @@ function TabComexModulo() {
 // ════════════════════════════════════════════════════════════════════════════
 // MÓDULO PRINCIPAL
 // ════════════════════════════════════════════════════════════════════════════
-export default function LRMInversiones() {
-  const [tab, setTab] = useState('dashboard')
+export default function LRMInversiones({ tabInicial = 'dashboard' }) {
+  const [tab, setTab] = useState(tabInicial)
   const TABS = [
     { id:'dashboard',   label:'📊 Dashboard' },
     { id:'operaciones', label:'📦 Operaciones' },

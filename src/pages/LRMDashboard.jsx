@@ -95,7 +95,7 @@ export default function LRMDashboard({ onEntrarNegocio }) {
     return 'Próximamente'
   }
 
-  const esClickeable = (id) => id === 'zabu' || id === 'rv' || id === 'inversiones'
+  const esClickeable = (id) => id === 'zabu' || id === 'rv' || id === 'inversiones' || id === 'lrm-inversiones'
   const negociosActivos = NEGOCIOS_INFO.filter(n => n.estado === 'activo').length
 
   return (

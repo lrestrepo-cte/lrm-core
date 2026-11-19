@@ -1,13 +1,14 @@
 const NEGOCIOS = [
   { id:'zabu',        nombre:'ZABÚ',            color:'#C9A84C', estado:'activo'  },
   { id:'rv',          nombre:'RV Sports',       color:'#378ADD', estado:'activo'  },
-  { id:'inversiones', nombre:'LRM Trade Consulting', color:'#9C27B0', estado:'activo'  },
+  { id:'inversiones', nombre:'LRM Trade Consulting', color:'#C9A84C', estado:'activo'  },
+  { id:'lrm-inversiones', nombre:'LRM Inversiones', color:'#9C27B0', estado:'activo'  },
   { id:'bombas',      nombre:'Las Bombas',      color:'#4caf50', estado:'dev'     },
   { id:'coco',        nombre:'Coco Shake',      color:'#00BCD4', estado:'pronto'  },
   { id:'quesolote',   nombre:'Quesolote',       color:'#FF9800', estado:'pronto'  },
   { id:'puffys',      nombre:'Puffys',          color:'#9C27B0', estado:'pronto'  },
 ]
-const ACTIVOS = ['zabu', 'rv', 'inversiones']
+const ACTIVOS = ['zabu', 'rv', 'inversiones', 'lrm-inversiones']
 const NAV_LRM = [
   {
     seccion:'General',
@@ -114,12 +115,11 @@ const NAV_RV = [
     ]
   },
 ]
-export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onEntrarNegocio, usuario, onCerrarSesion }) {
+export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onIrCore, onEntrarNegocio, usuario, onCerrarSesion }) {
   const isZabu = vista === 'zabu'
   const isRV   = vista === 'rv'
   const isInv  = vista === 'inversiones'
   const isNeg  = isZabu || isRV || isInv
-  const isLuis = usuario?.email === 'luis@zabu.co'
   const navNegocio = isZabu ? NAV_ZABU : isRV ? NAV_RV : []
   const tituloNeg  = isZabu ? 'ZABÚ' : isRV ? 'RV Sports' : isInv ? 'LRM Trade Consulting' : ''
   const colorNeg   = isZabu ? '#C9A84C' : isRV ? '#378ADD' : isInv ? '#9C27B0' : 'var(--gold)'
@@ -128,8 +128,11 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onEnt
       <div className="sb-logo">
         <div className="sb-trade">LRM TRADE</div>
         <div className="sb-name" style={{ color: isNeg ? colorNeg : 'var(--text)' }}>
-          {isNeg ? tituloNeg : 'Core'}
+          {isNeg ? tituloNeg : 'Business'}
         </div>
+        {onIrCore && (
+          <div onClick={onIrCore} style={{ marginTop:10, fontSize:11, color:'rgba(255,255,255,0.35)', cursor:'pointer' }}>← LRM Core</div>
+        )}
       </div>
       <nav style={{ flex:1, overflowY:'auto', paddingBottom:8, minHeight:0 }}>
         {!isNeg ? (
@@ -160,18 +163,6 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onEnt
                 ))}
               </div>
             ))}
-            {isLuis && (
-              <>
-                <div className="sb-section-label">Personal</div>
-                <div
-                  className={`sb-item${navActivo==='myspace'?' active':''}`}
-                  onClick={() => onNavLRM && onNavLRM('myspace')}
-                  style={{ cursor:'pointer' }}
-                >
-                  <span className="sb-item-txt">🔐 My Space</span>
-                </div>
-              </>
-            )}
           </>
         ) : (
           <>
@@ -180,7 +171,7 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onEnt
                 style={{ display:'flex', alignItems:'center', gap:6, fontSize:11, color:'rgba(255,255,255,0.3)', cursor:'pointer', padding:'6px 10px', borderRadius:8, transition:'color .15s' }}
                 onMouseOver={e => e.currentTarget.style.color='rgba(255,255,255,0.7)'}
                 onMouseOut={e  => e.currentTarget.style.color='rgba(255,255,255,0.3)'}
-              >← LRM Trade</div>
+              >← Business</div>
             </div>
             {navNegocio.map(grupo => (
               <div key={grupo.seccion}>

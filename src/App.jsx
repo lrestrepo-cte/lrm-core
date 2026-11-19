@@ -13,9 +13,12 @@ import RVApp from './modules/rv/RVApp'
 import MySpace from './pages/MySpace'
 import { AperturaTurno, PanelTurno } from './modules/zabu/ZabuTurno'
 import { useBreakpoint } from './hooks/useBreakpoint'
+import PuertasCore from './components/PuertasCore'
+import CapitanEnSilencio from './pages/CapitanEnSilencio'
+import { negocioPorId, ponerHash } from './lib/espacios'
 
 const TITULOS = {
-  dashboard:     'Dashboard LRM Trade',
+  dashboard:     'Business · Grupo LRM',
   finanzas:      'Plan Financiero',
   bi:            'BI Ejecutivo',
   consolidado:   'Consolidado',
@@ -102,20 +105,38 @@ function CocinaApp({ usuario, onCerrarSesion }) {
 
 export default function App() {
   useEffect(() => { localStorage.removeItem('lrm_usuario') }, [])
-
   const [usuario,     setUsuario]     = useState(null)
-  const [vista,       setVista]       = useState('lrm')
+  const [vista,       setVista]       = useState('core')   // core | lrm | zabu | rv | inversiones | myspace | capitan
   const [navActivo,   setNavActivo]   = useState('dashboard')
   const [negNav,      setNegNav]      = useState('dashboard')
+  const [tabInv,      setTabInv]      = useState('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const { isMobile, isTablet } = useBreakpoint()
   const esMovilOTablet = isMobile || isTablet
 
-  const handleLogin   = (u) => { localStorage.setItem('lrm_usuario', JSON.stringify(u)); setUsuario(u) }
-  const cerrarSesion  = () => { localStorage.removeItem('lrm_usuario'); setUsuario(null); setVista('lrm'); setNavActivo('dashboard'); setSidebarOpen(false) }
-  const entrarNegocio = (id) => { setVista(id); setNegNav('dashboard'); setNavActivo('dashboard'); setSidebarOpen(false) }
-  const volverLRM     = () => { setVista('lrm'); setNavActivo('dashboard'); setSidebarOpen(false) }
+  // Entra a un negocio y deja el link directo en la barra (#/lrm-trade, #/zabu, ...)
+  const entrarNegocio = (id) => {
+    const n = negocioPorId(id)
+    if (id === 'lrm-inversiones') { setVista('inversiones'); setTabInv('inversiones') }
+    else { setVista(id); setTabInv('dashboard') }
+    setNegNav('dashboard'); setNavActivo('dashboard'); setSidebarOpen(false)
+    ponerHash(n?.slug || '')
+  }
+  const irCore    = () => { setVista('core'); setNavActivo('dashboard'); setSidebarOpen(false); ponerHash('') }
+  const volverLRM = () => { setVista('lrm'); setNavActivo('dashboard'); setSidebarOpen(false); ponerHash('') }
+  const elegirEspacio = (id) => {
+    if (id === 'business') return volverLRM()
+    setVista(id); setSidebarOpen(false); ponerHash('')
+  }
+
+  const handleLogin = (u, destino = {}) => {
+    setUsuario(u)
+    if (destino.negocio) entrarNegocio(destino.negocio)
+    else if (destino.espacio === 'myspace' || destino.espacio === 'capitan') setVista(destino.espacio)
+    else setVista('core')
+  }
+  const cerrarSesion  = () => { localStorage.removeItem('lrm_usuario'); setUsuario(null); setVista('core'); setNavActivo('dashboard'); setSidebarOpen(false); ponerHash('') }
   const handleNav     = (id) => {
     if (vista==='zabu'||vista==='rv') { setNegNav(id); setNavActivo(id) }
     else { setNavActivo(id) }
@@ -125,6 +146,25 @@ export default function App() {
   if (!usuario)                 return <Login onLogin={handleLogin} />
   if (usuario.rol==='vendedor') return <VendedorApp usuario={usuario} onCerrarSesion={cerrarSesion} />
   if (usuario.rol==='cocina')   return <CocinaApp   usuario={usuario} onCerrarSesion={cerrarSesion} />
+
+  // LRM Core: las tres puertas
+  if (vista === 'core') return <PuertasCore onElegir={elegirEspacio} subtitulo={`Hola, ${usuario.nombre?.split(' ')[0] || ''}. ¿A dónde vamos?`} />
+
+  // MySpace y Capitán en Silencio: espacios privados, sin la barra de negocios
+  if (vista === 'myspace' || vista === 'capitan') return (
+    <div className="app-root">
+      <div className="main-area">
+        <div className="topbar">
+          <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+            <button onClick={irCore} className="btn" style={{ fontSize:12 }}>← LRM Core</button>
+            <div className="topbar-title">{vista === 'myspace' ? 'MySpace' : 'Capitán en Silencio'}</div>
+          </div>
+          <button onClick={cerrarSesion} className="btn" style={{ fontSize:12 }}>Salir</button>
+        </div>
+        <div className="page-content">{vista === 'myspace' ? <MySpace /> : <CapitanEnSilencio />}</div>
+      </div>
+    </div>
+  )
 
   // IMPORTANTE: estas variables se usan dentro de renderContenido() y del JSX de retorno.
   // 'inversiones' se trata exactamente igual que zabu/rv: una vista de negocio con su propio
@@ -136,7 +176,7 @@ export default function App() {
   const tituloTopbar = isZabu ? 'ZABÚ — Hot Dogs de Verdad'
     : isRV   ? 'RV Sports — Calcetines'
     : isInversiones ? 'LRM Trade Consulting'
-    : (TITULOS[navActivo] || 'LRM Trade')
+    : (TITULOS[navActivo] || 'Business')
 
   const renderContenido = () => {
     // "configuracion" y "myspace" son rutas de LRM Trade general — solo se
@@ -150,7 +190,7 @@ export default function App() {
     }
     if (isZabu)        return <ZabuApp navExterno={negNav} onNavChange={(id)=>{setNegNav(id);setNavActivo(id)}} usuario={usuario} />
     if (isRV)          return <RVApp   navExterno={negNav} onNavChange={(id)=>{setNegNav(id);setNavActivo(id)}} usuario={usuario} />
-    if (isInversiones) return <LRMInversiones />
+    if (isInversiones) return <LRMInversiones key={tabInv} tabInicial={tabInv} />
     switch (navActivo) {
       case 'dashboard': return <LRMDashboard onEntrarNegocio={entrarNegocio} />
       case 'finanzas':  return <LRMFinanzas />
@@ -179,7 +219,7 @@ export default function App() {
       }}>
         <Sidebar
           vista={vista} navActivo={navActivo}
-          onNavLRM={handleNav} onVolverLRM={volverLRM}
+          onNavLRM={handleNav} onVolverLRM={volverLRM} onIrCore={irCore}
           onEntrarNegocio={entrarNegocio}
           usuario={usuario} onCerrarSesion={cerrarSesion}
         />

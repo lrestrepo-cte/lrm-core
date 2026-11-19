@@ -143,3 +143,41 @@ body {
   #ticket-print, #ticket-print * { visibility: visible; }
   #ticket-print { position: fixed; top: 0; left: 0; }
 }
+/* ─── LRM CORE · ENTRADA Y PUERTAS ─────────────────────────────────────────── */
+.core-wrap { position:relative; min-height:100vh; height:100%; overflow-y:auto; background:var(--bg); display:flex; justify-content:center; padding:48px max(20px, env(safe-area-inset-left,0px)) 32px max(20px, env(safe-area-inset-right,0px)); }
+.core-glow { position:fixed; inset:0; pointer-events:none;
+  background:
+    radial-gradient(600px 380px at 50% -8%, rgba(201,168,76,0.16), transparent 70%),
+    radial-gradient(500px 300px at 12% 100%, rgba(123,147,255,0.08), transparent 70%),
+    radial-gradient(500px 300px at 90% 95%, rgba(63,182,139,0.08), transparent 70%); }
+.core-inner { position:relative; width:100%; max-width:460px; display:flex; flex-direction:column; }
+.core-head { text-align:center; margin:4vh 0 36px; }
+.core-eyebrow { font-size:11px; letter-spacing:5px; font-weight:700; color:var(--gold); margin-bottom:10px; }
+.core-title { font-size:56px; line-height:1; font-weight:800; letter-spacing:-2px; color:var(--text); }
+.core-sub { font-size:13px; color:var(--text3); margin-top:12px; }
+.core-puertas { display:flex; flex-direction:column; gap:12px; }
+.core-puerta { --acento:#C9A84C; position:relative; display:flex; align-items:center; gap:16px; width:100%; text-align:left; cursor:pointer;
+  padding:20px 20px; border-radius:18px; font-family:inherit; color:var(--text);
+  background:linear-gradient(180deg, rgba(255,255,255,0.035), rgba(255,255,255,0.015));
+  border:1px solid rgba(255,255,255,0.07); overflow:hidden;
+  transition:border-color .2s, transform .2s, background .2s; animation:core-entra .5s both cubic-bezier(.2,.7,.2,1); }
+.core-puerta::before { content:''; position:absolute; left:0; top:18%; bottom:18%; width:3px; border-radius:0 3px 3px 0; background:var(--acento); opacity:.85; }
+.core-puerta:hover, .core-puerta:focus-visible { border-color:color-mix(in srgb, var(--acento) 45%, transparent); background:linear-gradient(180deg, color-mix(in srgb, var(--acento) 9%, transparent), rgba(255,255,255,0.015)); transform:translateY(-1px); outline:none; }
+.core-puerta-icono { width:52px; height:52px; flex-shrink:0; border-radius:14px; display:flex; align-items:center; justify-content:center; color:var(--acento);
+  background:color-mix(in srgb, var(--acento) 12%, transparent); border:1px solid color-mix(in srgb, var(--acento) 28%, transparent); }
+.core-puerta-txt { flex:1; min-width:0; display:flex; flex-direction:column; gap:4px; }
+.core-puerta-nombre { font-size:17px; font-weight:800; letter-spacing:-0.3px; }
+.core-puerta-desc { font-size:12px; color:var(--text3); line-height:1.45; }
+.core-puerta-flecha { font-size:18px; color:var(--text4); transition:transform .2s, color .2s; }
+.core-puerta:hover .core-puerta-flecha { color:var(--acento); transform:translateX(3px); }
+.core-pie { text-align:center; font-size:10px; letter-spacing:2px; color:var(--text4); margin-top:auto; padding-top:40px; text-transform:uppercase; }
+@keyframes core-entra { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+@media (prefers-reduced-motion: reduce) { .core-puerta { animation:none; transition:none; } }
+@media (max-width:420px) { .core-title { font-size:46px; } .core-puerta { padding:16px; gap:14px; } .core-puerta-icono { width:46px; height:46px; } }
+
+/* Cabecera de marca de cada negocio (entrada por link directo) */
+.neg-marca { text-align:center; margin-bottom:32px; }
+.neg-marca-emoji { width:64px; height:64px; margin:0 auto 14px; border-radius:18px; display:flex; align-items:center; justify-content:center; font-size:30px; }
+.neg-marca-nombre { font-size:32px; font-weight:900; letter-spacing:-1px; color:var(--text); }
+.neg-marca-desc { font-size:13px; color:var(--text3); margin-top:6px; }
+.neg-marca-parte { font-size:10px; letter-spacing:3px; color:var(--text4); margin-top:14px; text-transform:uppercase; }

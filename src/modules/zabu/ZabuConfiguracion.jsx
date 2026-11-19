@@ -3,7 +3,6 @@ import { supabase } from '../../lib/supabase'
 
 const USUARIOS_INIT = [
   { id:1, nombre:'Luis Restrepo',  email:'luis@zabu.co',   rol:'ceo',      pin:null,   carrito:'—',  activo:true  },
-  { id:2, nombre:'Emelyn Mendoza', email:'emelyn@zabu.co', rol:'ceo',      pin:null,   carrito:'—',  activo:true  },
   { id:3, nombre:'Operador C01',   email:null,             rol:'vendedor', pin:'1234', carrito:'C01',activo:true  },
   { id:4, nombre:'Operador C02',   email:null,             rol:'vendedor', pin:'2345', carrito:'C02',activo:false },
   { id:5, nombre:'Cocina',         email:null,             rol:'cocina',   pin:'9999', carrito:'C01',activo:true  },
