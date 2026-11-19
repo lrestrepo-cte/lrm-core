@@ -109,7 +109,6 @@ export default function App() {
   const [vista,       setVista]       = useState('core')   // core | lrm | zabu | rv | inversiones | myspace | capitan
   const [navActivo,   setNavActivo]   = useState('dashboard')
   const [negNav,      setNegNav]      = useState('dashboard')
-  const [tabInv,      setTabInv]      = useState('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const { isMobile, isTablet } = useBreakpoint()
@@ -118,8 +117,7 @@ export default function App() {
   // Entra a un negocio y deja el link directo en la barra (#/lrm-trade, #/zabu, ...)
   const entrarNegocio = (id) => {
     const n = negocioPorId(id)
-    if (id === 'lrm-inversiones') { setVista('inversiones'); setTabInv('inversiones') }
-    else { setVista(id); setTabInv('dashboard') }
+    setVista(id)
     setNegNav('dashboard'); setNavActivo('dashboard'); setSidebarOpen(false)
     ponerHash(n?.slug || '')
   }
@@ -172,10 +170,12 @@ export default function App() {
   const isZabu = vista === 'zabu'
   const isRV   = vista === 'rv'
   const isInversiones = vista === 'inversiones'
+  const isLRMInv = vista === 'lrm-inversiones'
 
   const tituloTopbar = isZabu ? 'ZABÚ — Hot Dogs de Verdad'
     : isRV   ? 'RV Sports — Calcetines'
     : isInversiones ? 'LRM Trade Consulting'
+    : isLRMInv ? 'LRM Inversiones'
     : (TITULOS[navActivo] || 'Business')
 
   const renderContenido = () => {
@@ -184,13 +184,14 @@ export default function App() {
     // Antes esta condición se evaluaba SIEMPRE, así que el clic en
     // "Configuración" dentro de ZABÚ también caía aquí y mostraba el panel
     // de LRM en vez de abrir ZabuApp con su propio case 'configuracion'.
-    if (!isZabu && !isRV && !isInversiones) {
+    if (!isZabu && !isRV && !isInversiones && !isLRMInv) {
       if (navActivo === 'myspace')       return <MySpace />
       if (navActivo === 'configuracion') return <LRMConfiguracion />
     }
     if (isZabu)        return <ZabuApp navExterno={negNav} onNavChange={(id)=>{setNegNav(id);setNavActivo(id)}} usuario={usuario} />
     if (isRV)          return <RVApp   navExterno={negNav} onNavChange={(id)=>{setNegNav(id);setNavActivo(id)}} usuario={usuario} />
-    if (isInversiones) return <LRMInversiones key={tabInv} tabInicial={tabInv} />
+    if (isInversiones) return <LRMInversiones modo="trade" tab={navActivo} onTab={setNavActivo} />
+    if (isLRMInv)      return <LRMInversiones modo="inversiones" />
     switch (navActivo) {
       case 'dashboard': return <LRMDashboard onEntrarNegocio={entrarNegocio} />
       case 'finanzas':  return <LRMFinanzas />

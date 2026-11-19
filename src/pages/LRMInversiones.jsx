@@ -1,6 +1,8 @@
 // @ts-nocheck
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import LRMClientes from './lrm/LRMClientes'
+import LRMTradeDashboard from './lrm/LRMTradeDashboard'
 function cop(n) { return '$' + Math.round(Math.abs(n||0)).toLocaleString('es-CO') }
 const iStyle = {
   width:'100%', padding:'8px 12px', borderRadius:8,
@@ -1579,33 +1581,52 @@ function TabComexModulo() {
 // ════════════════════════════════════════════════════════════════════════════
 // MÓDULO PRINCIPAL
 // ════════════════════════════════════════════════════════════════════════════
-export default function LRMInversiones({ tabInicial = 'dashboard' }) {
-  const [tab, setTab] = useState(tabInicial)
-  const TABS = [
-    { id:'dashboard',   label:'📊 Dashboard' },
-    { id:'operaciones', label:'📦 Operaciones' },
-    { id:'cuentas',     label:'📲 Cuentas de cobro' },
-    { id:'inversiones', label:'💰 Inversiones' },
-    { id:'comex',       label:'🌐 Comex' },
-  ]
-  return (
+export default function LRMInversiones({ modo = 'trade', tab: tabExterno, onTab }) {
+  const [tabInterno, setTabInterno] = useState('dashboard')
+
+  // LRM Inversiones es su propio negocio: solo préstamos, empeños, libranzas y portafolio
+  if (modo === 'inversiones') return (
     <div>
       <div style={{ marginBottom:20 }}>
         <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:4 }}>
           <div style={{ fontSize:28 }}>📈</div>
+          <div style={{ fontSize:22, fontWeight:900, color:'#9C27B0' }}>LRM Inversiones</div>
+        </div>
+        <div style={{ fontSize:12, color:'var(--text3)' }}>Préstamos, empeños, libranzas y portafolio</div>
+      </div>
+      <TabInversionesModulo />
+    </div>
+  )
+
+  // LRM Trade Consulting: todo gira alrededor de la importación
+  const TABS = [
+    { id:'dashboard',   label:'📊 Dashboard' },
+    { id:'clientes',    label:'👥 Clientes' },
+    { id:'operaciones', label:'📦 Operaciones' },
+    { id:'cuentas',     label:'📲 Cuentas de cobro' },
+    { id:'comex',       label:'🌐 Comex' },
+  ]
+  const pedido = tabExterno ?? tabInterno
+  const tab = TABS.some(t => t.id === pedido) ? pedido : 'dashboard'
+  const setTab = onTab || setTabInterno
+  return (
+    <div>
+      <div style={{ marginBottom:20 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:4 }}>
+          <div style={{ fontSize:28 }}>🌐</div>
           <div style={{ fontSize:22, fontWeight:900, color:'var(--gold)' }}>LRM Trade Consulting</div>
         </div>
-        <div style={{ fontSize:12, color:'var(--text3)' }}>Trading & International Commerce Consulting — Conectado a Supabase</div>
+        <div style={{ fontSize:12, color:'var(--text3)' }}>Importaciones desde Estados Unidos, China y Panamá</div>
       </div>
       <div className="sub-nav" style={{ marginBottom:24, flexWrap:'wrap' }}>
         {TABS.map(t => (
           <div key={t.id} className={`sub-nav-item${tab===t.id?' active':''}`} onClick={() => setTab(t.id)}>{t.label}</div>
         ))}
       </div>
-      {tab==='dashboard'   && <TabDashboardLRM />}
+      {tab==='dashboard'   && <LRMTradeDashboard />}
+      {tab==='clientes'    && <LRMClientes />}
       {tab==='operaciones' && <TabOperaciones />}
       {tab==='cuentas'     && <TabCuentasCobro />}
-      {tab==='inversiones' && <TabInversionesModulo />}
       {tab==='comex'       && <TabComexModulo />}
     </div>
   )
