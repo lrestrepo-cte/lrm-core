@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { hoyISO, fechaCorta } from './LRMClientes'
+import { CuentaCobro } from './Cargas'
 
 const cop = n => (n < 0 ? '−' : '') + '$' + Math.round(Math.abs(n || 0)).toLocaleString('es-CO')
 const num = v => Number(String(v ?? '').replace(/\D/g, '')) || 0
@@ -110,6 +111,7 @@ export default function Caja() {
   const [modal, setModal] = useState(null)          // { tipo, inicial }
   const [modalCuenta, setModalCuenta] = useState(null)
   const [borrando, setBorrando] = useState(null)
+  const [cuentaDe, setCuentaDe] = useState(null)       // id de la carga cuya cuenta de cobro se está viendo
 
   const cargar = async () => {
     const [cu, mo, cl, ci] = await Promise.all([
@@ -282,6 +284,9 @@ export default function Caja() {
                     <div style={{ fontSize:13, fontWeight:800, color:t.color, whiteSpace:'nowrap' }}>{t.signo > 0 ? '+' : t.signo < 0 ? '−' : ''}{cop(m.monto).replace('−', '')}</div>
                     <div style={{ fontSize:10, color:'var(--text3)', whiteSpace:'nowrap' }}>{cuenta}</div>
                   </div>
+                  {m.tipo === 'cobro_cliente' && m.carga_id && (
+                    <button onClick={() => setCuentaDe(m.carga_id)} title="Ver cuenta de cobro" className="btn" style={{ fontSize:11, padding:'4px 8px' }}>🧾</button>
+                  )}
                   {!mesCerrado && (
                     <button onClick={() => borrar(m)} onBlur={() => setBorrando(null)} title="Borrar"
                       style={{ background:'none', border:'none', cursor:'pointer', fontSize:11, color: borrando === m.id ? 'var(--red)' : 'var(--text4)', fontFamily:'inherit', whiteSpace:'nowrap' }}>
@@ -332,6 +337,7 @@ export default function Caja() {
 
       {modal && <ModalMovimiento {...modal} cuentas={activas} clientes={clientes} proveedores={proveedores} cerrado={cerrado}
         onCerrar={() => setModal(null)} onGuardado={() => { setModal(null); cargar() }} />}
+      {cuentaDe && <CuentaCobro cargaId={cuentaDe} onCerrar={() => setCuentaDe(null)} />}
       {modalCuenta && <ModalCuenta cuenta={modalCuenta} onCerrar={() => setModalCuenta(null)} onGuardado={() => { setModalCuenta(null); cargar() }} />}
     </div>
   )

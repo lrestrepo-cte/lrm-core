@@ -2,8 +2,9 @@
 // LRM Trade Consulting · Ajustes
 // Botón maestro: borra los datos de LRM Trade por partes o todo, para arrancar limpio.
 // Solo toca tablas lrm_* (LRM Trade). No toca ZABÚ, RV, MySpace ni nada más.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { useDatosLRM, guardarDatosLRM } from './datosLRM'
 
 // Cada grupo borra sus tablas en orden (primero las que dependen de otras)
 const GRUPOS = [
@@ -47,7 +48,8 @@ export default function Ajustes() {
   }
 
   return (
-    <div style={{ maxWidth:640, display:'flex', flexDirection:'column', gap:14 }}>
+    <div style={{ maxWidth:720, display:'flex', flexDirection:'column', gap:14 }}>
+      <DatosCobro />
       <div className="panel" style={{ border:'1px solid rgba(224,82,82,0.35)' }}>
         <div style={{ fontSize:15, fontWeight:800, color:'var(--red)', marginBottom:4 }}>Borrar datos de LRM Trade</div>
         <div style={{ fontSize:12, color:'var(--text3)', lineHeight:1.6, marginBottom:16 }}>
@@ -76,6 +78,60 @@ export default function Ajustes() {
           </button>
         </div>
         {estado && <div style={{ fontSize:12, color: estado.startsWith('Error') ? 'var(--red)' : 'var(--green)', marginTop:10 }}>{estado}</div>}
+      </div>
+    </div>
+  )
+}
+// ── Datos que salen en la cuenta de cobro: empresa y medios de pago ─────────
+const iS = { width:'100%', padding:'8px 10px', borderRadius:8, background:'rgba(255,255,255,0.06)', border:'1px solid var(--border)', color:'var(--text)', fontSize:13, fontFamily:'inherit', outline:'none', marginTop:4 }
+const CAMPOS_EMPRESA = [
+  ['nombre','Nombre'], ['lema','Lema'], ['responsable','Responsable'], ['documento','NIT o cédula'],
+  ['ciudad','Ciudad'], ['whatsapp','WhatsApp'], ['correo','Correo'],
+]
+const TIPOS_SUGERIDOS = ['Bancolombia · Ahorros','Bancolombia · Corriente','Nequi','Daviplata','Llave Bre-B','DollarApp','Zelle','Davivienda · Ahorros','Efectivo']
+
+function DatosCobro() {
+  const { empresa, medios, cargado } = useDatosLRM()
+  const [e, setE] = useState(null)
+  const [m, setM] = useState(null)
+  const [estado, setEstado] = useState('')
+  useEffect(() => { if (cargado) { setE(empresa); setM(medios) } }, [cargado])
+  if (!e || !m) return <div className="panel" style={{ color:'var(--text3)' }}>Cargando datos…</div>
+
+  const setMedio = (i, k) => ev => setM(prev => prev.map((x, j) => j === i ? { ...x, [k]: ev.target.value } : x))
+  const guardar = async () => {
+    setEstado('Guardando…')
+    const { error } = await guardarDatosLRM(e, m.filter(x => x.tipo.trim() || x.detalle.trim()))
+    setEstado(error ? 'Error: ' + error.message : '✓ Guardado. Ya sale así en las cuentas de cobro.')
+  }
+
+  return (
+    <div className="panel">
+      <div style={{ fontSize:15, fontWeight:800, color:'var(--gold)', marginBottom:4 }}>Datos de la cuenta de cobro</div>
+      <div style={{ fontSize:12, color:'var(--text3)', marginBottom:14 }}>Lo que ve el cliente en cada cuenta de cobro: tu empresa y dónde te paga.</div>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', gap:10 }}>
+        {CAMPOS_EMPRESA.map(([k, l]) => (
+          <div key={k}><div style={{ fontSize:11, color:'var(--text3)' }}>{l}</div><input value={e[k] || ''} onChange={ev => setE(p => ({ ...p, [k]: ev.target.value }))} style={iS} /></div>
+        ))}
+      </div>
+      <div style={{ marginTop:10 }}><div style={{ fontSize:11, color:'var(--text3)' }}>Condiciones de pago</div>
+        <textarea value={e.condiciones || ''} onChange={ev => setE(p => ({ ...p, condiciones: ev.target.value }))} style={{ ...iS, minHeight:54, resize:'vertical' }} /></div>
+
+      <div style={{ fontSize:13, fontWeight:700, color:'var(--text)', margin:'18px 0 4px' }}>Medios de pago</div>
+      <div style={{ fontSize:11, color:'var(--text3)', marginBottom:8 }}>Los que dejes sin número o llave no salen en la cuenta de cobro.</div>
+      <datalist id="tipos-pago">{TIPOS_SUGERIDOS.map(t => <option key={t} value={t} />)}</datalist>
+      {m.map((x, i) => (
+        <div key={i} style={{ display:'grid', gridTemplateColumns:'minmax(140px,1fr) minmax(140px,1.2fr) minmax(140px,1.4fr) auto', gap:6, marginBottom:6, alignItems:'end' }}>
+          <div><div style={{ fontSize:10, color:'var(--text4)' }}>Medio</div><input list="tipos-pago" value={x.tipo} onChange={setMedio(i, 'tipo')} placeholder="Nequi" style={iS} /></div>
+          <div><div style={{ fontSize:10, color:'var(--text4)' }}>Número / llave / usuario</div><input value={x.detalle} onChange={setMedio(i, 'detalle')} placeholder="300 000 0000" style={iS} /></div>
+          <div><div style={{ fontSize:10, color:'var(--text4)' }}>Titular (opcional)</div><input value={x.titular || ''} onChange={setMedio(i, 'titular')} style={iS} /></div>
+          <button onClick={() => setM(prev => prev.filter((_, j) => j !== i))} className="btn" style={{ height:36 }}>✕</button>
+        </div>
+      ))}
+      <button onClick={() => setM(prev => [...prev, { tipo:'', detalle:'', titular:'' }])} className="btn" style={{ fontSize:11, marginTop:4 }}>+ Medio de pago</button>
+      <div style={{ display:'flex', gap:10, alignItems:'center', marginTop:14 }}>
+        <button onClick={guardar} className="btn-gold" style={{ padding:'9px 18px' }}>Guardar datos</button>
+        {estado && <span style={{ fontSize:12, color: estado.startsWith('Error') ? 'var(--red)' : 'var(--green)' }}>{estado}</span>}
       </div>
     </div>
   )

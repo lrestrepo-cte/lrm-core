@@ -8,6 +8,8 @@ import { supabase } from '../../lib/supabase'
 import { hoyISO, fechaCorta, NICHOS_LRM } from './LRMClientes'
 import { ETAPAS } from './Dashboard'
 import { useDivisas } from '../../lib/divisas'
+import { BODEGA_POR_DEFECTO, useDatosLRM } from './datosLRM'
+import { linkWhatsApp } from './LRMClientes'
 
 const cop = n => '$' + Math.round(Math.abs(n || 0)).toLocaleString('es-CO')
 const n2 = v => Number(String(v ?? '').replace(',', '.')) || 0
@@ -53,10 +55,15 @@ export default function Cargas() {
     const [ca, bo, cl] = await Promise.all([
       supabase.from('lrm_cargas').select('*').order('orden', { ascending:false }),
       supabase.from('lrm_bodegas').select('*').order('created_at'),
-      supabase.from('lrm_clientes').select('id,nombre,empresa,codigo,tarifa_kg,nicho').order('nombre'),
+      supabase.from('lrm_clientes').select('id,nombre,empresa,codigo,tarifa_kg,nicho,telefono').order('nombre'),
     ])
     if ([ca, bo, cl].some(r => r.error)) { setFaltaTabla(true); setCargando(false); return }
-    setCargas(ca.data || []); setBodegas(bo.data || []); setClientes(cl.data || []); setCargando(false)
+    let bods = bo.data || []
+    if (bods.length === 0) {   // sin bodegas: se crea RD Star 1 para poder trabajar de una vez
+      const { data } = await supabase.from('lrm_bodegas').insert(BODEGA_POR_DEFECTO).select()
+      bods = data || []
+    }
+    setCargas(ca.data || []); setBodegas(bods); setClientes(cl.data || []); setCargando(false)
   }
   useEffect(() => { cargar() }, [])
 
@@ -123,7 +130,7 @@ export default function Cargas() {
         <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
           {lista.map(c => {
             const e = etapaDe(c.etapa), sig = siguiente(c.etapa)
-            const cobro = n2(c.peso_cobrable_kg) * n2(c.tarifa_cliente), costo = c.tarifa_costo_usd ? n2(c.peso_kg) * n2(c.tarifa_costo_usd) * n2(c.trm) : n2(c.peso_cobrable_kg) * n2(c.tarifa_costo)
+            const cobro = n2(c.peso_cobrable_kg) * n2(c.tarifa_cliente), costo = c.tarifa_costo_usd ? n2(c.libras) * LB_A_KG * n2(c.tarifa_costo_usd) * n2(c.trm) : n2(c.peso_cobrable_kg) * n2(c.tarifa_costo)
             const idx = ETAPAS.findIndex(x => x.id === c.etapa)
             return (
               <div key={c.id} className="panel" style={{ padding:'14px 16px', borderLeft:`3px solid ${e.color}` }}>
@@ -163,8 +170,8 @@ export default function Cargas() {
         </div>
       )}
 
-      {nuevo && <ModalRecibo bodegas={bodegas.filter(b => b.activa)} clientes={clientes} onCerrar={() => setNuevo(false)} onGuardado={() => { setNuevo(false); cargar() }} />}
-      {detalle && <ModalDetalle carga={detalle} cliente={nombreCliente(detalle.cliente_id)} bodega={bodegas.find(b => b.id === detalle.bodega_id)}
+      {nuevo && <ModalRecibo bodegas={bodegas.filter(b => b.activa)} clientes={clientes} onCerrar={() => setNuevo(false)} onGuardado={(carga) => { setNuevo(false); cargar(); if (carga) setDetalle({ ...carga, _cuenta:true }) }} />}
+      {detalle && <ModalDetalle carga={detalle} cliente={nombreCliente(detalle.cliente_id)} clienteFicha={clientes.find(x => x.id === detalle.cliente_id)} bodega={bodegas.find(b => b.id === detalle.bodega_id)}
         onAvanzar={avanzar} onCerrar={() => setDetalle(null)} onCambio={() => { setDetalle(null); cargar() }} />}
       {verBodegas && <ModalBodegas bodegas={bodegas} onCerrar={() => setVerBodegas(false)} onCambio={cargar} />}
     </div>
@@ -359,7 +366,7 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
       if (costo > 0) movs.push({ tipo:'costo_proveedor', concepto:'flete', proveedor: bodega?.operador || bodega?.nombre, carga_id: carga.id, monto: Math.round(costo), fecha: hoyISO(), referencia: ref, notas: `${fmt(tot.kg)} kg × US$${fmt(f.tarifa_costo_usd, 2)} = US$${fmt(costoUsd, 2)} · TRM ${fmt(f.trm, 2)}` })
       await supabase.from('lrm_movimientos').insert(movs)
     }
-    setGuardando(false); onGuardado()
+    setGuardando(false); onGuardado(carga)
   }
 
   return (
@@ -506,7 +513,8 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
 }
 
 // ── Detalle: piezas, trazabilidad y borrar ─────────────────────────────────
-function ModalDetalle({ carga, cliente, bodega, onAvanzar, onCerrar, onCambio }) {
+function ModalDetalle({ carga, cliente, clienteFicha, bodega, onAvanzar, onCerrar, onCambio }) {
+  const [verCuenta, setVerCuenta] = useState(!!carga._cuenta)
   const [piezas, setPiezas] = useState([])
   const [eventos, setEventos] = useState([])
   const [confirmar, setConfirmar] = useState(false)
@@ -528,6 +536,7 @@ function ModalDetalle({ carga, cliente, bodega, onAvanzar, onCerrar, onCambio })
     onCambio()
   }
 
+  if (verCuenta) return <CuentaCobro carga={carga} onVolver={() => setVerCuenta(false)} onCerrar={onCerrar} />
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:12 }}>
       <div style={{ background:'var(--bg2)', borderRadius:16, padding:22, width:'100%', maxWidth:620, border:'1px solid var(--border)', maxHeight:'94vh', overflowY:'auto' }}>
@@ -564,7 +573,8 @@ function ModalDetalle({ carga, cliente, bodega, onAvanzar, onCerrar, onCambio })
         </div>
 
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          {sig && <button onClick={async () => { await onAvanzar(carga, sig.id); onCambio() }} className="btn-gold">→ {sig.label}</button>}
+          <button onClick={() => setVerCuenta(true)} className="btn-gold">🧾 Cuenta de cobro</button>
+          {sig && <button onClick={async () => { await onAvanzar(carga, sig.id); onCambio() }} className="btn">→ {sig.label}</button>}
           {ant && <button onClick={retroceder} className="btn">← Devolver a {ant.label}</button>}
           <button onClick={borrar} onBlur={() => setConfirmar(false)} className="btn" style={{ color:'var(--red)', borderColor:'rgba(224,82,82,0.4)' }}>
             {confirmar ? '¿Seguro? Se borra con su cobro y costo' : 'Borrar carga'}
@@ -617,6 +627,117 @@ function ModalBodegas({ bodegas, onCerrar, onCambio }) {
             </div>
           </>
         )}
+      </div>
+    </div>
+  )
+}
+// ── Cuenta de cobro al cliente ─────────────────────────────────────────────
+// Documento completo: empresa, cliente, datos de la carga, piezas, liquidación y medios de pago.
+// El AIU no se nombra: va incluido en el peso de cada pieza que ve el cliente.
+const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]))
+
+export function htmlCuentaCobro({ carga, piezas, cliente, bodega, empresa, medios }) {
+  const numero = `LRM-${(carga.fecha_recibo || hoyISO()).slice(0, 4)}-${String(carga.orden || '').padStart(3, '0')}`
+  const aiuPieza = n2(carga.piezas) ? n2(carga.aiu_lb) / n2(carga.piezas) : 0
+  const kg = n2(carga.peso_cobrable_kg), tarifa = n2(carga.tarifa_cliente), total = Math.round(kg * tarifa)
+  const lbTotal = n2(carga.libras_aiu) || n2(carga.libras)
+  const fechaHoy = new Date().toLocaleDateString('es-CO', { day:'numeric', month:'long', year:'numeric' })
+  const modalidad = carga.modalidad === 'aereo' ? 'Aéreo' : 'Marítimo'
+  const ruta = `${bodega?.ciudad || bodega?.nombre || 'Origen'} → Barranquilla`
+  const filasPiezas = piezas.map(p => {
+    const pesoUnit = n2(p.peso_lb) + aiuPieza
+    return `<tr><td>${p.cantidad}</td><td>${esc(p.tipo)}</td><td>${fmt(p.largo)} × ${fmt(p.ancho)} × ${fmt(p.alto)}</td><td class="n">${fmt(pesoUnit, 1)}</td><td class="n">${fmt(pesoUnit * n2(p.cantidad), 1)}</td><td class="n">${fmt(p.pies3, 3)}</td></tr>`
+  }).join('')
+  const mediosOk = (medios || []).filter(m => String(m.detalle || '').trim())
+  const dato = (l, v) => v ? `<div class="d"><span>${l}</span><b>${esc(v)}</b></div>` : ''
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>Cuenta de cobro ${numero}</title><style>
+    *{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#1b1b1b;margin:0;padding:28px;background:#fff;font-size:12.5px}
+    .doc{max-width:800px;margin:0 auto}.top{display:flex;justify-content:space-between;gap:20px;border-bottom:3px solid #C9A84C;padding-bottom:14px}
+    .marca{font-size:22px;font-weight:800;color:#1b1b1b}.marca small{display:block;font-size:11px;font-weight:400;color:#777;margin-top:2px}
+    .emp{font-size:11px;color:#555;line-height:1.6;margin-top:6px}.num{text-align:right}.num .t{font-size:11px;letter-spacing:2px;color:#8a6d1f;font-weight:700}
+    .num .n1{font-size:20px;font-weight:800;margin:2px 0 6px}.num div{font-size:11px;color:#555}
+    h3{font-size:11px;letter-spacing:2px;color:#8a6d1f;margin:20px 0 8px;text-transform:uppercase}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px}.d{display:flex;justify-content:space-between;gap:10px;border-bottom:1px dotted #ddd;padding:4px 0}.d span{color:#777}
+    table{width:100%;border-collapse:collapse}th{background:#f6f1e3;text-align:left;font-size:11px;padding:7px 6px;color:#5a4a1a}td{padding:7px 6px;border-bottom:1px solid #eee}
+    .n{text-align:right}.tot td{font-weight:700;background:#fafafa}.liq td{font-size:13px}.gran{font-size:18px;font-weight:800;text-align:right;padding:12px 6px;border-top:2px solid #1b1b1b}
+    .pago{display:grid;grid-template-columns:1fr 1fr;gap:8px}.m{border:1px solid #e5dcc3;border-radius:8px;padding:8px 10px}.m b{display:block;font-size:12px}.m span{color:#555;font-size:11.5px}
+    .cond{margin-top:16px;font-size:11px;color:#555;background:#faf7ee;border-radius:8px;padding:10px 12px}.firma{margin-top:36px;font-size:11px;color:#555}.firma .l{border-top:1px solid #999;width:240px;padding-top:4px;margin-top:40px}
+    @media print{body{padding:0}}</style></head><body><div class="doc">
+    <div class="top"><div><div class="marca">${esc(empresa.nombre)}<small>${esc(empresa.lema)}</small></div>
+      <div class="emp">${esc(empresa.responsable)} · ${esc(empresa.documento)}<br>${esc(empresa.ciudad)} · ${esc(empresa.whatsapp)} · ${esc(empresa.correo)}</div></div>
+      <div class="num"><div class="t">CUENTA DE COBRO</div><div class="n1">${numero}</div><div>Fecha: ${fechaHoy}</div><div>Orden #${carga.orden} · WR ${esc(carga.guia)}</div></div></div>
+    <h3>Cliente</h3><div class="grid">${dato('Nombre', cliente?.nombre || carga.referencia)}${dato('Empresa', cliente?.empresa)}${dato('Casillero', carga.referencia || cliente?.codigo)}${dato('Teléfono', cliente?.telefono)}</div>
+    <h3>Datos de la carga</h3><div class="grid">${dato('Recibo de bodega (WR)', carga.guia)}${dato('Fecha de recibo', fechaCorta(carga.fecha_recibo) + ' ' + (carga.fecha_recibo || '').slice(0, 4))}
+      ${dato('Bodega', [bodega?.nombre, bodega?.ciudad].filter(Boolean).join(' · '))}${dato('Ruta', ruta)}${dato('Modalidad', modalidad)}${dato('Flete', carga.flete === 'prepaid' ? 'Prepaid' : 'Collect')}
+      ${dato('Remitente', carga.remitente)}${dato('Consignatario', carga.consignatario)}${dato('Categoría', carga.categoria)}${dato('Descripción', carga.descripcion)}</div>
+    <h3>Detalle de piezas</h3><table><tr><th>Cant.</th><th>Tipo</th><th>Medidas (pulg.)</th><th class="n">Peso c/u (lb)</th><th class="n">Peso total (lb)</th><th class="n">Vol. c/u (ft³)</th></tr>${filasPiezas}
+      <tr class="tot"><td>${carga.piezas}</td><td colspan="3">Totales · ${fmt(n2(carga.pies3), 3)} ft³ · ${fmt(n2(carga.cbm), 3)} m³</td><td class="n">${fmt(lbTotal, 1)} lb</td><td class="n">${fmt(kg, 1)} kg</td></tr></table>
+    <h3>Liquidación</h3><table class="liq"><tr><th>Concepto</th><th class="n">Cantidad</th><th class="n">Tarifa</th><th class="n">Valor</th></tr>
+      <tr><td>Flete ${modalidad.toLowerCase()} ${esc(ruta)} · gestión de importación</td><td class="n">${fmt(kg, 1)} kg</td><td class="n">${cop(tarifa)} / kg</td><td class="n">${cop(total)}</td></tr></table>
+    <div class="gran">Total a pagar: ${cop(total)}</div>
+    ${mediosOk.length ? `<h3>Medios de pago</h3><div class="pago">${mediosOk.map(m => `<div class="m"><b>${esc(m.tipo)}</b><span>${esc(m.detalle)}${m.titular ? '<br>' + esc(m.titular) : ''}</span></div>`).join('')}</div>` : ''}
+    ${empresa.condiciones ? `<div class="cond"><b>Condiciones:</b> ${esc(empresa.condiciones)}</div>` : ''}
+    <div class="firma"><div class="l">${esc(empresa.responsable)}<br>${esc(empresa.nombre)}</div></div>
+  </div></body></html>`
+
+  const texto = [
+    `*${empresa.nombre}* · Cuenta de cobro ${numero}`, `Fecha: ${fechaHoy}`, `Cliente: ${cliente?.nombre || carga.referencia || ''}`, ``,
+    `*Carga*`, `WR ${carga.guia} · ${bodega?.nombre || ''} · ${modalidad}`, `${carga.descripcion || ''}`,
+    ...piezas.map(p => `• ${p.cantidad} ${p.tipo} ${fmt(p.largo)}×${fmt(p.ancho)}×${fmt(p.alto)} in · ${fmt(n2(p.peso_lb) + aiuPieza, 1)} lb c/u`),
+    `Total: ${carga.piezas} piezas · ${fmt(lbTotal, 1)} lb · *${fmt(kg, 1)} kg*`, ``,
+    `Flete: ${fmt(kg, 1)} kg × ${cop(tarifa)} = *${cop(total)}*`, `*Total a pagar: ${cop(total)}*`, ``,
+    ...(mediosOk.length ? ['*Medios de pago*', ...mediosOk.map(m => `• ${m.tipo}: ${m.detalle}${m.titular ? ' (' + m.titular + ')' : ''}`)] : []),
+    ...(empresa.condiciones ? ['', empresa.condiciones] : []),
+  ].join('\n')
+  return { html, texto, numero, total }
+}
+
+export function CuentaCobro({ cargaId, carga: cargaInicial, onVolver, onCerrar }) {
+  const { empresa, medios, cargado } = useDatosLRM()
+  const [d, setD] = useState(null)
+  const [copiado, setCopiado] = useState(false)
+  const id = cargaId || cargaInicial?.id
+  useEffect(() => {
+    (async () => {
+      const { data: carga } = await supabase.from('lrm_cargas').select('*').eq('id', id).single()
+      if (!carga) return setD({ error:true })
+      const [pz, cl, bo] = await Promise.all([
+        supabase.from('lrm_carga_piezas').select('*').eq('carga_id', id),
+        carga.cliente_id ? supabase.from('lrm_clientes').select('*').eq('id', carga.cliente_id).single() : Promise.resolve({ data:null }),
+        carga.bodega_id ? supabase.from('lrm_bodegas').select('*').eq('id', carga.bodega_id).single() : Promise.resolve({ data:null }),
+      ])
+      setD({ carga, piezas: pz.data || [], cliente: cl.data, bodega: bo.data })
+    })()
+  }, [id])
+
+  const doc = d && !d.error && cargado ? htmlCuentaCobro({ ...d, empresa, medios }) : null
+  const copiar = async () => { try { await navigator.clipboard.writeText(doc.texto); setCopiado(true); setTimeout(() => setCopiado(false), 2000) } catch {} }
+  const wa = doc && d.cliente?.telefono ? (linkWhatsApp(d.cliente.telefono, d.cliente.nombre) || '').replace(/text=.*$/, 'text=' + encodeURIComponent(doc.texto)) : null
+  const imprimir = () => {
+    const w = window.open('', '_blank'); if (!w) return
+    w.document.write(doc.html.replace('</body>', '<script>window.onload=()=>window.print()<\/script></body>')); w.document.close()
+  }
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:12 }}>
+      <div style={{ background:'var(--bg2)', borderRadius:16, padding:18, width:'100%', maxWidth:880, border:'1px solid var(--gold-border)', height:'94vh', display:'flex', flexDirection:'column', gap:12 }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, flexWrap:'wrap' }}>
+          <div>
+            <div style={{ fontSize:11, letterSpacing:3, color:'var(--gold)', fontWeight:700 }}>CUENTA DE COBRO</div>
+            <div style={{ fontSize:18, fontWeight:800, color:'var(--text)' }}>{doc ? `${doc.numero} · ${cop(doc.total)}` : 'Cargando…'}</div>
+          </div>
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+            {wa && <a href={wa} target="_blank" rel="noreferrer" className="btn" style={{ color:'#25D366', borderColor:'rgba(37,211,102,0.4)', textDecoration:'none' }}>WhatsApp</a>}
+            <button onClick={copiar} disabled={!doc} className="btn">{copiado ? '✓ Copiado' : 'Copiar texto'}</button>
+            <button onClick={imprimir} disabled={!doc} className="btn-gold">Imprimir / PDF</button>
+            {onVolver && <button onClick={onVolver} className="btn">Ver carga</button>}
+            <button onClick={onCerrar} className="btn">Cerrar</button>
+          </div>
+        </div>
+        {d?.error ? <Vacio>No se encontró la carga.</Vacio>
+          : doc ? <iframe title="Cuenta de cobro" srcDoc={doc.html} style={{ flex:1, width:'100%', border:'none', borderRadius:10, background:'#fff' }} />
+          : <Vacio>Cargando…</Vacio>}
+        <div style={{ fontSize:11, color:'var(--text4)' }}>Ya quedó en Caja como cuenta por cobrar. Medios de pago y datos de la empresa: LRM Trade → Ajustes.</div>
       </div>
     </div>
   )
