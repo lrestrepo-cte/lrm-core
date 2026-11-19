@@ -20,7 +20,7 @@ const iStyle = {
   width:'100%', padding:'9px 12px', borderRadius:8, background:'rgba(255,255,255,0.06)',
   border:'1px solid var(--border)', color:'var(--text)', fontSize:13, fontFamily:'inherit', outline:'none', marginTop:4,
 }
-const FORM_VACIO = { nombre:'', empresa:'', telefono:'', nicho:'Otro', estado:'prospecto', proxima_accion:'', fecha_accion:'', origen:'Estados Unidos', volumen_mes:'', tarifa:'', referido_por:'', notas:'', valor_mes:'', codigo:'', tarifa_kg:'' }
+const FORM_VACIO = { nombre:'', empresa:'', telefono:'', correo:'', nicho:'Otro', estado:'prospecto', proxima_accion:'', fecha_accion:'', origen:'Estados Unidos', volumen_mes:'', tarifa:'', referido_por:'', notas:'', valor_mes:'', codigo:'', tarifa_kg:'' }
 
 export const hoyISO = () => new Date().toLocaleDateString('en-CA', { timeZone:'America/Bogota' })
 const estadoDe = (id) => ESTADOS_CLIENTE.find(e => e.id === id) || ESTADOS_CLIENTE[0]
@@ -190,7 +190,7 @@ export default function LRMClientes() {
           <div style={{ background:'var(--bg2)', borderRadius:16, padding:24, width:'100%', maxWidth:520, border:'1px solid var(--border)', margin:'auto' }}>
             <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:16 }}>{editando ? 'Editar cliente' : 'Nuevo cliente'}</div>
             <div className="grid-2" style={{ gap:10, marginBottom:10 }}>
-              {[['nombre','Nombre *'],['empresa','Empresa'],['telefono','WhatsApp'],['referido_por','Referido por']].map(([k,l]) => (
+              {[['nombre','Nombre *'],['empresa','Empresa'],['telefono','WhatsApp'],['correo','Correo'],['referido_por','Referido por']].map(([k,l]) => (
                 <div key={k}><div style={{ fontSize:11, color:'var(--text3)' }}>{l}</div>
                   <input id={`cli-${k}`} value={form[k]} onChange={e => setForm(p => ({ ...p, [k]:e.target.value }))} style={iStyle} /></div>
               ))}

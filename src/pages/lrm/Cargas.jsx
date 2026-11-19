@@ -8,7 +8,7 @@ import { supabase } from '../../lib/supabase'
 import { hoyISO, fechaCorta, NICHOS_LRM } from './LRMClientes'
 import { ETAPAS } from './Dashboard'
 import { useDivisas } from '../../lib/divisas'
-import { BODEGA_POR_DEFECTO, useDatosLRM } from './datosLRM'
+import { BODEGA_POR_DEFECTO, useDatosLRM, AVISOS_LRM, DIAS_TRANSITO } from './datosLRM'
 import { linkWhatsApp } from './LRMClientes'
 
 const cop = n => '$' + Math.round(Math.abs(n || 0)).toLocaleString('es-CO')
@@ -31,6 +31,9 @@ const anterior  = id => ETAPAS[ETAPAS.findIndex(e => e.id === id) - 1]
 // Costo de la bodega en US$/kg según la categoría (ej. RD Star: Perfumes = 5)
 export const usdDe = (bodega, categoria) => Number(bodega?.tarifas_usd?.[categoria] || 0)
 
+// De dónde sale el servicio según el país de la bodega
+export const origenDe = (bodega) => { const p = (bodega?.pais || '').toLowerCase(); return p.includes('china') ? 'China' : p.includes('pan') ? 'Panamá' : 'Miami' }
+
 export function totalesPiezas(piezas) {
   const piezasTot = piezas.reduce((s, p) => s + n2(p.cantidad), 0)
   const lb = piezas.reduce((s, p) => s + n2(p.cantidad) * n2(p.peso_lb), 0)
@@ -50,12 +53,13 @@ export default function Cargas() {
   const [nuevo, setNuevo] = useState(false)
   const [detalle, setDetalle] = useState(null)
   const [verBodegas, setVerBodegas] = useState(false)
+  const [avisar, setAvisar] = useState(null)            // { carga, etapa } para mandar el aviso al cliente
 
   const cargar = async () => {
     const [ca, bo, cl] = await Promise.all([
       supabase.from('lrm_cargas').select('*').order('orden', { ascending:false }),
       supabase.from('lrm_bodegas').select('*').order('created_at'),
-      supabase.from('lrm_clientes').select('id,nombre,empresa,codigo,tarifa_kg,nicho,telefono').order('nombre'),
+      supabase.from('lrm_clientes').select('*').order('nombre'),
     ])
     if ([ca, bo, cl].some(r => r.error)) { setFaltaTabla(true); setCargando(false); return }
     let bods = bo.data || []
@@ -83,6 +87,7 @@ export default function Cargas() {
     await supabase.from('lrm_cargas').update({ etapa, ...extra }).eq('id', c.id)
     await supabase.from('lrm_carga_eventos').insert({ carga_id: c.id, etapa })
     cargar()
+    setAvisar({ carga: { ...c, etapa }, etapa })        // al cambiar de etapa, se propone avisarle al cliente
   }
 
   if (faltaTabla) return (
@@ -170,9 +175,11 @@ export default function Cargas() {
         </div>
       )}
 
-      {nuevo && <ModalRecibo bodegas={bodegas.filter(b => b.activa)} clientes={clientes} onCerrar={() => setNuevo(false)} onGuardado={(carga) => { setNuevo(false); cargar(); if (carga) setDetalle({ ...carga, _cuenta:true }) }} />}
+      {nuevo && <ModalRecibo bodegas={bodegas.filter(b => b.activa)} clientes={clientes} onCerrar={() => setNuevo(false)} onGuardado={() => { setNuevo(false); cargar() }} />}
       {detalle && <ModalDetalle carga={detalle} cliente={nombreCliente(detalle.cliente_id)} clienteFicha={clientes.find(x => x.id === detalle.cliente_id)} bodega={bodegas.find(b => b.id === detalle.bodega_id)}
-        onAvanzar={avanzar} onCerrar={() => setDetalle(null)} onCambio={() => { setDetalle(null); cargar() }} />}
+        onAvanzar={avanzar} onAvisar={(c) => { setDetalle(null); setAvisar({ carga:c, etapa:c.etapa }) }} onCerrar={() => setDetalle(null)} onCambio={() => { setDetalle(null); cargar() }} />}
+      {avisar && <ModalAviso carga={avisar.carga} etapa={avisar.etapa} cliente={clientes.find(x => x.id === avisar.carga.cliente_id)}
+        bodega={bodegas.find(b => b.id === avisar.carga.bodega_id)} onCerrar={() => setAvisar(null)} />}
       {verBodegas && <ModalBodegas bodegas={bodegas} onCerrar={() => setVerBodegas(false)} onCambio={cargar} />}
     </div>
   )
@@ -241,7 +248,6 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
   const [bodegas, setBodegas] = useState(bodegasIniciales)
   const [nuevaBod, setNuevaBod] = useState(null)          // { nombre, operador, usd, aiu } mientras se crea una bodega aquí
   const [clientes, setClientes] = useState(clientesIniciales)
-  const [porCodigo, setPorCodigo] = useState(false)       // true si el cliente se eligió solo por el casillero
   const [nuevoCli, setNuevoCli] = useState(null)          // nombre del cliente que se está creando aquí mismo
   const [f, setF] = useState({
     bodega_id: bodegas[0]?.id || '', guia:'', fecha_recibo: hoyISO(), cliente_id:'', referencia:'', seguimiento:'', remitente:'', consignatario:'',
@@ -269,16 +275,9 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
   const costo = costoUsd * n2(f.trm)
   const cobro = kgCliente * n2(f.tarifa_cliente)
 
-  // La referencia trae el código del cliente (ej. "MOHAMED ANKA / 608"): si coincide, lo elige solo
-  const alCambiarReferencia = (e) => {
-    const ref = e.target.value
-    const codigo = (ref.match(/(\d+)\s*$/) || [])[1]
-    const cli = codigo && clientes.find(c => String(c.codigo || '').trim() === codigo)
-    setF(p => ({ ...p, referencia: ref, ...(cli ? { cliente_id: cli.id, tarifa_cliente: p.tarifa_cliente || String(cli.tarifa_kg || '') } : {}) }))
-    if (cli) setPorCodigo(true)
-  }
+  // La referencia es el nombre que trae el recibo (quien envía). NO es el cliente LRM: ese se elige a mano.
+  const alCambiarReferencia = (e) => setF(p => ({ ...p, referencia: e.target.value }))
   const alCambiarCliente = (e) => {
-    setPorCodigo(false)
     const cli = clientes.find(c => c.id === e.target.value)
     const categoria = cli?.nicho && NICHOS_LRM.includes(cli.nicho) ? cli.nicho : f.categoria
     setF(p => ({ ...p, cliente_id: e.target.value, tarifa_cliente: cli?.tarifa_kg ? String(cli.tarifa_kg) : p.tarifa_cliente, categoria, tarifa_costo_usd: String(usdDe(bodegas.find(b => b.id === p.bodega_id), categoria) || p.tarifa_costo_usd) }))
@@ -300,11 +299,10 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
   }
   const crearCliente = async () => {
     if (!nuevoCli?.trim()) return
-    const codigo = (f.referencia.match(/(\d+)\s*$/) || [])[1] || null
-    const { data, error: e } = await supabase.from('lrm_clientes').insert({ nombre: nuevoCli.trim(), codigo, nicho: f.categoria, estado:'activo', tarifa_kg: n2(f.tarifa_cliente) }).select().single()
+    const { data, error: e } = await supabase.from('lrm_clientes').insert({ nombre: nuevoCli.trim(), nicho: f.categoria, estado:'activo', tarifa_kg: n2(f.tarifa_cliente) }).select().single()
     if (e) return setError('No se pudo crear el cliente: ' + e.message)
     setClientes(prev => [...prev, data].sort((a, b) => a.nombre.localeCompare(b.nombre)))
-    setF(p => ({ ...p, cliente_id: data.id })); setNuevoCli(null); setPorCodigo(false)
+    setF(p => ({ ...p, cliente_id: data.id })); setNuevoCli(null)
   }
   const setPieza = (i, k) => e => setPiezas(prev => prev.map((p, j) => j === i ? { ...p, [k]: e.target.value } : p))
   const [bloque, setBloque] = useState('')
@@ -313,8 +311,6 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
     const d = leerBloqueRecibo(bloque)
     if (!d.guia && d.piezas.length === 0) return setAviso('No reconocí el formato. Pega el bloque tal cual te lo entregó Claude.')
     const bod = d.bodega && bodegas.find(b => sinTildes(b.nombre).includes(sinTildes(d.bodega)) || sinTildes(d.bodega).includes(sinTildes(b.nombre)))
-    const codigo = (d.referencia.match(/(\d+)\s*$/) || [])[1]
-    const cli = codigo && clientes.find(c => String(c.codigo || '').trim() === codigo)
     setF(p => ({
       ...p,
       ...(d.guia && { guia: d.guia }), ...(d.fecha_recibo && { fecha_recibo: d.fecha_recibo }),
@@ -322,12 +318,10 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
       ...(d.consignatario && { consignatario: d.consignatario }), ...(d.descripcion && { descripcion: d.descripcion }),
       ...(d.modalidad && { modalidad: d.modalidad }), ...(d.flete && { flete: d.flete }),
       ...(bod && { bodega_id: bod.id, aiu_lb_pieza: String(bod.aiu_lb_pieza ?? p.aiu_lb_pieza), tarifa_costo_usd: String(usdDe(bod, p.categoria) || p.tarifa_costo_usd) }),
-      ...(cli && { cliente_id: cli.id, tarifa_cliente: p.tarifa_cliente || String(cli.tarifa_kg || ''), categoria: NICHOS_LRM.includes(cli.nicho) ? cli.nicho : p.categoria }),
     }))
     if (d.piezas.length) setPiezas(d.piezas)
     if (d.bodega && !bod) setNuevaBod({ nombre: d.bodega, operador:'', usd:'5', aiu:'2' })   // la bodega del recibo no existe: se propone crearla
-    setPorCodigo(!!cli)
-    setAviso(`Listo: ${d.piezas.length} renglón(es) de piezas${cli ? `, cliente ${cli.nombre}` : codigo ? `. Ningún cliente tiene el código ${codigo}: elígelo a mano` : ''}. Revisa los totales contra el papel.`)
+    setAviso(`Listo: ${d.piezas.length} renglón(es) de piezas. Ahora elige tu cliente LRM (quien te paga) y revisa los totales contra el papel.`)
     setBloque('')
   }
 
@@ -416,9 +410,9 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
           </div>
         )}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap:10, marginBottom:10 }}>
-          <div><Etiqueta>Referencia / casillero (Reference)</Etiqueta><input id="wr-referencia" value={f.referencia} onChange={alCambiarReferencia} placeholder="MOHAMED ANKA / 608" style={iStyle} /></div>
+          <div><Etiqueta>Nombre en el recibo (Reference)</Etiqueta><input id="wr-referencia" value={f.referencia} onChange={alCambiarReferencia} placeholder="MOHAMED ANKA / 608" style={iStyle} /></div>
           <div><Etiqueta>Seguimiento (nombre tuyo para esta carga)</Etiqueta><input id="wr-seguimiento" value={f.seguimiento} onChange={set('seguimiento')} placeholder="Ej: Andrés · perfumes pedido 3" style={iStyle} /></div>
-          <div><Etiqueta>Cliente LRM · verifícalo</Etiqueta>
+          <div><Etiqueta>Cliente LRM · quien te paga</Etiqueta>
             {nuevoCli === null ? (
               <div style={{ display:'flex', gap:6 }}>
                 <select id="wr-cliente" value={f.cliente_id} onChange={alCambiarCliente} style={{ ...iStyle, borderColor: f.cliente_id ? 'var(--border)' : 'rgba(232,162,58,0.6)' }}>
@@ -434,8 +428,8 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
                 <button type="button" onClick={() => setNuevoCli(null)} className="btn" style={{ marginTop:4, fontSize:11 }}>✕</button>
               </div>
             )}
-            <div style={{ fontSize:10, marginTop:3, color: f.cliente_id ? (porCodigo ? 'var(--green)' : 'var(--text3)') : '#E8A23A' }}>
-              {f.cliente_id ? (porCodigo ? `✓ Elegido solo por el casillero ${(f.referencia.match(/(\d+)\s*$/) || [])[1]}. Verifica que sea él.` : '✓ Elegido a mano') : 'Elige el cliente o créalo con + Nuevo (queda con el casillero de la referencia).'}
+            <div style={{ fontSize:10, marginTop:3, color: f.cliente_id ? 'var(--green)' : '#E8A23A' }}>
+              {f.cliente_id ? '✓ A este cliente le sale la cuenta de cobro y los avisos.' : 'Elige quién te paga (ej. Andrés Restrepo) o créalo con + Nuevo.'}
             </div>
           </div>
           <div><Etiqueta>Remitente (Received from)</Etiqueta><input id="wr-remitente" value={f.remitente} onChange={set('remitente')} placeholder="ORIENTAL AROMA PERFUMERIA" style={iStyle} /></div>
@@ -513,7 +507,7 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
 }
 
 // ── Detalle: piezas, trazabilidad y borrar ─────────────────────────────────
-function ModalDetalle({ carga, cliente, clienteFicha, bodega, onAvanzar, onCerrar, onCambio }) {
+function ModalDetalle({ carga, cliente, clienteFicha, bodega, onAvanzar, onAvisar, onCerrar, onCambio }) {
   const [verCuenta, setVerCuenta] = useState(!!carga._cuenta)
   const [piezas, setPiezas] = useState([])
   const [eventos, setEventos] = useState([])
@@ -573,7 +567,8 @@ function ModalDetalle({ carga, cliente, clienteFicha, bodega, onAvanzar, onCerra
         </div>
 
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
-          <button onClick={() => setVerCuenta(true)} className="btn-gold">🧾 Cuenta de cobro</button>
+          <button onClick={() => setVerCuenta(true)} className="btn-gold">🧾 Generar cuenta de cobro</button>
+          <button onClick={() => onAvisar(carga)} className="btn">📣 Avisar al cliente</button>
           {sig && <button onClick={async () => { await onAvanzar(carga, sig.id); onCambio() }} className="btn">→ {sig.label}</button>}
           {ant && <button onClick={retroceder} className="btn">← Devolver a {ant.label}</button>}
           <button onClick={borrar} onBlur={() => setConfirmar(false)} className="btn" style={{ color:'var(--red)', borderColor:'rgba(224,82,82,0.4)' }}>
@@ -643,10 +638,11 @@ export function htmlCuentaCobro({ carga, piezas, cliente, bodega, empresa, medio
   const lbTotal = n2(carga.libras_aiu) || n2(carga.libras)
   const fechaHoy = new Date().toLocaleDateString('es-CO', { day:'numeric', month:'long', year:'numeric' })
   const modalidad = carga.modalidad === 'aereo' ? 'Aéreo' : 'Marítimo'
-  const ruta = `${bodega?.ciudad || bodega?.nombre || 'Origen'} → Barranquilla`
+  const origen = origenDe(bodega)
+  const ruta = `${origen} → Barranquilla`
   const filasPiezas = piezas.map(p => {
     const pesoUnit = n2(p.peso_lb) + aiuPieza
-    return `<tr><td>${p.cantidad}</td><td>${esc(p.tipo)}</td><td>${fmt(p.largo)} × ${fmt(p.ancho)} × ${fmt(p.alto)}</td><td class="n">${fmt(pesoUnit, 1)}</td><td class="n">${fmt(pesoUnit * n2(p.cantidad), 1)}</td><td class="n">${fmt(p.pies3, 3)}</td></tr>`
+    return `<tr><td>${p.cantidad}</td><td>${p.tipo === 'CART' ? 'Caja' : esc(p.tipo)}</td><td class="n">${fmt(pesoUnit, 1)}</td><td class="n">${fmt(pesoUnit * n2(p.cantidad), 1)}</td></tr>`
   }).join('')
   const mediosOk = (medios || []).filter(m => String(m.detalle || '').trim())
   const dato = (l, v) => v ? `<div class="d"><span>${l}</span><b>${esc(v)}</b></div>` : ''
@@ -665,15 +661,14 @@ export function htmlCuentaCobro({ carga, piezas, cliente, bodega, empresa, medio
     @media print{body{padding:0}}</style></head><body><div class="doc">
     <div class="top"><div><div class="marca">${esc(empresa.nombre)}<small>${esc(empresa.lema)}</small></div>
       <div class="emp">${esc(empresa.responsable)} · ${esc(empresa.documento)}<br>${esc(empresa.ciudad)} · ${esc(empresa.whatsapp)} · ${esc(empresa.correo)}</div></div>
-      <div class="num"><div class="t">CUENTA DE COBRO</div><div class="n1">${numero}</div><div>Fecha: ${fechaHoy}</div><div>Orden #${carga.orden} · WR ${esc(carga.guia)}</div></div></div>
-    <h3>Cliente</h3><div class="grid">${dato('Nombre', cliente?.nombre || carga.referencia)}${dato('Empresa', cliente?.empresa)}${dato('Casillero', carga.referencia || cliente?.codigo)}${dato('Teléfono', cliente?.telefono)}</div>
-    <h3>Datos de la carga</h3><div class="grid">${dato('Recibo de bodega (WR)', carga.guia)}${dato('Fecha de recibo', fechaCorta(carga.fecha_recibo) + ' ' + (carga.fecha_recibo || '').slice(0, 4))}
-      ${dato('Bodega', [bodega?.nombre, bodega?.ciudad].filter(Boolean).join(' · '))}${dato('Ruta', ruta)}${dato('Modalidad', modalidad)}${dato('Flete', carga.flete === 'prepaid' ? 'Prepaid' : 'Collect')}
-      ${dato('Remitente', carga.remitente)}${dato('Consignatario', carga.consignatario)}${dato('Categoría', carga.categoria)}${dato('Descripción', carga.descripcion)}</div>
-    <h3>Detalle de piezas</h3><table><tr><th>Cant.</th><th>Tipo</th><th>Medidas (pulg.)</th><th class="n">Peso c/u (lb)</th><th class="n">Peso total (lb)</th><th class="n">Vol. c/u (ft³)</th></tr>${filasPiezas}
-      <tr class="tot"><td>${carga.piezas}</td><td colspan="3">Totales · ${fmt(n2(carga.pies3), 3)} ft³ · ${fmt(n2(carga.cbm), 3)} m³</td><td class="n">${fmt(lbTotal, 1)} lb</td><td class="n">${fmt(kg, 1)} kg</td></tr></table>
+      <div class="num"><div class="t">CUENTA DE COBRO</div><div class="n1">${numero}</div><div>Fecha: ${fechaHoy}</div></div></div>
+    <h3>Cliente</h3><div class="grid">${dato('Nombre', cliente?.nombre || '')}${dato('Empresa', cliente?.empresa)}${dato('Teléfono', cliente?.telefono)}</div>
+    <h3>Servicio</h3><div class="grid">${dato('Servicio', 'Importación y entrega en Barranquilla')}${dato('Origen', origen)}
+      ${dato('Modalidad', modalidad)}${dato('Mercancía', carga.descripcion || carga.categoria)}${dato('Ref. envío', 'WR ' + carga.guia)}${dato('Fecha de recepción', fechaCorta(carga.fecha_recibo) + ' ' + (carga.fecha_recibo || '').slice(0, 4))}</div>
+    <h3>Detalle de la mercancía</h3><table><tr><th>Cant.</th><th>Empaque</th><th class="n">Peso c/u (lb)</th><th class="n">Peso total (lb)</th></tr>${filasPiezas}
+      <tr class="tot"><td>${carga.piezas}</td><td>Total</td><td></td><td class="n">${fmt(lbTotal, 1)} lb · ${fmt(kg, 1)} kg</td></tr></table>
     <h3>Liquidación</h3><table class="liq"><tr><th>Concepto</th><th class="n">Cantidad</th><th class="n">Tarifa</th><th class="n">Valor</th></tr>
-      <tr><td>Flete ${modalidad.toLowerCase()} ${esc(ruta)} · gestión de importación</td><td class="n">${fmt(kg, 1)} kg</td><td class="n">${cop(tarifa)} / kg</td><td class="n">${cop(total)}</td></tr></table>
+      <tr><td>Servicio de importación ${esc(ruta)} · ${modalidad.toLowerCase()}</td><td class="n">${fmt(kg, 1)} kg</td><td class="n">${cop(tarifa)} / kg</td><td class="n">${cop(total)}</td></tr></table>
     <div class="gran">Total a pagar: ${cop(total)}</div>
     ${mediosOk.length ? `<h3>Medios de pago</h3><div class="pago">${mediosOk.map(m => `<div class="m"><b>${esc(m.tipo)}</b><span>${esc(m.detalle)}${m.titular ? '<br>' + esc(m.titular) : ''}</span></div>`).join('')}</div>` : ''}
     ${empresa.condiciones ? `<div class="cond"><b>Condiciones:</b> ${esc(empresa.condiciones)}</div>` : ''}
@@ -681,11 +676,10 @@ export function htmlCuentaCobro({ carga, piezas, cliente, bodega, empresa, medio
   </div></body></html>`
 
   const texto = [
-    `*${empresa.nombre}* · Cuenta de cobro ${numero}`, `Fecha: ${fechaHoy}`, `Cliente: ${cliente?.nombre || carga.referencia || ''}`, ``,
-    `*Carga*`, `WR ${carga.guia} · ${bodega?.nombre || ''} · ${modalidad}`, `${carga.descripcion || ''}`,
-    ...piezas.map(p => `• ${p.cantidad} ${p.tipo} ${fmt(p.largo)}×${fmt(p.ancho)}×${fmt(p.alto)} in · ${fmt(n2(p.peso_lb) + aiuPieza, 1)} lb c/u`),
-    `Total: ${carga.piezas} piezas · ${fmt(lbTotal, 1)} lb · *${fmt(kg, 1)} kg*`, ``,
-    `Flete: ${fmt(kg, 1)} kg × ${cop(tarifa)} = *${cop(total)}*`, `*Total a pagar: ${cop(total)}*`, ``,
+    `*${empresa.nombre}* · Cuenta de cobro ${numero}`, `Fecha: ${fechaHoy}`, `Cliente: ${cliente?.nombre || ''}`, ``,
+    `Servicio de importación ${ruta} (${modalidad.toLowerCase()})`, `${carga.descripcion || ''}`,
+    `${carga.piezas} cajas · ${fmt(lbTotal, 1)} lb · *${fmt(kg, 1)} kg*`, ``,
+    `${fmt(kg, 1)} kg × ${cop(tarifa)} = *${cop(total)}*`, `*Total a pagar: ${cop(total)}*`, ``,
     ...(mediosOk.length ? ['*Medios de pago*', ...mediosOk.map(m => `• ${m.tipo}: ${m.detalle}${m.titular ? ' (' + m.titular + ')' : ''}`)] : []),
     ...(empresa.condiciones ? ['', empresa.condiciones] : []),
   ].join('\n')
@@ -738,6 +732,43 @@ export function CuentaCobro({ cargaId, carga: cargaInicial, onVolver, onCerrar }
           : doc ? <iframe title="Cuenta de cobro" srcDoc={doc.html} style={{ flex:1, width:'100%', border:'none', borderRadius:10, background:'#fff' }} />
           : <Vacio>Cargando…</Vacio>}
         <div style={{ fontSize:11, color:'var(--text4)' }}>Ya quedó en Caja como cuenta por cobrar. Medios de pago y datos de la empresa: LRM Trade → Ajustes.</div>
+      </div>
+    </div>
+  )
+}
+// ── Aviso al cliente: mensaje listo para WhatsApp o correo según la etapa ───
+export function ModalAviso({ carga, etapa, cliente, bodega, onCerrar }) {
+  const { empresa } = useDatosLRM()
+  const plantilla = AVISOS_LRM[etapa] || AVISOS_LRM.transito
+  const kg = n2(carga.peso_cobrable_kg), total = Math.round(kg * n2(carga.tarifa_cliente))
+  const vars = {
+    nombre: (cliente?.nombre || '').split(' ')[0] || 'hola', mercancia: (carga.categoria && carga.categoria !== 'Otro' ? carga.categoria : 'mercancía').toLowerCase(),
+    cajas: carga.piezas, origen: origenDe(bodega), dias: DIAS_TRANSITO[carga.modalidad] || 8, kg: fmt(kg, 1), total: cop(total), guia: carga.guia,
+  }
+  const llenar = t => t.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '')
+  const [texto, setTexto] = useState(llenar(plantilla.texto) + `\n\n${empresa.nombre} · ${empresa.whatsapp}`)
+  const [estado, setEstado] = useState('')
+  const asunto = `${empresa.nombre} · ${plantilla.asunto} · Envío WR ${carga.guia}`
+  const registrar = async (tipo) => { if (cliente?.id) await supabase.from('lrm_contactos').insert({ cliente_id: cliente.id, tipo, resumen: `${plantilla.asunto} (WR ${carga.guia})` }) }
+  const wa = cliente?.telefono ? (linkWhatsApp(cliente.telefono, cliente.nombre) || '').replace(/text=.*$/, 'text=' + encodeURIComponent(texto)) : null
+  const mail = cliente?.correo ? `mailto:${cliente.correo}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(texto)}` : null
+  const e = etapaDe(etapa)
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:110, padding:12 }}>
+      <div style={{ background:'var(--bg2)', borderRadius:16, padding:22, width:'100%', maxWidth:520, border:`1px solid ${e.color}66` }}>
+        <div style={{ fontSize:11, letterSpacing:2, fontWeight:700, color:e.color }}>📣 AVISAR AL CLIENTE · {e.label.toUpperCase()}</div>
+        <div style={{ fontSize:17, fontWeight:800, color:'var(--text)', margin:'4px 0 12px' }}>{cliente?.nombre || 'Carga sin cliente LRM'}</div>
+        <textarea value={texto} onChange={ev => setTexto(ev.target.value)} style={{ width:'100%', minHeight:150, padding:12, borderRadius:10, background:'rgba(255,255,255,0.06)', border:'1px solid var(--border)', color:'var(--text)', fontSize:13, fontFamily:'inherit', lineHeight:1.5, resize:'vertical', outline:'none' }} />
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:12 }}>
+          {wa && <a href={wa} target="_blank" rel="noreferrer" onClick={() => { registrar('whatsapp'); setEstado('Abriendo WhatsApp…') }} className="btn" style={{ color:'#25D366', borderColor:'rgba(37,211,102,0.4)', textDecoration:'none' }}>WhatsApp</a>}
+          {mail && <a href={mail} onClick={() => { registrar('correo'); setEstado('Abriendo el correo…') }} className="btn" style={{ textDecoration:'none' }}>Correo</a>}
+          <button onClick={async () => { try { await navigator.clipboard.writeText(texto); setEstado('✓ Copiado') } catch {} }} className="btn">Copiar</button>
+          <button onClick={onCerrar} className="btn" style={{ marginLeft:'auto' }}>{estado ? 'Listo' : 'Ahora no'}</button>
+        </div>
+        <div style={{ fontSize:11, color: estado ? 'var(--green)' : 'var(--text4)', marginTop:10 }}>
+          {estado || (!wa && !mail ? 'Este cliente no tiene WhatsApp ni correo en su ficha (CRM). Puedes copiar el mensaje.' : 'Puedes editar el mensaje antes de enviarlo. Queda registrado en el CRM.')}
+        </div>
       </div>
     </div>
   )
