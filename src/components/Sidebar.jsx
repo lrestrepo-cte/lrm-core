@@ -91,23 +91,40 @@ const NAV_ZABU = [
     ]
   },
 ]
+// LRM Trade Consulting: menú propio con íconos. activo:false = "Pronto"
 const NAV_TRADE = [
-  {
-    seccion:'Comercial',
-    items:[
-      { id:'dashboard',   label:'Dashboard'        },
-      { id:'clientes',    label:'Clientes'         },
-      { id:'operaciones', label:'Operaciones'      },
-      { id:'cuentas',     label:'Cuentas de cobro' },
-    ]
-  },
-  {
-    seccion:'Logística',
-    items:[
-      { id:'comex', label:'Comex · Cotizador' },
-    ]
-  },
+  { seccion:'General',   items:[ { id:'dashboard',   label:'Inicio',         icono:'inicio',     activo:true  } ] },
+  { seccion:'Comercial', items:[
+      { id:'clientes',    label:'CRM',            icono:'crm',        activo:true  },
+      { id:'red',         label:'Red comercial',  icono:'red',        activo:false },
+      { id:'comex',       label:'Cotizador',      icono:'cotizador',  activo:true  },
+  ] },
+  { seccion:'Logística', items:[
+      { id:'logistica',   label:'Cargas y guías', icono:'cargas',     activo:false },
+      { id:'operaciones', label:'Operaciones',    icono:'operaciones',activo:true  },
+  ] },
+  { seccion:'Finanzas',  items:[
+      { id:'caja',        label:'Caja',           icono:'caja',       activo:false },
+      { id:'cuentas',     label:'Cuentas de cobro', icono:'cobro',    activo:true  },
+  ] },
 ]
+
+// Íconos de línea (mismo trazo que las puertas de LRM Core)
+export function IconoNav({ tipo, size = 16 }) {
+  const p = { width:size, height:size, viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', strokeWidth:1.7, strokeLinecap:'round', strokeLinejoin:'round', style:{ flexShrink:0 } }
+  switch (tipo) {
+    case 'inicio':      return <svg {...p}><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+    case 'crm':         return <svg {...p}><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 20a6.5 6.5 0 0 0-2.5-5.1"/></svg>
+    case 'red':         return <svg {...p}><circle cx="12" cy="5" r="2.5"/><circle cx="5" cy="18" r="2.5"/><circle cx="19" cy="18" r="2.5"/><path d="M10.8 7.2 6.2 15.8M13.2 7.2l4.6 8.6M7.5 18h9"/></svg>
+    case 'cotizador':   return <svg {...p}><rect x="5" y="2.5" width="14" height="19" rx="2"/><path d="M8 6.5h8"/><path d="M8.5 11h.01M12 11h.01M15.5 11h.01M8.5 14.5h.01M12 14.5h.01M15.5 14.5h.01M8.5 18h.01M12 18h3.5"/></svg>
+    case 'cargas':      return <svg {...p}><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>
+    case 'operaciones': return <svg {...p}><path d="M4 7h16M4 12h16M4 17h10"/></svg>
+    case 'caja':        return <svg {...p}><rect x="2.5" y="6" width="19" height="13" rx="2"/><path d="M2.5 10h19"/><path d="M16 14.5h2.5"/></svg>
+    case 'cobro':       return <svg {...p}><path d="M6 2.5h9l4 4v15H6z"/><path d="M15 2.5v4h4M9 12h7M9 16h5"/></svg>
+    default: return null
+  }
+}
+
 const NAV_RV = [
   {
     seccion:'Operación',
@@ -187,14 +204,23 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onIrC
             {navNegocio.map(grupo => (
               <div key={grupo.seccion}>
                 <div className="sb-section-label">{grupo.seccion}</div>
-                {grupo.items.map(item => (
-                  <div key={item.id}
-                    className={`sb-item${navActivo===item.id?' active':''}`}
-                    onClick={() => onNavLRM && onNavLRM(item.id)}
-                  >
-                    <span className="sb-item-txt">{item.label}</span>
-                  </div>
-                ))}
+                {grupo.items.map(item => {
+                  const listo = item.activo !== false
+                  return (
+                    <div key={item.id}
+                      className={`sb-item${navActivo===item.id?' active':''}`}
+                      onClick={() => listo && onNavLRM && onNavLRM(item.id)}
+                      style={{ cursor: listo ? 'pointer' : 'default', opacity: listo ? 1 : 0.45,
+                        color: navActivo===item.id ? 'var(--gold)' : 'var(--text3)' }}
+                    >
+                      {item.icono && <IconoNav tipo={item.icono} />}
+                      <span className="sb-item-txt">{item.label}</span>
+                      {!listo && (
+                        <span style={{ fontSize:9, padding:'1px 6px', borderRadius:6, background:'rgba(255,255,255,0.06)', color:'rgba(255,255,255,0.3)', border:'0.5px solid rgba(255,255,255,0.08)' }}>Pronto</span>
+                      )}
+                    </div>
+                  )
+                })}
               </div>
             ))}
           </>

@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import LRMClientes from './lrm/LRMClientes'
 import LRMTradeDashboard from './lrm/LRMTradeDashboard'
+import { useDivisas } from '../lib/divisas'
 function cop(n) { return '$' + Math.round(Math.abs(n||0)).toLocaleString('es-CO') }
 const iStyle = {
   width:'100%', padding:'8px 12px', borderRadius:8,
@@ -1598,36 +1599,54 @@ export default function LRMInversiones({ modo = 'trade', tab: tabExterno, onTab 
     </div>
   )
 
-  // LRM Trade Consulting: todo gira alrededor de la importación
-  const TABS = [
-    { id:'dashboard',   label:'📊 Dashboard' },
-    { id:'clientes',    label:'👥 Clientes' },
-    { id:'operaciones', label:'📦 Operaciones' },
-    { id:'cuentas',     label:'📲 Cuentas de cobro' },
-    { id:'comex',       label:'🌐 Comex' },
-  ]
+  // LRM Trade Consulting: el menú vive en la barra izquierda; arriba van las divisas
+  const SECCIONES = {
+    dashboard:   { titulo:'Inicio',           sub:'Todo lo de LRM Trade en una mirada' },
+    clientes:    { titulo:'CRM',              sub:'Prospectos, conversaciones y clientes' },
+    operaciones: { titulo:'Operaciones',      sub:'Registro de operaciones' },
+    cuentas:     { titulo:'Cuentas de cobro', sub:'Cobros pendientes a clientes' },
+    comex:       { titulo:'Cotizador',        sub:'Rutas, tarifas y cotizaciones' },
+  }
   const pedido = tabExterno ?? tabInterno
-  const tab = TABS.some(t => t.id === pedido) ? pedido : 'dashboard'
-  const setTab = onTab || setTabInterno
+  const tab = SECCIONES[pedido] ? pedido : 'dashboard'
   return (
     <div>
-      <div style={{ marginBottom:20 }}>
-        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:4 }}>
-          <div style={{ fontSize:28 }}>🌐</div>
-          <div style={{ fontSize:22, fontWeight:900, color:'var(--gold)' }}>LRM Trade Consulting</div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-end', gap:16, flexWrap:'wrap', marginBottom:20 }}>
+        <div>
+          <div style={{ fontSize:11, letterSpacing:3, fontWeight:700, color:'var(--gold)', marginBottom:4 }}>LRM TRADE CONSULTING</div>
+          <div style={{ fontSize:24, fontWeight:800, color:'var(--text)', letterSpacing:-0.5 }}>{SECCIONES[tab].titulo}</div>
+          <div style={{ fontSize:12, color:'var(--text3)', marginTop:2 }}>{SECCIONES[tab].sub}</div>
         </div>
-        <div style={{ fontSize:12, color:'var(--text3)' }}>Importaciones desde Estados Unidos, China y Panamá</div>
-      </div>
-      <div className="sub-nav" style={{ marginBottom:24, flexWrap:'wrap' }}>
-        {TABS.map(t => (
-          <div key={t.id} className={`sub-nav-item${tab===t.id?' active':''}`} onClick={() => setTab(t.id)}>{t.label}</div>
-        ))}
+        <BurbujasDivisas />
       </div>
       {tab==='dashboard'   && <LRMTradeDashboard />}
       {tab==='clientes'    && <LRMClientes />}
       {tab==='operaciones' && <TabOperaciones />}
       {tab==='cuentas'     && <TabCuentasCobro />}
       {tab==='comex'       && <TabComexModulo />}
+    </div>
+  )
+}
+
+// Dólar, euro y yuan contra el peso, con la variación frente al día anterior
+function BurbujasDivisas() {
+  const divisas = useDivisas()
+  return (
+    <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+      {(divisas || [{ id:'USD' }, { id:'EUR' }, { id:'CNY' }]).map(d => {
+        const delta = d.hoy && d.ayer ? d.hoy - d.ayer : 0
+        const color = delta > 0 ? 'var(--red)' : delta < 0 ? 'var(--green)' : 'var(--text3)'
+        return (
+          <div key={d.id} title={d.oficial ? 'TRM oficial del día' : 'Referencia: TRM cruzada con el cambio del día frente al dólar'}
+            style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 14px', borderRadius:999, background:'var(--bg3)', border:'1px solid var(--border2)' }}>
+            <span style={{ fontSize:11, fontWeight:800, letterSpacing:1, color:'var(--gold)' }}>{d.id}</span>
+            <span style={{ fontSize:14, fontWeight:700, color:'var(--text)' }}>
+              {d.hoy ? '$' + d.hoy.toLocaleString('es-CO', { minimumFractionDigits:2, maximumFractionDigits:2 }) : '—'}
+            </span>
+            {d.hoy ? <span style={{ fontSize:11, color }}>{delta > 0 ? '▲' : delta < 0 ? '▼' : '='} {Math.abs(delta).toLocaleString('es-CO', { maximumFractionDigits:2 })}</span> : null}
+          </div>
+        )
+      })}
     </div>
   )
 }

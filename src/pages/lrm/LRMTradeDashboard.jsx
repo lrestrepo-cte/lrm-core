@@ -43,18 +43,6 @@ function saldoFIFO(cargos, pagos) {
   return { saldo: Math.max(0, sumar(cargos) - sumar(pagos)), masViejo }
 }
 
-// TRM oficial del día (Superintendencia Financiera, publicada en datos.gov.co)
-function useTRM() {
-  const [trm, setTrm] = useState(null)
-  useEffect(() => {
-    fetch('https://www.datos.gov.co/resource/32sa-8pi3.json?$order=vigenciadesde%20DESC&$limit=2')
-      .then(r => r.json())
-      .then(d => { if (d?.[0]?.valor) setTrm({ valor: +d[0].valor, anterior: +(d[1]?.valor || d[0].valor) }) })
-      .catch(() => {})
-  }, [])
-  return trm
-}
-
 function calcular({ clientes, cargas, movs, contactos, temas, ajustes }) {
   const hoy = hoyISO()
   const mesActual = hoy.slice(0, 7)
@@ -150,7 +138,6 @@ function Kpi({ label, valor, sub, color = 'var(--text)', subColor = 'var(--text3
 }
 
 export default function LRMTradeDashboard() {
-  const trm = useTRM()
   const [datos, setDatos] = useState(null)
   const [faltaTabla, setFaltaTabla] = useState(false)
   const [nuevoTema, setNuevoTema] = useState('')
@@ -208,7 +195,6 @@ export default function LRMTradeDashboard() {
   const proyTotal = proyeccion.activos + proyeccion.propuestas * 0.5
   const enMovimiento = datos.cargas.filter(c => c.etapa !== 'entregada')
   const entregadas30 = datos.cargas.filter(c => c.etapa === 'entregada' && diasDesde(c.fecha_entrega || c.created_at?.slice(0, 10)) <= 30)
-  const varTrm = trm ? trm.valor - trm.anterior : 0
   const nombreMes = MESES[Number(hoyISO().slice(5, 7)) - 1]
   const maxEmbudo = Math.max(1, ...EMBUDO.map(x => datos.embudo[x.id].n))
 
@@ -216,10 +202,7 @@ export default function LRMTradeDashboard() {
     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
 
       {/* 1 · Franja superior */}
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(170px, 100%), 1fr))', gap:12 }}>
-        <Kpi label="TRM hoy" valor={trm ? '$ ' + trm.valor.toLocaleString('es-CO', { minimumFractionDigits:2, maximumFractionDigits:2 }) : '—'}
-          sub={trm ? `${varTrm > 0 ? '▲' : varTrm < 0 ? '▼' : '='} ${cop(varTrm)} vs. ayer` : 'Sin conexión'}
-          subColor={varTrm > 0 ? 'var(--red)' : varTrm < 0 ? 'var(--green)' : 'var(--text3)'} />
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(150px, 100%), 1fr))', gap:12 }}>
         <Kpi label="Cartera por cobrar" valor={millones(totalCartera)} color="var(--gold)" sub={`${datos.cartera.length} clientes`} />
         <Kpi label="Por pagar proveedores" valor={millones(totalPagar)} color="var(--red)" sub={`${datos.porPagar.length} proveedores`} />
         <Kpi label="Cruce neto" valor={millones(neto)} color={neto >= 0 ? 'var(--green)' : 'var(--red)'} sub="Cobrar − pagar" />
