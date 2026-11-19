@@ -5,7 +5,7 @@
 // Tablas: lrm_clientes, lrm_contactos, lrm_cargas, lrm_movimientos, lrm_ajustes (clave 'pitches')
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
-import { PITCHES_LRM, ETAPAS_PITCH } from './pitchesLRM'
+import { PITCHES_LRM, ETAPAS_PITCH, PUBLICOS_PITCH, unirPitches } from './pitchesLRM'
 
 export const NICHOS_LRM = ['Perfumes','Cosméticos','Celulares','Computadores','Tablets','Electrónica','Electrodomésticos','Partes y repuestos','Mercancía doméstica','Otro']
 
@@ -426,6 +426,8 @@ const Titulo = ({ children }) => <div style={{ fontSize:11, letterSpacing:2, fon
 // ── Pitches y enganches por nicho ──────────────────────────────────────────
 function Pitches({ clientes }) {
   const [lista, setLista] = useState(PITCHES_LRM)
+  const [borrados, setBorrados] = useState([])
+  const [publico, setPublico] = useState('Todos')
   const [nicho, setNicho] = useState('Todos')
   const [etapa, setEtapa] = useState('todas')
   const [editando, setEditando] = useState(null)
@@ -434,28 +436,36 @@ function Pitches({ clientes }) {
 
   useEffect(() => {
     supabase.from('lrm_ajustes').select('valor').eq('clave', 'pitches').maybeSingle()
-      .then(({ data }) => { try { if (data?.valor) setLista(JSON.parse(data.valor)) } catch { /* se quedan los de arranque */ } })
+      .then(({ data }) => { try { const u = unirPitches(data?.valor ? JSON.parse(data.valor) : []); setLista(u.items); setBorrados(u.borrados) } catch { /* se quedan los de arranque */ } })
   }, [])
-  const guardarLista = async (nueva) => {
-    setLista(nueva)
-    const { error } = await supabase.from('lrm_ajustes').upsert({ clave:'pitches', valor: JSON.stringify(nueva) })
+  const guardarLista = async (nueva, nuevosBorrados = borrados) => {
+    setLista(nueva); setBorrados(nuevosBorrados)
+    const { error } = await supabase.from('lrm_ajustes').upsert({ clave:'pitches', valor: JSON.stringify({ items: nueva, borrados: nuevosBorrados }) })
     setEstado(error ? 'No se pudo guardar: ' + error.message : '✓ Guardado'); setTimeout(() => setEstado(''), 2000)
   }
+  const borrarPitch = (id) => guardarLista(lista.filter(x => x.id !== id), PITCHES_LRM.some(p => p.id === id) ? [...borrados, id] : borrados)
 
   const nichos = ['Todos', ...NICHOS_LRM.filter(n => lista.some(p => p.nicho === n))]
-  const visibles = lista.filter(p => (nicho === 'Todos' || p.nicho === nicho || p.nicho === 'Todos') && (etapa === 'todas' || p.etapa === etapa))
-    .sort((a, b) => (a.nicho === 'Todos' ? 1 : 0) - (b.nicho === 'Todos' ? 1 : 0))   // los del nicho elegido van primero
+  const visibles = lista.filter(p => (publico === 'Todos' || p.publico === publico || (p.publico || 'Todos') === 'Todos') && (nicho === 'Todos' || p.nicho === nicho || p.nicho === 'Todos') && (etapa === 'todas' || p.etapa === etapa))
+    .sort((a, b) => ((a.nicho === 'Todos' ? 1 : 0) + ((a.publico || 'Todos') === 'Todos' ? 1 : 0)) - ((b.nicho === 'Todos' ? 1 : 0) + ((b.publico || 'Todos') === 'Todos' ? 1 : 0)))   // lo específico primero
   const copiar = async (t) => { try { await navigator.clipboard.writeText(t); setEstado('✓ Copiado'); setTimeout(() => setEstado(''), 1500) } catch {} }
 
   return (
     <div>
-      <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:8 }}>
+      <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:8, alignItems:'center' }}>
+        <span style={{ fontSize:11, color:'var(--text3)', width:56 }}>Para</span>
+        {['Todos', ...PUBLICOS_PITCH].map(x => <button key={x} onClick={() => setPublico(x)} className={publico === x ? 'btn-gold' : 'btn'} style={{ fontSize:11, padding:'5px 12px' }}>{x === 'Todos' ? 'Todos' : x}</button>)}
+        <span style={{ fontSize:11, color:'var(--text4)', marginLeft:'auto' }}>{visibles.length} mensajes</span>
+      </div>
+      <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:8, alignItems:'center' }}>
+        <span style={{ fontSize:11, color:'var(--text3)', width:56 }}>Nicho</span>
         {nichos.map(n => <button key={n} onClick={() => setNicho(n)} className={nicho === n ? 'btn-gold' : 'btn'} style={{ fontSize:11, padding:'5px 12px' }}>{n}</button>)}
       </div>
       <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:14, alignItems:'center' }}>
-        <button onClick={() => setEtapa('todas')} className={etapa === 'todas' ? 'btn-gold' : 'btn'} style={{ fontSize:11, padding:'5px 12px' }}>Todas las etapas</button>
+        <span style={{ fontSize:11, color:'var(--text3)', width:56 }}>Etapa</span>
+        <button onClick={() => setEtapa('todas')} className={etapa === 'todas' ? 'btn-gold' : 'btn'} style={{ fontSize:11, padding:'5px 12px' }}>Todas</button>
         {ETAPAS_PITCH.map(e => <button key={e.id} onClick={() => setEtapa(e.id)} title={e.desc} className={etapa === e.id ? 'btn-gold' : 'btn'} style={{ fontSize:11, padding:'5px 12px' }}>{e.nombre}</button>)}
-        <button onClick={() => setEditando({ id:'n' + Date.now(), nicho: nicho === 'Todos' ? 'Todos' : nicho, etapa: etapa === 'todas' ? 'enganche' : etapa, titulo:'', texto:'', nuevo:true })} className="btn" style={{ fontSize:11, marginLeft:'auto' }}>+ Nuevo pitch</button>
+        <button onClick={() => setEditando({ id:'n' + Date.now(), publico, nicho: nicho === 'Todos' ? 'Todos' : nicho, etapa: etapa === 'todas' ? 'enganche' : etapa, titulo:'', texto:'', nuevo:true })} className="btn" style={{ fontSize:11, marginLeft:'auto' }}>+ Nuevo pitch</button>
         {estado && <span style={{ fontSize:11, color:'var(--green)' }}>{estado}</span>}
       </div>
 
@@ -466,7 +476,8 @@ function Pitches({ clientes }) {
             <div key={p.id} className="panel" style={{ display:'flex', flexDirection:'column', gap:8 }}>
               <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
                 <span style={{ fontSize:10, padding:'2px 8px', borderRadius:6, background:'var(--gold-dim)', color:'var(--gold)' }}>{et?.nombre || p.etapa}</span>
-                <span style={{ fontSize:10, padding:'2px 8px', borderRadius:6, background:'rgba(255,255,255,0.05)', color:'var(--text3)' }}>{p.nicho}</span>
+                {(p.publico || 'Todos') !== 'Todos' && <span style={{ fontSize:10, padding:'2px 8px', borderRadius:6, background:'rgba(55,138,221,0.12)', color:'#6aa7e8' }}>{p.publico}</span>}
+                {p.nicho !== 'Todos' && <span style={{ fontSize:10, padding:'2px 8px', borderRadius:6, background:'rgba(255,255,255,0.05)', color:'var(--text3)' }}>{p.nicho}</span>}
               </div>
               <div style={{ fontSize:14, fontWeight:800, color:'var(--text)' }}>{p.titulo}</div>
               <div style={{ fontSize:12.5, color:'var(--text2)', lineHeight:1.6, flex:1, whiteSpace:'pre-wrap' }}>{p.texto}</div>
@@ -485,6 +496,8 @@ function Pitches({ clientes }) {
           <div style={{ background:'var(--bg2)', borderRadius:16, padding:22, width:'100%', maxWidth:520, border:'1px solid var(--border)' }}>
             <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:12 }}>{editando.nuevo ? 'Nuevo pitch' : 'Editar pitch'}</div>
             <div className="grid-2" style={{ gap:8, marginBottom:8 }}>
+              <div><div style={{ fontSize:11, color:'var(--text3)' }}>Para</div>
+                <select value={editando.publico || 'Todos'} onChange={e => setEditando(p => ({ ...p, publico:e.target.value }))} style={iStyle}>{['Todos', ...PUBLICOS_PITCH].map(n => <option key={n}>{n}</option>)}</select></div>
               <div><div style={{ fontSize:11, color:'var(--text3)' }}>Nicho</div>
                 <select value={editando.nicho} onChange={e => setEditando(p => ({ ...p, nicho:e.target.value }))} style={iStyle}>{['Todos', ...NICHOS_LRM].map(n => <option key={n}>{n}</option>)}</select></div>
               <div><div style={{ fontSize:11, color:'var(--text3)' }}>Etapa</div>
@@ -497,7 +510,7 @@ function Pitches({ clientes }) {
             <div style={{ display:'flex', gap:8, marginTop:12 }}>
               <button disabled={!editando.titulo.trim() || !editando.texto.trim()} className="btn-green" style={{ flex:1 }}
                 onClick={() => { const { nuevo, ...p } = editando; guardarLista(nuevo ? [...lista, p] : lista.map(x => x.id === p.id ? p : x)); setEditando(null) }}>Guardar</button>
-              {!editando.nuevo && <button onClick={() => { guardarLista(lista.filter(x => x.id !== editando.id)); setEditando(null) }} className="btn" style={{ color:'var(--red)' }}>Borrar</button>}
+              {!editando.nuevo && <button onClick={() => { borrarPitch(editando.id); setEditando(null) }} className="btn" style={{ color:'var(--red)' }}>Borrar</button>}
               <button onClick={() => setEditando(null)} className="btn">Cancelar</button>
             </div>
           </div>
