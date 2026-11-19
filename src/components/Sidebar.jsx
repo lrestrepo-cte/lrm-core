@@ -101,11 +101,9 @@ const NAV_TRADE = [
   ] },
   { seccion:'Logística', items:[
       { id:'logistica',   label:'Cargas y guías', icono:'cargas',     activo:true  },
-      { id:'operaciones', label:'Operaciones',    icono:'operaciones',activo:true  },
   ] },
   { seccion:'Finanzas',  items:[
       { id:'caja',        label:'Caja',           icono:'caja',       activo:true  },
-      { id:'cuentas',     label:'Cuentas de cobro', icono:'cobro',    activo:true  },
   ] },
   { seccion:'Sistema',   items:[ { id:'ajustes',     label:'Ajustes',        icono:'ajustes',    activo:true  } ] },
 ]

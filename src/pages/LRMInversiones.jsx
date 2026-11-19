@@ -7,6 +7,7 @@ import Caja from './lrm/Caja'
 import Cargas from './lrm/Cargas'
 import Ajustes from './lrm/Ajustes'
 import RedComercial from './lrm/RedComercial'
+import Cotizador from './lrm/Cotizador'
 import { useDivisas } from '../lib/divisas'
 function cop(n) { return '$' + Math.round(Math.abs(n||0)).toLocaleString('es-CO') }
 const iStyle = {
@@ -1607,9 +1608,7 @@ export default function LRMInversiones({ modo = 'trade', tab: tabExterno, onTab 
   const SECCIONES = {
     dashboard:   { titulo:'Inicio',           sub:'Todo lo de LRM Trade en una mirada' },
     clientes:    { titulo:'CRM',              sub:'Prospectos, conversaciones y clientes' },
-    operaciones: { titulo:'Operaciones',      sub:'Registro de operaciones' },
-    cuentas:     { titulo:'Cuentas de cobro', sub:'Cobros pendientes a clientes' },
-    comex:       { titulo:'Cotizador',        sub:'Rutas, tarifas y cotizaciones' },
+    comex:       { titulo:'Cotizador',        sub:'Escalera de valor: precio, costo y margen al instante' },
     logistica:   { titulo:'Cargas y guías',   sub:'Recibos de bodega y trazabilidad de cada carga' },
     caja:        { titulo:'Caja',             sub:'Lo que entra, lo que sale y el cierre de cada mes' },
     red:         { titulo:'Red comercial',    sub:'Vendedores, sus clientes y comisiones' },
@@ -1629,9 +1628,7 @@ export default function LRMInversiones({ modo = 'trade', tab: tabExterno, onTab 
       </div>
       {tab==='dashboard'   && <Dashboard />}
       {tab==='clientes'    && <LRMClientes />}
-      {tab==='operaciones' && <TabOperaciones />}
-      {tab==='cuentas'     && <TabCuentasCobro />}
-      {tab==='comex'       && <TabComexModulo />}
+      {tab==='comex'       && <Cotizador />}
       {tab==='logistica'   && <Cargas />}
       {tab==='caja'        && <Caja />}
       {tab==='red'         && <RedComercial />}
