@@ -66,7 +66,7 @@ export default function Cargas() {
   const lista = useMemo(() => cargas.filter(c =>
     (filtroEtapa === 'todas' || (filtroEtapa === 'activas' ? c.etapa !== 'entregada' : c.etapa === filtroEtapa)) &&
     (!filtroBodega || c.bodega_id === filtroBodega) &&
-    (!buscar || [c.guia, c.referencia, c.remitente, c.descripcion, nombreCliente(c.cliente_id), String(c.orden)].join(' ').toLowerCase().includes(buscar.toLowerCase()))
+    (!buscar || [c.guia, c.referencia, c.seguimiento, c.remitente, c.descripcion, nombreCliente(c.cliente_id), String(c.orden)].join(' ').toLowerCase().includes(buscar.toLowerCase()))
   ), [cargas, filtroEtapa, filtroBodega, buscar, clientes])
 
   const avanzar = async (c, etapa) => {
@@ -131,6 +131,7 @@ export default function Cargas() {
                   <div style={{ minWidth:0 }}>
                     <div style={{ fontSize:11, color:'var(--text3)' }}>Orden #{c.orden} · WR {c.guia} · {nombreBodega(c.bodega_id)} · {fechaCorta(c.fecha_recibo)}</div>
                     <div style={{ fontSize:15, fontWeight:800, color:'var(--text)', marginTop:2 }}>{nombreCliente(c.cliente_id) || c.referencia || 'Sin cliente'}</div>
+                    {c.seguimiento && <div style={{ fontSize:12, color:'var(--gold)', marginTop:2 }}>📌 {c.seguimiento}</div>}
                     <div style={{ fontSize:12, color:'var(--text3)', marginTop:2 }}>
                       {[c.descripcion, c.remitente && `de ${c.remitente}`].filter(Boolean).join(' · ')}
                     </div>
@@ -229,9 +230,12 @@ export function leerBloqueRecibo(texto) {
 // ── Nuevo recibo de bodega ─────────────────────────────────────────────────
 const PIEZA_VACIA = { cantidad:'1', tipo:'CART', largo:'', ancho:'', alto:'', peso_lb:'' }
 
-function ModalRecibo({ bodegas, clientes, onCerrar, onGuardado }) {
+function ModalRecibo({ bodegas, clientes: clientesIniciales, onCerrar, onGuardado }) {
+  const [clientes, setClientes] = useState(clientesIniciales)
+  const [porCodigo, setPorCodigo] = useState(false)       // true si el cliente se eligió solo por el casillero
+  const [nuevoCli, setNuevoCli] = useState(null)          // nombre del cliente que se está creando aquí mismo
   const [f, setF] = useState({
-    bodega_id: bodegas[0]?.id || '', guia:'', fecha_recibo: hoyISO(), cliente_id:'', referencia:'', remitente:'', consignatario:'',
+    bodega_id: bodegas[0]?.id || '', guia:'', fecha_recibo: hoyISO(), cliente_id:'', referencia:'', seguimiento:'', remitente:'', consignatario:'',
     descripcion:'', categoria:'Perfumes', modalidad:'maritimo', flete:'collect', peso_cobrable_kg:'',
     aiu_lb_pieza: String(bodegas[0]?.aiu_lb_pieza ?? 2), tarifa_costo_usd: String(usdDe(bodegas[0], 'Perfumes')), trm:'',
     tarifa_cliente:'', notas:'',
@@ -262,8 +266,10 @@ function ModalRecibo({ bodegas, clientes, onCerrar, onGuardado }) {
     const codigo = (ref.match(/(\d+)\s*$/) || [])[1]
     const cli = codigo && clientes.find(c => String(c.codigo || '').trim() === codigo)
     setF(p => ({ ...p, referencia: ref, ...(cli ? { cliente_id: cli.id, tarifa_cliente: p.tarifa_cliente || String(cli.tarifa_kg || '') } : {}) }))
+    if (cli) setPorCodigo(true)
   }
   const alCambiarCliente = (e) => {
+    setPorCodigo(false)
     const cli = clientes.find(c => c.id === e.target.value)
     const categoria = cli?.nicho && NICHOS_LRM.includes(cli.nicho) ? cli.nicho : f.categoria
     setF(p => ({ ...p, cliente_id: e.target.value, tarifa_cliente: cli?.tarifa_kg ? String(cli.tarifa_kg) : p.tarifa_cliente, categoria, tarifa_costo_usd: String(usdDe(bodegas.find(b => b.id === p.bodega_id), categoria) || p.tarifa_costo_usd) }))
@@ -271,6 +277,14 @@ function ModalRecibo({ bodegas, clientes, onCerrar, onGuardado }) {
   const alCambiarBodega = (e) => {
     const b = bodegas.find(x => x.id === e.target.value)
     setF(p => ({ ...p, bodega_id: e.target.value, tarifa_costo_usd: String(usdDe(b, p.categoria) || p.tarifa_costo_usd), aiu_lb_pieza: String(b?.aiu_lb_pieza ?? p.aiu_lb_pieza) }))
+  }
+  const crearCliente = async () => {
+    if (!nuevoCli?.trim()) return
+    const codigo = (f.referencia.match(/(\d+)\s*$/) || [])[1] || null
+    const { data, error: e } = await supabase.from('lrm_clientes').insert({ nombre: nuevoCli.trim(), codigo, nicho: f.categoria, estado:'activo', tarifa_kg: n2(f.tarifa_cliente) }).select().single()
+    if (e) return setError('No se pudo crear el cliente: ' + e.message)
+    setClientes(prev => [...prev, data].sort((a, b) => a.nombre.localeCompare(b.nombre)))
+    setF(p => ({ ...p, cliente_id: data.id })); setNuevoCli(null); setPorCodigo(false)
   }
   const setPieza = (i, k) => e => setPiezas(prev => prev.map((p, j) => j === i ? { ...p, [k]: e.target.value } : p))
   const [bloque, setBloque] = useState('')
@@ -291,6 +305,7 @@ function ModalRecibo({ bodegas, clientes, onCerrar, onGuardado }) {
       ...(cli && { cliente_id: cli.id, tarifa_cliente: p.tarifa_cliente || String(cli.tarifa_kg || ''), categoria: NICHOS_LRM.includes(cli.nicho) ? cli.nicho : p.categoria }),
     }))
     if (d.piezas.length) setPiezas(d.piezas)
+    setPorCodigo(!!cli)
     setAviso(`Listo: ${d.piezas.length} renglón(es) de piezas${cli ? `, cliente ${cli.nombre}` : codigo ? `. Ningún cliente tiene el código ${codigo}: elígelo a mano` : ''}. Revisa los totales contra el papel.`)
     setBloque('')
   }
@@ -299,11 +314,12 @@ function ModalRecibo({ bodegas, clientes, onCerrar, onGuardado }) {
     if (!f.guia.trim()) return setError('Escribe el número del recibo (WR).')
     if (!f.bodega_id) return setError('Elige la bodega.')
     if (tot.piezas === 0) return setError('Agrega al menos una pieza.')
+    if (!f.cliente_id) return setError('Elige o crea el cliente LRM antes de guardar.')
     setGuardando(true)
     const bodega = bodegas.find(b => b.id === f.bodega_id)
     const { data: carga, error: e } = await supabase.from('lrm_cargas').insert({
       guia: f.guia.trim(), bodega_id: f.bodega_id, fecha_recibo: f.fecha_recibo, cliente_id: f.cliente_id || null,
-      referencia: f.referencia || null, remitente: f.remitente || null, consignatario: f.consignatario || null,
+      referencia: f.referencia || null, seguimiento: f.seguimiento.trim() || null, remitente: f.remitente || null, consignatario: f.consignatario || null,
       descripcion: f.descripcion || null, categoria: f.categoria, modalidad: f.modalidad, flete: f.flete,
       proveedor: bodega?.operador || bodega?.nombre, origen: bodega?.ciudad || null,
       piezas: tot.piezas, libras: Math.round(tot.lb * 100) / 100, peso_kg: Math.round(tot.kg * 10) / 10,
@@ -354,12 +370,28 @@ function ModalRecibo({ bodegas, clientes, onCerrar, onGuardado }) {
           <div><Etiqueta>Modalidad</Etiqueta><select value={f.modalidad} onChange={set('modalidad')} style={iStyle}><option value="maritimo">Marítimo (Ocean)</option><option value="aereo">Aéreo (Air)</option></select></div>
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap:10, marginBottom:10 }}>
-          <div><Etiqueta>Referencia (Reference)</Etiqueta><input id="wr-referencia" value={f.referencia} onChange={alCambiarReferencia} placeholder="MOHAMED ANKA / 608" style={iStyle} /></div>
-          <div><Etiqueta>Cliente LRM</Etiqueta>
-            <select id="wr-cliente" value={f.cliente_id} onChange={alCambiarCliente} style={iStyle}>
-              <option value="">Sin asignar</option>
-              {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}{c.codigo ? ` · ${c.codigo}` : ''}</option>)}
-            </select></div>
+          <div><Etiqueta>Referencia / casillero (Reference)</Etiqueta><input id="wr-referencia" value={f.referencia} onChange={alCambiarReferencia} placeholder="MOHAMED ANKA / 608" style={iStyle} /></div>
+          <div><Etiqueta>Seguimiento (nombre tuyo para esta carga)</Etiqueta><input id="wr-seguimiento" value={f.seguimiento} onChange={set('seguimiento')} placeholder="Ej: Andrés · perfumes pedido 3" style={iStyle} /></div>
+          <div><Etiqueta>Cliente LRM · verifícalo</Etiqueta>
+            {nuevoCli === null ? (
+              <div style={{ display:'flex', gap:6 }}>
+                <select id="wr-cliente" value={f.cliente_id} onChange={alCambiarCliente} style={{ ...iStyle, borderColor: f.cliente_id ? 'var(--border)' : 'rgba(232,162,58,0.6)' }}>
+                  <option value="">Elegir cliente…</option>
+                  {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}{c.codigo ? ` · ${c.codigo}` : ''}</option>)}
+                </select>
+                <button type="button" onClick={() => setNuevoCli('')} className="btn" style={{ marginTop:4, whiteSpace:'nowrap', fontSize:11 }}>+ Nuevo</button>
+              </div>
+            ) : (
+              <div style={{ display:'flex', gap:6 }}>
+                <input id="wr-nuevo-cliente" value={nuevoCli} onChange={e => setNuevoCli(e.target.value)} placeholder="Nombre del cliente" style={iStyle} autoFocus />
+                <button type="button" onClick={crearCliente} className="btn-gold" style={{ marginTop:4, fontSize:11 }}>Crear</button>
+                <button type="button" onClick={() => setNuevoCli(null)} className="btn" style={{ marginTop:4, fontSize:11 }}>✕</button>
+              </div>
+            )}
+            <div style={{ fontSize:10, marginTop:3, color: f.cliente_id ? (porCodigo ? 'var(--green)' : 'var(--text3)') : '#E8A23A' }}>
+              {f.cliente_id ? (porCodigo ? `✓ Elegido solo por el casillero ${(f.referencia.match(/(\d+)\s*$/) || [])[1]}. Verifica que sea él.` : '✓ Elegido a mano') : 'Elige el cliente o créalo con + Nuevo (queda con el casillero de la referencia).'}
+            </div>
+          </div>
           <div><Etiqueta>Remitente (Received from)</Etiqueta><input id="wr-remitente" value={f.remitente} onChange={set('remitente')} placeholder="ORIENTAL AROMA PERFUMERIA" style={iStyle} /></div>
           <div><Etiqueta>Consignatario (Received for)</Etiqueta><input value={f.consignatario} onChange={set('consignatario')} placeholder="SPC SERVICIOS LOGISTICOS SAS" style={iStyle} /></div>
           <div><Etiqueta>Descripción</Etiqueta><input id="wr-descripcion" value={f.descripcion} onChange={set('descripcion')} placeholder="6 CRTN CON PERFUMES" style={iStyle} /></div>
@@ -462,7 +494,8 @@ function ModalDetalle({ carga, cliente, bodega, onAvanzar, onCerrar, onCambio })
       <div style={{ background:'var(--bg2)', borderRadius:16, padding:22, width:'100%', maxWidth:620, border:'1px solid var(--border)', maxHeight:'94vh', overflowY:'auto' }}>
         <div style={{ fontSize:11, color:'var(--text3)' }}>Orden #{carga.orden} · {bodega?.nombre}</div>
         <div style={{ fontSize:18, fontWeight:800, color:'var(--text)' }}>WR {carga.guia} · {cliente || carga.referencia || 'Sin cliente'}</div>
-        <div style={{ fontSize:12, color:'var(--text3)', marginBottom:14 }}>{[carga.descripcion, carga.remitente && `de ${carga.remitente}`, carga.consignatario && `para ${carga.consignatario}`].filter(Boolean).join(' · ')}</div>
+        {carga.seguimiento && <div style={{ fontSize:13, color:'var(--gold)', marginTop:2 }}>📌 {carga.seguimiento}</div>}
+        <div style={{ fontSize:12, color:'var(--text3)', marginBottom:14 }}>{[carga.referencia && `Casillero ${carga.referencia}`, carga.descripcion, carga.remitente && `de ${carga.remitente}`, carga.consignatario && `para ${carga.consignatario}`].filter(Boolean).join(' · ')}</div>
 
         <div style={{ fontSize:12, fontWeight:700, color:'var(--text)', marginBottom:6 }}>Piezas</div>
         <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12, marginBottom:6 }}>
