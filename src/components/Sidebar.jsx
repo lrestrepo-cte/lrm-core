@@ -96,7 +96,7 @@ const NAV_TRADE = [
   { seccion:'General',   items:[ { id:'dashboard',   label:'Inicio',         icono:'inicio',     activo:true  } ] },
   { seccion:'Comercial', items:[
       { id:'clientes',    label:'CRM',            icono:'crm',        activo:true  },
-      { id:'red',         label:'Red comercial',  icono:'red',        activo:false },
+      { id:'red',         label:'Red comercial',  icono:'red',        activo:true  },
       { id:'comex',       label:'Cotizador',      icono:'cotizador',  activo:true  },
   ] },
   { seccion:'Logística', items:[
