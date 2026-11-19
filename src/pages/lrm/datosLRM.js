@@ -28,7 +28,7 @@ export const MEDIOS_PAGO_LRM = [
 export const AVISOS_LRM = {
   bodega:    { asunto:'Recibimos tu mercancía',            texto:'Hola {nombre}, te confirmo que ya recibimos tu mercancía ({cajas} cajas de {mercancia}) en nuestra bodega de {origen}. Te aviso apenas salga hacia Barranquilla.' },
   transito:  { asunto:'Tu mercancía salió hacia Barranquilla', texto:'Hola {nombre}, tu mercancía ({cajas} cajas de {mercancia}) ya salió de {origen} hacia Barranquilla. Puedes estar reclamándola en aproximadamente {dias} días. Te mantengo informado.' },
-  aduana:    { asunto:'Tu mercancía llegó a Colombia',      texto:'Hola {nombre}, tu mercancía ya llegó a Colombia y está en proceso de nacionalización. Muy pronto la tenemos en Barranquilla.' },
+  aduana:    { asunto:'Tu mercancía llegó a Colombia',      texto:'Hola {nombre}, tu mercancía ya llegó a Colombia. En pocos días la tienes en Barranquilla.' },
   destino:   { asunto:'Tu mercancía está lista · prepárate para el pago', texto:'Hola {nombre}, tu mercancía ya está en Barranquilla y lista para entrega. Prepárate para el pago: son {kg} kg por un total de {total}. Te envío la cuenta de cobro.' },
   entregada: { asunto:'Mercancía entregada',                texto:'Hola {nombre}, tu mercancía fue entregada. ¡Gracias por confiar en LRM Trade Consulting!' },
 }
