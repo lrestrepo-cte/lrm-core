@@ -315,7 +315,7 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
       ...p,
       ...(d.guia && { guia: d.guia }), ...(d.fecha_recibo && { fecha_recibo: d.fecha_recibo }),
       ...(d.referencia && { referencia: d.referencia }), ...(d.remitente && { remitente: d.remitente }),
-      ...(d.consignatario && { consignatario: d.consignatario }), ...(d.descripcion && { descripcion: d.descripcion }),
+      ...(d.consignatario && { consignatario: d.consignatario }), ...(d.descripcion && { descripcion: limpiarDescripcion(d.descripcion) }),
       ...(d.modalidad && { modalidad: d.modalidad }), ...(d.flete && { flete: d.flete }),
       ...(bod && { bodega_id: bod.id, aiu_lb_pieza: String(bod.aiu_lb_pieza ?? p.aiu_lb_pieza), tarifa_costo_usd: String(usdDe(bod, p.categoria) || p.tarifa_costo_usd) }),
     }))
@@ -434,7 +434,7 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
           </div>
           <div><Etiqueta>Remitente (Received from)</Etiqueta><input id="wr-remitente" value={f.remitente} onChange={set('remitente')} placeholder="ORIENTAL AROMA PERFUMERIA" style={iStyle} /></div>
           <div><Etiqueta>Consignatario (Received for)</Etiqueta><input value={f.consignatario} onChange={set('consignatario')} placeholder="SPC SERVICIOS LOGISTICOS SAS" style={iStyle} /></div>
-          <div><Etiqueta>Descripción</Etiqueta><input id="wr-descripcion" value={f.descripcion} onChange={set('descripcion')} placeholder="6 CRTN CON PERFUMES" style={iStyle} /></div>
+          <div><Etiqueta>Descripción</Etiqueta><input id="wr-descripcion" value={f.descripcion} onChange={set('descripcion')} onBlur={() => setF(p => ({ ...p, descripcion: limpiarDescripcion(p.descripcion) }))} placeholder="6 cajas con perfumes" style={iStyle} /></div>
           <div className="grid-2" style={{ gap:10 }}>
             <div><Etiqueta>Categoría</Etiqueta><select id="wr-categoria" value={f.categoria} onChange={e => { const categoria = e.target.value; setF(p => ({ ...p, categoria, tarifa_costo_usd: String(usdDe(bodegas.find(b => b.id === p.bodega_id), categoria) || '') })) }} style={iStyle}>{NICHOS_LRM.map(n => <option key={n}>{n}</option>)}</select></div>
             <div><Etiqueta>Flete</Etiqueta><select value={f.flete} onChange={set('flete')} style={iStyle}><option value="collect">Collect</option><option value="prepaid">Prepaid</option></select></div>
@@ -626,12 +626,36 @@ function ModalBodegas({ bodegas, onCerrar, onCambio }) {
     </div>
   )
 }
+// Pasa la descripción del recibo (en inglés y abreviada) a español claro:
+// "6 CRTN CON PERFUMES" → "6 cajas con perfumes"
+const DICCIONARIO = [
+  [/\b(CRTNS?|CTNS?|CARTONS?|CARTS?|BOX(ES)?|BXS?|CAJAS?)\b/gi, 'cajas'], [/\b(PCS|PC|PIECES?|PZS?)\b/gi, 'piezas'],
+  [/\b(PALLETS?|PLTS?)\b/gi, 'estibas'], [/\b(BAGS?)\b/gi, 'bolsas'], [/\bWITH\b/gi, 'con'], [/\bAND\b/gi, 'y'],
+  [/\bPERFUMES?\b/gi, 'perfumes'], [/\bFRAGRANCES?\b/gi, 'perfumes'], [/\bCOSMETICS?\b/gi, 'cosméticos'], [/\bMAKE ?UP\b/gi, 'maquillaje'],
+  [/\b(CELL ?PHONES?|PHONES?|CELLULARS?)\b/gi, 'celulares'], [/\b(LAPTOPS?|COMPUTERS?)\b/gi, 'computadores'], [/\bTABLETS?\b/gi, 'tablets'],
+  [/\bELECTRONICS?\b/gi, 'electrónica'], [/\bCLOTH(ES|ING)\b/gi, 'ropa'], [/\bSHOES?\b/gi, 'zapatos'], [/\b(AUTO )?PARTS?\b/gi, 'repuestos'],
+  [/\bACCESSOR(Y|IES)\b/gi, 'accesorios'], [/\bGENERAL MERCHANDISE\b/gi, 'mercancía general'], [/\bTOYS?\b/gi, 'juguetes'],
+]
+export function limpiarDescripcion(txt) {
+  let t = String(txt || '').trim()
+  if (!t) return ''
+  for (const [re, es] of DICCIONARIO) t = t.replace(re, es)
+  t = t.toLowerCase().replace(/\s+/g, ' ')
+  t = t.replace(/^1 cajas\b/, '1 caja').replace(/^1 piezas\b/, '1 pieza')
+  return t.charAt(0).toUpperCase() + t.slice(1)
+}
+
 // ── Cuenta de cobro al cliente ─────────────────────────────────────────────
 // Documento completo: empresa, cliente, datos de la carga, piezas, liquidación y medios de pago.
 // El AIU no se nombra: va incluido en el peso de cada pieza que ve el cliente.
 const esc = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]))
 
-export function htmlCuentaCobro({ carga, piezas, cliente, bodega, empresa, medios }) {
+// Cómo ve el cliente su mercancía: "Perfumes · 6 cajas" (no el texto en inglés del recibo)
+export const mercanciaCliente = (carga) => carga.descripcion ? limpiarDescripcion(carga.descripcion)
+  : `${carga.categoria && carga.categoria !== 'Otro' ? carga.categoria : 'Mercancía general'} · ${carga.piezas} ${Number(carga.piezas) === 1 ? 'caja' : 'cajas'}`
+
+export function htmlCuentaCobro({ carga, piezas, cliente, bodega, empresa, medios, mercancia }) {
+  mercancia = (mercancia || '').trim() || mercanciaCliente(carga)
   const numero = `LRM-${(carga.fecha_recibo || hoyISO()).slice(0, 4)}-${String(carga.orden || '').padStart(3, '0')}`
   const aiuPieza = n2(carga.piezas) ? n2(carga.aiu_lb) / n2(carga.piezas) : 0
   const kg = n2(carga.peso_cobrable_kg), tarifa = n2(carga.tarifa_cliente), total = Math.round(kg * tarifa)
@@ -647,37 +671,41 @@ export function htmlCuentaCobro({ carga, piezas, cliente, bodega, empresa, medio
   const mediosOk = (medios || []).filter(m => String(m.detalle || '').trim())
   const dato = (l, v) => v ? `<div class="d"><span>${l}</span><b>${esc(v)}</b></div>` : ''
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Cuenta de cobro ${numero}</title><style>
-    *{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#1b1b1b;margin:0;padding:28px;background:#fff;font-size:12.5px}
-    .doc{max-width:800px;margin:0 auto}.top{display:flex;justify-content:space-between;gap:20px;border-bottom:3px solid #C9A84C;padding-bottom:14px}
-    .marca{font-size:22px;font-weight:800;color:#1b1b1b}.marca small{display:block;font-size:11px;font-weight:400;color:#777;margin-top:2px}
-    .emp{font-size:11px;color:#555;line-height:1.6;margin-top:6px}.num{text-align:right}.num .t{font-size:11px;letter-spacing:2px;color:#8a6d1f;font-weight:700}
-    .num .n1{font-size:20px;font-weight:800;margin:2px 0 6px}.num div{font-size:11px;color:#555}
-    h3{font-size:11px;letter-spacing:2px;color:#8a6d1f;margin:20px 0 8px;text-transform:uppercase}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:4px 24px}.d{display:flex;justify-content:space-between;gap:10px;border-bottom:1px dotted #ddd;padding:4px 0}.d span{color:#777}
-    table{width:100%;border-collapse:collapse}th{background:#f6f1e3;text-align:left;font-size:11px;padding:7px 6px;color:#5a4a1a}td{padding:7px 6px;border-bottom:1px solid #eee}
-    .n{text-align:right}.tot td{font-weight:700;background:#fafafa}.liq td{font-size:13px}.gran{font-size:18px;font-weight:800;text-align:right;padding:12px 6px;border-top:2px solid #1b1b1b}
-    .pago{display:grid;grid-template-columns:1fr 1fr;gap:8px}.m{border:1px solid #e5dcc3;border-radius:8px;padding:8px 10px}.m b{display:block;font-size:12px}.m span{color:#555;font-size:11.5px}
-    .cond{margin-top:16px;font-size:11px;color:#555;background:#faf7ee;border-radius:8px;padding:10px 12px}.firma{margin-top:36px;font-size:11px;color:#555}.firma .l{border-top:1px solid #999;width:240px;padding-top:4px;margin-top:40px}
+    @page{size:letter;margin:10mm}
+    *{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#1b1b1b;margin:0;padding:18px;background:#fff;font-size:11px;line-height:1.35}
+    .doc{max-width:780px;margin:0 auto}.top{display:flex;justify-content:space-between;gap:16px;border-bottom:2px solid #C9A84C;padding-bottom:8px}
+    .marca{font-size:18px;font-weight:800;color:#1b1b1b}.marca small{display:block;font-size:10px;font-weight:400;color:#777;margin-top:1px}
+    .emp{font-size:10px;color:#555;line-height:1.45;margin-top:4px}.num{text-align:right}.num .t{font-size:9.5px;letter-spacing:2px;color:#8a6d1f;font-weight:700}
+    .num .n1{font-size:16px;font-weight:800;margin:1px 0 3px}.num div{font-size:10px;color:#555}
+    h3{font-size:9.5px;letter-spacing:1.5px;color:#8a6d1f;margin:10px 0 4px;text-transform:uppercase}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:0 20px}.d{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dotted #ddd;padding:2px 0}.d span{color:#777}
+    table{width:100%;border-collapse:collapse}th{background:#f6f1e3;text-align:left;font-size:9.5px;padding:4px 5px;color:#5a4a1a}td{padding:3px 5px;border-bottom:1px solid #eee}
+    tr{page-break-inside:avoid}.n{text-align:right}.tot td{font-weight:700;background:#fafafa}.liq td{font-size:11.5px}
+    .gran{font-size:15px;font-weight:800;text-align:right;padding:6px 5px;border-top:2px solid #1b1b1b}
+    .cierre{page-break-inside:avoid;break-inside:avoid}
+    .pago{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.m{border:1px solid #e5dcc3;border-radius:6px;padding:5px 8px}.m b{display:block;font-size:10.5px}.m span{color:#555;font-size:10px}
+    .pie{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-top:10px}
+    .cond{font-size:9.5px;color:#555;background:#faf7ee;border-radius:6px;padding:6px 10px;flex:1}.firma{font-size:10px;color:#555;text-align:center}.firma .l{border-top:1px solid #999;width:200px;padding-top:3px;margin-top:26px}
     @media print{body{padding:0}}</style></head><body><div class="doc">
     <div class="top"><div><div class="marca">${esc(empresa.nombre)}<small>${esc(empresa.lema)}</small></div>
       <div class="emp">${esc(empresa.responsable)} · ${esc(empresa.documento)}<br>${esc(empresa.ciudad)} · ${esc(empresa.whatsapp)} · ${esc(empresa.correo)}</div></div>
       <div class="num"><div class="t">CUENTA DE COBRO</div><div class="n1">${numero}</div><div>Fecha: ${fechaHoy}</div></div></div>
     <h3>Cliente</h3><div class="grid">${dato('Nombre', cliente?.nombre || '')}${dato('Empresa', cliente?.empresa)}${dato('Teléfono', cliente?.telefono)}</div>
     <h3>Servicio</h3><div class="grid">${dato('Servicio', 'Importación y entrega en Barranquilla')}${dato('Origen', origen)}
-      ${dato('Modalidad', modalidad)}${dato('Mercancía', carga.descripcion || carga.categoria)}${dato('Ref. envío', 'WR ' + carga.guia)}${dato('Fecha de recepción', fechaCorta(carga.fecha_recibo) + ' ' + (carga.fecha_recibo || '').slice(0, 4))}</div>
+      ${dato('Modalidad', modalidad)}${dato('Mercancía', mercancia)}${dato('Ref. envío', 'WR ' + carga.guia)}${dato('Fecha de recepción', fechaCorta(carga.fecha_recibo) + ' ' + (carga.fecha_recibo || '').slice(0, 4))}</div>
     <h3>Detalle de la mercancía</h3><table><tr><th>Cant.</th><th>Empaque</th><th class="n">Peso c/u (lb)</th><th class="n">Peso total (lb)</th></tr>${filasPiezas}
       <tr class="tot"><td>${carga.piezas}</td><td>Total</td><td></td><td class="n">${fmt(lbTotal, 1)} lb · ${fmt(kg, 1)} kg</td></tr></table>
-    <h3>Liquidación</h3><table class="liq"><tr><th>Concepto</th><th class="n">Cantidad</th><th class="n">Tarifa</th><th class="n">Valor</th></tr>
+    <div class="cierre"><h3>Liquidación</h3><table class="liq"><tr><th>Concepto</th><th class="n">Cantidad</th><th class="n">Tarifa</th><th class="n">Valor</th></tr>
       <tr><td>Servicio de importación ${esc(ruta)} · ${modalidad.toLowerCase()}</td><td class="n">${fmt(kg, 1)} kg</td><td class="n">${cop(tarifa)} / kg</td><td class="n">${cop(total)}</td></tr></table>
     <div class="gran">Total a pagar: ${cop(total)}</div>
     ${mediosOk.length ? `<h3>Medios de pago</h3><div class="pago">${mediosOk.map(m => `<div class="m"><b>${esc(m.tipo)}</b><span>${esc(m.detalle)}${m.titular ? '<br>' + esc(m.titular) : ''}</span></div>`).join('')}</div>` : ''}
-    ${empresa.condiciones ? `<div class="cond"><b>Condiciones:</b> ${esc(empresa.condiciones)}</div>` : ''}
-    <div class="firma"><div class="l">${esc(empresa.responsable)}<br>${esc(empresa.nombre)}</div></div>
+    <div class="pie">${empresa.condiciones ? `<div class="cond"><b>Condiciones:</b> ${esc(empresa.condiciones)}</div>` : '<div></div>'}
+    <div class="firma"><div class="l">${esc(empresa.responsable)}<br>${esc(empresa.nombre)}</div></div></div></div>
   </div></body></html>`
 
   const texto = [
     `*${empresa.nombre}* · Cuenta de cobro ${numero}`, `Fecha: ${fechaHoy}`, `Cliente: ${cliente?.nombre || ''}`, ``,
-    `Servicio de importación ${ruta} (${modalidad.toLowerCase()})`, `${carga.descripcion || ''}`,
+    `Servicio de importación ${ruta} (${modalidad.toLowerCase()})`, `Mercancía: ${mercancia}`,
     `${carga.piezas} cajas · ${fmt(lbTotal, 1)} lb · *${fmt(kg, 1)} kg*`, ``,
     `${fmt(kg, 1)} kg × ${cop(tarifa)} = *${cop(total)}*`, `*Total a pagar: ${cop(total)}*`, ``,
     ...(mediosOk.length ? ['*Medios de pago*', ...mediosOk.map(m => `• ${m.tipo}: ${m.detalle}${m.titular ? ' (' + m.titular + ')' : ''}`)] : []),
@@ -704,7 +732,9 @@ export function CuentaCobro({ cargaId, carga: cargaInicial, onVolver, onCerrar }
     })()
   }, [id])
 
-  const doc = d && !d.error && cargado ? htmlCuentaCobro({ ...d, empresa, medios }) : null
+  const [mercancia, setMercancia] = useState('')
+  useEffect(() => { if (d?.carga) setMercancia(m => m || mercanciaCliente(d.carga)) }, [d])
+  const doc = d && !d.error && cargado ? htmlCuentaCobro({ ...d, empresa, medios, mercancia }) : null
   const copiar = async () => { try { await navigator.clipboard.writeText(doc.texto); setCopiado(true); setTimeout(() => setCopiado(false), 2000) } catch {} }
   const wa = doc && d.cliente?.telefono ? (linkWhatsApp(d.cliente.telefono, d.cliente.nombre) || '').replace(/text=.*$/, 'text=' + encodeURIComponent(doc.texto)) : null
   const imprimir = () => {
@@ -728,6 +758,13 @@ export function CuentaCobro({ cargaId, carga: cargaInicial, onVolver, onCerrar }
             <button onClick={onCerrar} className="btn">Cerrar</button>
           </div>
         </div>
+        {doc && (
+          <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+            <span style={{ fontSize:11, color:'var(--text3)' }}>Mercancía en la cuenta:</span>
+            <input id="cc-mercancia" value={mercancia} onChange={e => setMercancia(e.target.value)} style={{ ...iStyle, marginTop:0, flex:1, minWidth:200, padding:'6px 10px' }} />
+            <button onClick={() => setMercancia(mercanciaCliente(d.carga))} className="btn" style={{ fontSize:11 }}>Restablecer</button>
+          </div>
+        )}
         {d?.error ? <Vacio>No se encontró la carga.</Vacio>
           : doc ? <iframe title="Cuenta de cobro" srcDoc={doc.html} style={{ flex:1, width:'100%', border:'none', borderRadius:10, background:'#fff' }} />
           : <Vacio>Cargando…</Vacio>}
