@@ -7,7 +7,10 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { PITCHES_LRM, ETAPAS_PITCH, PUBLICOS_PITCH, unirPitches } from './pitchesLRM'
 
-export const NICHOS_LRM = ['Perfumes','Cosméticos','Celulares','Computadores','Tablets','Electrónica','Electrodomésticos','Partes y repuestos','Mercancía doméstica','Otro']
+export const NICHOS_LRM = ['Perfumes','Cosméticos','Celulares','Computadores','Tablets','Electrónica','Electrodomésticos','Relojes','Accesorios','Ropa y calzado','Partes y repuestos','Mercancía doméstica','Otro']
+// Un cliente puede comprar varias cosas: se guardan juntas en el mismo campo, separadas por coma
+export const nichosDe = c => String(c?.nicho || '').split(',').map(n => n.trim()).filter(Boolean)
+export const nichoPrincipal = (c, validos) => nichosDe(c).find(n => !validos || validos.includes(n)) || null
 
 export const ESTADOS_CLIENTE = [
   { id:'prospecto',    nombre:'Prospecto',         color:'#8A8F98' },
@@ -150,10 +153,14 @@ export default function LRMClientes() {
                 <div key={k}><div style={{ fontSize:11, color:'var(--text3)' }}>{l}</div>
                   <input id={`cli-${k}`} value={form[k]} onChange={e => setForm(p => ({ ...p, [k]:e.target.value }))} style={iStyle} /></div>
               ))}
-              <div><div style={{ fontSize:11, color:'var(--text3)' }}>Nicho</div>
-                <select id="cli-nicho" value={form.nicho} onChange={e => setForm(p => ({ ...p, nicho:e.target.value }))} style={iStyle}>
-                  {NICHOS_LRM.map(n => <option key={n}>{n}</option>)}
-                </select></div>
+              <div style={{ gridColumn:'1 / -1' }}><div style={{ fontSize:11, color:'var(--text3)', marginBottom:6 }}>Qué compra <span style={{ color:'var(--text4)' }}>(puedes marcar varios; el primero es el principal)</span></div>
+                <div id="cli-nichos" style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                  {NICHOS_LRM.map(n => {
+                    const sel = nichosDe(form), i = sel.indexOf(n)
+                    const toggle = () => setForm(p => { const a = nichosDe(p); return { ...p, nicho: (a.includes(n) ? a.filter(x => x !== n) : [...a.filter(x => x !== 'Otro' || n === 'Otro'), n]).join(', ') } })
+                    return <button key={n} type="button" onClick={toggle} className={i >= 0 ? 'btn-gold' : 'btn'} style={{ fontSize:11, padding:'5px 11px', width:'auto', flex:'none' }}>{i === 0 && sel.length > 1 ? '★ ' : i >= 0 ? '✓ ' : ''}{n}</button>
+                  })}
+                </div></div>
               <div><div style={{ fontSize:11, color:'var(--text3)' }}>Estado</div>
                 <select id="cli-estado" value={form.estado} onChange={e => setForm(p => ({ ...p, estado:e.target.value }))} style={iStyle}>
                   {ESTADOS_CLIENTE.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
@@ -282,7 +289,7 @@ function Lista({ clientes, onAbrir, onEditar, onEstado }) {
                     <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
                       <span style={{ fontSize:15, fontWeight:800, color:'var(--text)' }}>{c.nombre}</span>
                       {c.empresa && <span style={{ fontSize:12, color:'var(--text3)' }}>· {c.empresa}</span>}
-                      <span style={{ fontSize:10, padding:'2px 8px', borderRadius:6, background:'var(--gold-dim)', color:'var(--gold)' }}>{c.nicho}</span>
+                      {nichosDe(c).map(n => <span key={n} style={{ fontSize:10, padding:'2px 8px', borderRadius:6, background:'var(--gold-dim)', color:'var(--gold)' }}>{n}</span>)}
                     </div>
                     {c.proxima_accion && (
                       <div style={{ fontSize:12, marginTop:6, color: atrasada ? 'var(--red)' : esHoy ? 'var(--gold)' : 'var(--text2)' }}>

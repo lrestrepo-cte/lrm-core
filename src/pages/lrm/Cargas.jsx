@@ -5,7 +5,7 @@
 // Tablas: lrm_bodegas, lrm_cargas, lrm_carga_piezas, lrm_carga_eventos, lrm_movimientos (SQL 06)
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { hoyISO, fechaCorta, NICHOS_LRM } from './LRMClientes'
+import { hoyISO, fechaCorta, NICHOS_LRM, nichoPrincipal } from './LRMClientes'
 import { ETAPAS } from './Dashboard'
 import { useDivisas } from '../../lib/divisas'
 import { BODEGA_POR_DEFECTO, useDatosLRM, AVISOS_LRM, DIAS_TRANSITO } from './datosLRM'
@@ -279,7 +279,7 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
   const alCambiarReferencia = (e) => setF(p => ({ ...p, referencia: e.target.value }))
   const alCambiarCliente = (e) => {
     const cli = clientes.find(c => c.id === e.target.value)
-    const categoria = cli?.nicho && NICHOS_LRM.includes(cli.nicho) ? cli.nicho : f.categoria
+    const categoria = nichoPrincipal(cli, NICHOS_LRM) || f.categoria
     setF(p => ({ ...p, cliente_id: e.target.value, tarifa_cliente: cli?.tarifa_kg ? String(cli.tarifa_kg) : p.tarifa_cliente, categoria, tarifa_costo_usd: String(usdDe(bodegas.find(b => b.id === p.bodega_id), categoria) || p.tarifa_costo_usd) }))
   }
   const alCambiarBodega = (e) => {

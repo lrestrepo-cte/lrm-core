@@ -6,7 +6,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useDivisas } from '../../lib/divisas'
-import { NICHOS_LRM, linkWhatsApp, fechaCorta } from './LRMClientes'
+import { NICHOS_LRM, nichoPrincipal, linkWhatsApp, fechaCorta } from './LRMClientes'
 import { useDatosLRM } from './datosLRM'
 
 const cop = n => '$' + Math.round(Math.abs(n || 0)).toLocaleString('es-CO')
@@ -118,7 +118,7 @@ export default function Cotizador() {
           <div style={{ fontSize:15, fontWeight:800, color:'var(--text)', marginBottom:12 }}>Nueva cotización</div>
           <div className="grid-2" style={{ gap:10, marginBottom:10 }}>
             <div><Etiqueta>Cliente (del CRM)</Etiqueta>
-              <select id="cot-cliente" value={f.cliente_id} onChange={e => { const c = clientes.find(x => x.id === e.target.value); setF(p => ({ ...p, cliente_id:e.target.value, categoria: c?.nicho && escaleras[c.nicho] ? c.nicho : p.categoria })) }} style={iStyle}>
+              <select id="cot-cliente" value={f.cliente_id} onChange={e => { const c = clientes.find(x => x.id === e.target.value); setF(p => ({ ...p, cliente_id:e.target.value, categoria: nichoPrincipal(c, Object.keys(escaleras)) || p.categoria })) }} style={iStyle}>
                 <option value="">— Sin cliente / nuevo —</option>
                 {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
               </select></div>
