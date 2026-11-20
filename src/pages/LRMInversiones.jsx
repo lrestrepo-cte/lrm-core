@@ -5,6 +5,7 @@ import LRMClientes from './lrm/LRMClientes'
 import Dashboard from './lrm/Dashboard'
 import Caja from './lrm/Caja'
 import Cartera from './lrm/Cartera'
+import Tarifas from './lrm/Tarifas'
 import Cargas from './lrm/Cargas'
 import Ajustes from './lrm/Ajustes'
 import RedComercial from './lrm/RedComercial'
@@ -1612,6 +1613,7 @@ export default function LRMInversiones({ modo = 'trade', tab: tabExterno, onTab 
     comex:       { titulo:'Cotizador',        sub:'Escalera de valor: precio, costo y margen al instante' },
     logistica:   { titulo:'Cargas y guías',   sub:'Recibos de bodega y trazabilidad de cada carga' },
     caja:        { titulo:'Caja',             sub:'Lo que entra, lo que sale y el cierre de cada mes' },
+    tarifas:     { titulo:'Tarifas',          sub:'Tus costos y los precios de cada cliente con escalera de valor' },
     cartera:     { titulo:'Cartera',          sub:'Lo que te deben, cliente por cliente, listo para enviar' },
     red:         { titulo:'Red comercial',    sub:'Vendedores, sus clientes y comisiones' },
     ajustes:     { titulo:'Ajustes',          sub:'Datos de cobro, medios de pago y limpieza' },
@@ -1634,6 +1636,7 @@ export default function LRMInversiones({ modo = 'trade', tab: tabExterno, onTab 
       {tab==='logistica'   && <Cargas />}
       {tab==='caja'        && <Caja />}
       {tab==='cartera'     && <Cartera />}
+      {tab==='tarifas'     && <Tarifas />}
       {tab==='red'         && <RedComercial />}
       {tab==='ajustes'     && <Ajustes />}
     </div>

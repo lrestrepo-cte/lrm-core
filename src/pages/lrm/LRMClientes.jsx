@@ -6,6 +6,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { PITCHES_LRM, ETAPAS_PITCH, PUBLICOS_PITCH, unirPitches } from './pitchesLRM'
+import { cobroCarga } from './tarifasLRM'
 
 export const NICHOS_LRM = ['Perfumes','Cosméticos','Celulares','Computadores','Tablets','Electrónica','Electrodomésticos','Relojes','Accesorios','Ropa y calzado','Partes y repuestos','Mercancía doméstica','Otro']
 // Un cliente puede comprar varias cosas: se guardan juntas en el mismo campo, separadas por coma
@@ -331,7 +332,7 @@ function Ficha({ cliente: c, onCerrar, onEditar, onEstado, onCambio }) {
   const cargar = async () => {
     const [co, ca, mo] = await Promise.all([
       supabase.from('lrm_contactos').select('*').eq('cliente_id', c.id).order('fecha', { ascending:false }),
-      supabase.from('lrm_cargas').select('id,orden,guia,etapa,peso_cobrable_kg,tarifa_cliente,fecha_recibo,descripcion').eq('cliente_id', c.id).order('fecha_recibo', { ascending:false }),
+      supabase.from('lrm_cargas').select('*').eq('cliente_id', c.id).order('fecha_recibo', { ascending:false }),
       supabase.from('lrm_movimientos').select('tipo,monto').eq('cliente_id', c.id),
     ])
     setContactos(co.data || []); setCargas(ca.data || [])
@@ -421,7 +422,7 @@ function Ficha({ cliente: c, onCerrar, onEditar, onEstado, onCambio }) {
         {cargas.map(k => (
           <div key={k.id} style={{ display:'flex', justifyContent:'space-between', padding:'8px 0', borderBottom:'1px solid var(--border)', fontSize:12 }}>
             <span style={{ color:'var(--text2)' }}>#{k.orden} · WR {k.guia} · {fechaCorta(k.fecha_recibo)}</span>
-            <span style={{ color:'var(--text3)' }}>{ETAPA[k.etapa] || k.etapa} · {cop(Number(k.peso_cobrable_kg) * Number(k.tarifa_cliente))}</span>
+            <span style={{ color:'var(--text3)' }}>{ETAPA[k.etapa] || k.etapa} · {cop(cobroCarga(k))}</span>
           </div>
         ))}
       </div>

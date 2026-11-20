@@ -10,6 +10,7 @@ import { ETAPAS } from './Dashboard'
 import { useDivisas } from '../../lib/divisas'
 import { BODEGA_POR_DEFECTO, useDatosLRM, AVISOS_LRM, DIAS_TRANSITO } from './datosLRM'
 import { linkWhatsApp } from './LRMClientes'
+import { useTarifas, escaleraPara, costoPara, escalonDe, tramoTexto, cobroCarga, cantidadCobro, unidadCobro, costoCarga, UNIDAD_CORTA } from './tarifasLRM'
 
 const cop = n => '$' + Math.round(Math.abs(n || 0)).toLocaleString('es-CO')
 const n2 = v => Number(String(v ?? '').replace(',', '.')) || 0
@@ -135,7 +136,7 @@ export default function Cargas() {
         <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
           {lista.map(c => {
             const e = etapaDe(c.etapa), sig = siguiente(c.etapa)
-            const cobro = n2(c.peso_cobrable_kg) * n2(c.tarifa_cliente), costo = c.tarifa_costo_usd ? n2(c.libras) * LB_A_KG * n2(c.tarifa_costo_usd) * n2(c.trm) : n2(c.peso_cobrable_kg) * n2(c.tarifa_costo)
+            const cobro = cobroCarga(c), costo = costoCarga(c)
             const idx = ETAPAS.findIndex(x => x.id === c.etapa)
             return (
               <div key={c.id} className="panel" style={{ padding:'14px 16px', borderLeft:`3px solid ${e.color}` }}>
@@ -252,9 +253,13 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
   const [f, setF] = useState({
     bodega_id: bodegas[0]?.id || '', guia:'', fecha_recibo: hoyISO(), cliente_id:'', referencia:'', seguimiento:'', remitente:'', consignatario:'',
     descripcion:'', categoria:'Perfumes', modalidad:'maritimo', flete:'collect', peso_cobrable_kg:'',
-    aiu_lb_pieza: String(bodegas[0]?.aiu_lb_pieza ?? 2), tarifa_costo_usd: String(usdDe(bodegas[0], 'Perfumes')), trm:'',
-    tarifa_cliente:'', notas:'',
+    aiu_lb_pieza: String(bodegas[0]?.aiu_lb_pieza ?? 2), trm:'',
+    costo_valor:'', costo_moneda:'USD', costo_unidad:'kg',
+    cobro_por:'kg', unidades:'', tarifa_cliente:'', notas:'',
   })
+  const { escaleras, costos, listo: tarifasListas } = useTarifas()
+  const [tarifaAuto, setTarifaAuto] = useState(true)     // la tarifa al cliente la pone la escalera hasta que la cambies a mano
+  const [costoAuto, setCostoAuto] = useState(true)
   const divisas = useDivisas()
   const trmHoy = divisas?.find(d => d.id === 'USD')?.hoy
   useEffect(() => { if (trmHoy && !f.trm) setF(p => ({ ...p, trm: String(Math.round(trmHoy * 100) / 100) })) }, [trmHoy])
@@ -271,20 +276,44 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
   const aiuLb = aiuPieza * tot.piezas
   const lbConAiu = tot.lb + aiuLb
   const kgCliente = f.peso_cobrable_kg !== '' ? n2(f.peso_cobrable_kg) : Math.round(lbConAiu * LB_A_KG * 10) / 10
-  const costoUsd = tot.kg * n2(f.tarifa_costo_usd)            // la bodega cobra el peso real
-  const costo = costoUsd * n2(f.trm)
-  const cobro = kgCliente * n2(f.tarifa_cliente)
+  // Cuánto se cobra: por kg (con AIU), por lb o por unidad, según la escalera del cliente
+  const cantCliente = f.cobro_por === 'unidad' ? n2(f.unidades) : f.cobro_por === 'lb' ? kgCliente / LB_A_KG : kgCliente
+  const cobro = cantCliente * n2(f.tarifa_cliente)
+  // Lo que te cobra la bodega: peso real (kg o lb) o unidades, en US$ o pesos
+  const baseCosto = f.costo_unidad === 'unidad' ? n2(f.unidades) : f.costo_unidad === 'lb' ? tot.lb : tot.kg
+  const costoMoneda = baseCosto * n2(f.costo_valor)
+  const costo = f.costo_moneda === 'USD' ? costoMoneda * n2(f.trm) : costoMoneda
+  const textoCosto = `${fmt(baseCosto)} ${f.costo_unidad === 'unidad' ? 'u' : f.costo_unidad + ' reales'} × ${f.costo_moneda === 'USD' ? 'US$' + fmt(f.costo_valor, 2) : cop(f.costo_valor)}${f.costo_moneda === 'USD' ? ` = US$${fmt(costoMoneda, 2)}` : ''}`
+
+  // Precio del cliente según su escalera (la propia o la general) y el escalón que alcanza
+  const cliSel = clientes.find(c => c.id === f.cliente_id)
+  const { esc, fuente } = escaleraPara(cliSel, escaleras, f.categoria)
+  const cantEsc = esc.unidad === 'unidad' ? n2(f.unidades) : esc.unidad === 'lb' ? kgCliente / LB_A_KG : kgCliente
+  const escalon = escalonDe(esc, cantEsc)
+  const precioEsc = esc.moneda === 'USD' ? escalon.precio * n2(f.trm) : escalon.precio
+  useEffect(() => {
+    if (!tarifasListas || !tarifaAuto) return
+    setF(p => ({ ...p, cobro_por: esc.unidad, tarifa_cliente: precioEsc ? String(Math.round(precioEsc)) : (cliSel?.tarifa_kg ? String(cliSel.tarifa_kg) : p.tarifa_cliente) }))
+  }, [tarifasListas, tarifaAuto, f.cliente_id, f.categoria, esc, escalon?.precio, precioEsc])
+  const bodegaSel = bodegas.find(b => b.id === f.bodega_id)
+  useEffect(() => {
+    if (!tarifasListas || !costoAuto) return
+    const c = costoPara(costos, bodegaSel, f.categoria)
+    setF(p => ({ ...p, costo_valor: String(c.valor || ''), costo_moneda: c.moneda, costo_unidad: c.unidad }))
+  }, [tarifasListas, costoAuto, f.bodega_id, f.categoria, costos])
 
   // La referencia es el nombre que trae el recibo (quien envía). NO es el cliente LRM: ese se elige a mano.
   const alCambiarReferencia = (e) => setF(p => ({ ...p, referencia: e.target.value }))
   const alCambiarCliente = (e) => {
     const cli = clientes.find(c => c.id === e.target.value)
     const categoria = nichoPrincipal(cli, NICHOS_LRM) || f.categoria
-    setF(p => ({ ...p, cliente_id: e.target.value, tarifa_cliente: cli?.tarifa_kg ? String(cli.tarifa_kg) : p.tarifa_cliente, categoria, tarifa_costo_usd: String(usdDe(bodegas.find(b => b.id === p.bodega_id), categoria) || p.tarifa_costo_usd) }))
+    setTarifaAuto(true)
+    setF(p => ({ ...p, cliente_id: e.target.value, categoria }))
   }
   const alCambiarBodega = (e) => {
     const b = bodegas.find(x => x.id === e.target.value)
-    setF(p => ({ ...p, bodega_id: e.target.value, tarifa_costo_usd: String(usdDe(b, p.categoria) || p.tarifa_costo_usd), aiu_lb_pieza: String(b?.aiu_lb_pieza ?? p.aiu_lb_pieza) }))
+    setCostoAuto(true)
+    setF(p => ({ ...p, bodega_id: e.target.value, aiu_lb_pieza: String(b?.aiu_lb_pieza ?? p.aiu_lb_pieza) }))
   }
   const crearBodega = async () => {
     if (!nuevaBod?.nombre.trim()) return
@@ -294,7 +323,7 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
     }).select().single()
     if (e) return setError('No se pudo crear la bodega: ' + e.message)
     setBodegas(prev => [...prev, data])
-    setF(p => ({ ...p, bodega_id: data.id, aiu_lb_pieza: String(data.aiu_lb_pieza ?? p.aiu_lb_pieza), tarifa_costo_usd: String(usdDe(data, p.categoria) || p.tarifa_costo_usd) }))
+    setF(p => ({ ...p, bodega_id: data.id, aiu_lb_pieza: String(data.aiu_lb_pieza ?? p.aiu_lb_pieza) }))
     setNuevaBod(null)
   }
   const crearCliente = async () => {
@@ -317,7 +346,7 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
       ...(d.referencia && { referencia: d.referencia }), ...(d.remitente && { remitente: d.remitente }),
       ...(d.consignatario && { consignatario: d.consignatario }), ...(d.descripcion && { descripcion: limpiarDescripcion(d.descripcion) }),
       ...(d.modalidad && { modalidad: d.modalidad }), ...(d.flete && { flete: d.flete }),
-      ...(bod && { bodega_id: bod.id, aiu_lb_pieza: String(bod.aiu_lb_pieza ?? p.aiu_lb_pieza), tarifa_costo_usd: String(usdDe(bod, p.categoria) || p.tarifa_costo_usd) }),
+      ...(bod && { bodega_id: bod.id, aiu_lb_pieza: String(bod.aiu_lb_pieza ?? p.aiu_lb_pieza) }),
     }))
     if (d.piezas.length) setPiezas(d.piezas)
     if (d.bodega && !bod) setNuevaBod({ nombre: d.bodega, operador:'', usd:'5', aiu:'2' })   // la bodega del recibo no existe: se propone crearla
@@ -330,6 +359,7 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
     if (!f.bodega_id) return setError('Elige la bodega.')
     if (tot.piezas === 0) return setError('Agrega al menos una pieza.')
     if (!f.cliente_id) return setError('Elige o crea el cliente LRM antes de guardar.')
+    if ((f.cobro_por === 'unidad' || f.costo_unidad === 'unidad') && !n2(f.unidades)) return setError('Escribe cuántas unidades trae la carga.')
     setGuardando(true)
     const bodega = bodegas.find(b => b.id === f.bodega_id)
     const { data: carga, error: e } = await supabase.from('lrm_cargas').insert({
@@ -340,8 +370,10 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
       piezas: tot.piezas, libras: Math.round(tot.lb * 100) / 100, peso_kg: Math.round(tot.kg * 10) / 10,
       pies3: Math.round(tot.pies3 * 1000) / 1000, cbm: Math.round(tot.m3 * 1000) / 1000,
       aiu_lb: aiuLb, libras_aiu: Math.round(lbConAiu * 100) / 100, peso_cobrable_kg: kgCliente,
-      tarifa_cliente: n2(f.tarifa_cliente), tarifa_costo_usd: n2(f.tarifa_costo_usd), trm: n2(f.trm),
-      tarifa_costo: Math.round(n2(f.tarifa_costo_usd) * n2(f.trm) * tot.kg / Math.max(kgCliente, 0.0001)),
+      tarifa_cliente: n2(f.tarifa_cliente), trm: n2(f.trm),
+      tarifa_costo_usd: f.costo_moneda === 'USD' && f.costo_unidad === 'kg' ? n2(f.costo_valor) : null,
+      tarifa_costo: Math.round(costo / Math.max(kgCliente, 0.0001)),
+      cobro_por: f.cobro_por, unidades: n2(f.unidades) || null, costo_total: Math.round(costo),
       etapa:'bodega', facturada: pasarACaja && (cobro > 0 || costo > 0), notas: f.notas || null,
     }).select().single()
     if (e) { setGuardando(false); return setError('No se pudo guardar: ' + e.message) }
@@ -356,8 +388,8 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
     if (pasarACaja && (cobro > 0 || costo > 0)) {
       const ref = `WR ${f.guia.trim()}`
       // Nota para el cliente: solo kilos × tarifa (el AIU no se menciona)
-      const movs = [{ tipo:'cobro_cliente', concepto:'flete', cliente_id: f.cliente_id || null, carga_id: carga.id, monto: Math.round(cobro), fecha: hoyISO(), referencia: ref, notas: `${fmt(kgCliente)} kg × ${cop(f.tarifa_cliente)}` }]
-      if (costo > 0) movs.push({ tipo:'costo_proveedor', concepto:'flete', proveedor: bodega?.operador || bodega?.nombre, carga_id: carga.id, monto: Math.round(costo), fecha: hoyISO(), referencia: ref, notas: `${fmt(tot.kg)} kg × US$${fmt(f.tarifa_costo_usd, 2)} = US$${fmt(costoUsd, 2)} · TRM ${fmt(f.trm, 2)}` })
+      const movs = [{ tipo:'cobro_cliente', concepto:'flete', cliente_id: f.cliente_id || null, carga_id: carga.id, monto: Math.round(cobro), fecha: hoyISO(), referencia: ref, notas: `${fmt(cantCliente)} ${UNIDAD_CORTA[f.cobro_por]} × ${cop(f.tarifa_cliente)}` }]
+      if (costo > 0) movs.push({ tipo:'costo_proveedor', concepto:'flete', proveedor: bodega?.operador || bodega?.nombre, carga_id: carga.id, monto: Math.round(costo), fecha: hoyISO(), referencia: ref, notas: `${textoCosto}${f.costo_moneda === 'USD' ? ` · TRM ${fmt(f.trm, 2)}` : ''}` })
       await supabase.from('lrm_movimientos').insert(movs)
     }
     setGuardando(false); onGuardado(carga)
@@ -436,7 +468,7 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
           <div><Etiqueta>Consignatario (Received for)</Etiqueta><input value={f.consignatario} onChange={set('consignatario')} placeholder="SPC SERVICIOS LOGISTICOS SAS" style={iStyle} /></div>
           <div><Etiqueta>Descripción</Etiqueta><input id="wr-descripcion" value={f.descripcion} onChange={set('descripcion')} onBlur={() => setF(p => ({ ...p, descripcion: limpiarDescripcion(p.descripcion) }))} placeholder="6 cajas con perfumes" style={iStyle} /></div>
           <div className="grid-2" style={{ gap:10 }}>
-            <div><Etiqueta>Categoría</Etiqueta><select id="wr-categoria" value={f.categoria} onChange={e => { const categoria = e.target.value; setF(p => ({ ...p, categoria, tarifa_costo_usd: String(usdDe(bodegas.find(b => b.id === p.bodega_id), categoria) || '') })) }} style={iStyle}>{NICHOS_LRM.map(n => <option key={n}>{n}</option>)}</select></div>
+            <div><Etiqueta>Categoría</Etiqueta><select id="wr-categoria" value={f.categoria} onChange={e => { const categoria = e.target.value; setTarifaAuto(true); setCostoAuto(true); setF(p => ({ ...p, categoria })) }} style={iStyle}>{NICHOS_LRM.map(n => <option key={n}>{n}</option>)}</select></div>
             <div><Etiqueta>Flete</Etiqueta><select value={f.flete} onChange={set('flete')} style={iStyle}><option value="collect">Collect</option><option value="prepaid">Prepaid</option></select></div>
           </div>
         </div>
@@ -481,14 +513,22 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
         {/* Costo (bodega, peso real en US$) y cobro (cliente, peso con AIU interno) */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(150px, 100%), 1fr))', gap:10, marginBottom:10 }}>
           {conAiu && <div><Etiqueta>AIU interno (lb por pieza)</Etiqueta><input id="wr-aiu" inputMode="decimal" value={f.aiu_lb_pieza} onChange={set('aiu_lb_pieza')} style={iStyle} /></div>}
-          <div><Etiqueta>Costo bodega (US$/kg)</Etiqueta><input id="wr-costo-usd" inputMode="decimal" value={f.tarifa_costo_usd} onChange={set('tarifa_costo_usd')} placeholder="5" style={iStyle} /></div>
+          {(f.cobro_por === 'unidad' || f.costo_unidad === 'unidad') && <div><Etiqueta>Unidades en la carga</Etiqueta><input id="wr-unidades" inputMode="numeric" value={f.unidades} onChange={set('unidades')} placeholder="60" style={{ ...iStyle, borderColor: n2(f.unidades) ? 'var(--border)' : 'rgba(232,162,58,0.6)' }} /></div>}
+          <div><Etiqueta>Costo bodega ({f.costo_moneda === 'USD' ? 'US$' : '$'}/{UNIDAD_CORTA[f.costo_unidad]})</Etiqueta><input id="wr-costo-usd" inputMode="decimal" value={f.costo_valor} onChange={e => { setCostoAuto(false); setF(p => ({ ...p, costo_valor: e.target.value })) }} placeholder="5" style={iStyle} /></div>
           <div><Etiqueta>TRM</Etiqueta><input id="wr-trm" inputMode="decimal" value={f.trm} onChange={set('trm')} placeholder="3326.96" style={iStyle} /></div>
-          <div><Etiqueta>Kg al cliente</Etiqueta><input id="wr-cobrable" inputMode="decimal" value={f.peso_cobrable_kg} onChange={set('peso_cobrable_kg')} placeholder={fmt(lbConAiu * LB_A_KG)} style={iStyle} /></div>
-          <div><Etiqueta>Le cobras (COP/kg)</Etiqueta><input id="wr-tarifa-cliente" inputMode="numeric" value={f.tarifa_cliente} onChange={set('tarifa_cliente')} placeholder="20000" style={iStyle} /></div>
+          {f.cobro_por !== 'unidad' && <div><Etiqueta>Kg al cliente</Etiqueta><input id="wr-cobrable" inputMode="decimal" value={f.peso_cobrable_kg} onChange={set('peso_cobrable_kg')} placeholder={fmt(lbConAiu * LB_A_KG)} style={iStyle} /></div>}
+          <div><Etiqueta>Le cobras (COP/{UNIDAD_CORTA[f.cobro_por]})</Etiqueta><input id="wr-tarifa-cliente" inputMode="numeric" value={f.tarifa_cliente} onChange={e => { setTarifaAuto(false); setF(p => ({ ...p, tarifa_cliente: e.target.value })) }} placeholder="20000" style={iStyle} /></div>
+        </div>
+        <div style={{ fontSize:11, color:'var(--text3)', marginBottom:10, display:'flex', gap:10, flexWrap:'wrap', alignItems:'center' }}>
+          <span>{tarifaAuto
+            ? <>Precio {fuente === 'cliente' ? <b style={{ color:'var(--gold)' }}>de {cliSel?.nombre}</b> : 'general'} · {f.categoria} · escalón {tramoTexto(esc, escalon)} {UNIDAD_CORTA[esc.unidad]}</>
+            : <>Precio puesto a mano</>}</span>
+          {!tarifaAuto && <button type="button" onClick={() => setTarifaAuto(true)} className="btn" style={{ fontSize:11, padding:'3px 9px', width:'auto' }}>↺ Usar la escalera</button>}
+          {!costoAuto && <button type="button" onClick={() => setCostoAuto(true)} className="btn" style={{ fontSize:11, padding:'3px 9px', width:'auto' }}>↺ Costo de la tabla</button>}
         </div>
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', gap:8, padding:'12px 14px', borderRadius:10, background:'var(--bg4)', marginBottom:12, fontSize:12, color:'var(--text2)' }}>
-          <div>Costo RD <b style={{ color:'var(--red)', fontSize:14 }}>{cop(costo)}</b><div style={{ fontSize:11, color:'var(--text3)' }}>{fmt(tot.kg)} kg reales × US${fmt(f.tarifa_costo_usd, 2)} = US${fmt(costoUsd, 2)}</div></div>
-          <div>Cobro al cliente <b style={{ color:'var(--gold)', fontSize:14 }}>{cop(cobro)}</b><div style={{ fontSize:11, color:'var(--text3)' }}>{fmt(kgCliente)} kg × {cop(f.tarifa_cliente)}</div></div>
+          <div>Costo bodega <b style={{ color:'var(--red)', fontSize:14 }}>{cop(costo)}</b><div style={{ fontSize:11, color:'var(--text3)' }}>{textoCosto}</div></div>
+          <div>Cobro al cliente <b style={{ color:'var(--gold)', fontSize:14 }}>{cop(cobro)}</b><div style={{ fontSize:11, color:'var(--text3)' }}>{fmt(cantCliente)} {UNIDAD_CORTA[f.cobro_por]} × {cop(f.tarifa_cliente)}</div></div>
           <div>Margen <b style={{ color:'var(--green)', fontSize:14 }}>{cop(cobro - costo)}</b>{conAiu && aiuLb > 0 && <div style={{ fontSize:11, color:'#E8A23A' }}>incluye AIU interno: {fmt(aiuLb)} lb ({fmt(aiuLb * LB_A_KG)} kg)</div>}</div>
         </div>
         <label style={{ display:'flex', gap:8, alignItems:'center', fontSize:12, color:'var(--text2)', marginBottom:12, cursor:'pointer' }}>
@@ -550,7 +590,7 @@ function ModalDetalle({ carga, cliente, clienteFicha, bodega, onAvanzar, onAvisa
             </tr>
           ))}</tbody>
         </table>
-        <div style={{ fontSize:12, color:'var(--text2)', marginBottom:16 }}>Total: {carga.piezas} pzs · {fmt(carga.libras, 0)} lb · {fmt(carga.peso_kg)} kg · {fmt(carga.pies3, 3)} ft³ · {fmt(carga.cbm, 3)} m³ · al cliente {fmt(carga.peso_cobrable_kg)} kg{carga.aiu_lb ? ` (AIU interno ${fmt(carga.aiu_lb)} lb)` : ''}{carga.tarifa_costo_usd ? ` · costo US$${fmt(carga.tarifa_costo_usd, 2)}/kg, TRM ${fmt(carga.trm, 2)}` : ''}</div>
+        <div style={{ fontSize:12, color:'var(--text2)', marginBottom:16 }}>Total: {carga.piezas} pzs · {fmt(carga.libras, 0)} lb · {fmt(carga.peso_kg)} kg · {fmt(carga.pies3, 3)} ft³ · {fmt(carga.cbm, 3)} m³ · al cliente {carga.cobro_por === 'unidad' ? `${fmt(carga.unidades, 0)} unidades` : `${fmt(carga.peso_cobrable_kg)} kg`}{carga.aiu_lb ? ` (AIU interno ${fmt(carga.aiu_lb)} lb)` : ''}{carga.tarifa_costo_usd ? ` · costo US$${fmt(carga.tarifa_costo_usd, 2)}/kg, TRM ${fmt(carga.trm, 2)}` : ''}</div>
 
         <div style={{ fontSize:12, fontWeight:700, color:'var(--text)', marginBottom:8 }}>Trazabilidad</div>
         <div style={{ borderLeft:'2px solid var(--border2)', marginLeft:6, paddingLeft:14, marginBottom:14 }}>
@@ -658,7 +698,8 @@ export function htmlCuentaCobro({ carga, piezas, cliente, bodega, empresa, medio
   mercancia = (mercancia || '').trim() || mercanciaCliente(carga)
   const numero = `LRM-${(carga.fecha_recibo || hoyISO()).slice(0, 4)}-${String(carga.orden || '').padStart(3, '0')}`
   const aiuPieza = n2(carga.piezas) ? n2(carga.aiu_lb) / n2(carga.piezas) : 0
-  const kg = n2(carga.peso_cobrable_kg), tarifa = n2(carga.tarifa_cliente), total = Math.round(kg * tarifa)
+  const kg = n2(carga.peso_cobrable_kg), tarifa = n2(carga.tarifa_cliente), total = Math.round(cobroCarga(carga))
+  const cant = cantidadCobro(carga), uni = UNIDAD_CORTA[unidadCobro(carga)], uniLarga = unidadCobro(carga) === 'unidad' ? 'unidades' : uni
   const lbTotal = n2(carga.libras_aiu) || n2(carga.libras)
   const fechaHoy = new Date().toLocaleDateString('es-CO', { day:'numeric', month:'long', year:'numeric' })
   const modalidad = carga.modalidad === 'aereo' ? 'Aéreo' : 'Marítimo'
@@ -696,7 +737,7 @@ export function htmlCuentaCobro({ carga, piezas, cliente, bodega, empresa, medio
     <h3>Detalle de la mercancía</h3><table><tr><th>Cant.</th><th>Empaque</th><th class="n">Peso c/u (lb)</th><th class="n">Peso total (lb)</th></tr>${filasPiezas}
       <tr class="tot"><td>${carga.piezas}</td><td>Total</td><td></td><td class="n">${fmt(lbTotal, 1)} lb · ${fmt(kg, 1)} kg</td></tr></table>
     <div class="cierre"><h3>Liquidación</h3><table class="liq"><tr><th>Concepto</th><th class="n">Cantidad</th><th class="n">Tarifa</th><th class="n">Valor</th></tr>
-      <tr><td>Servicio de importación ${esc(ruta)} · ${modalidad.toLowerCase()}</td><td class="n">${fmt(kg, 1)} kg</td><td class="n">${cop(tarifa)} / kg</td><td class="n">${cop(total)}</td></tr></table>
+      <tr><td>Servicio de importación ${esc(ruta)} · ${modalidad.toLowerCase()}</td><td class="n">${fmt(cant, 1)} ${uniLarga}</td><td class="n">${cop(tarifa)} / ${uni}</td><td class="n">${cop(total)}</td></tr></table>
     <div class="gran">Total a pagar: ${cop(total)}</div>
     ${mediosOk.length ? `<h3>Medios de pago</h3><div class="pago">${mediosOk.map(m => `<div class="m"><b>${esc(m.tipo)}</b><span>${esc(m.detalle)}${m.titular ? '<br>' + esc(m.titular) : ''}</span></div>`).join('')}</div>` : ''}
     <div class="pie">${empresa.condiciones ? `<div class="cond"><b>Condiciones:</b> ${esc(empresa.condiciones)}</div>` : '<div></div>'}
@@ -707,7 +748,7 @@ export function htmlCuentaCobro({ carga, piezas, cliente, bodega, empresa, medio
     `*${empresa.nombre}* · Cuenta de cobro ${numero}`, `Fecha: ${fechaHoy}`, `Cliente: ${cliente?.nombre || ''}`, ``,
     `Servicio de importación ${ruta} (${modalidad.toLowerCase()})`, `Mercancía: ${mercancia}`,
     `${carga.piezas} cajas · ${fmt(lbTotal, 1)} lb · *${fmt(kg, 1)} kg*`, ``,
-    `${fmt(kg, 1)} kg × ${cop(tarifa)} = *${cop(total)}*`, `*Total a pagar: ${cop(total)}*`, ``,
+    `${fmt(cant, 1)} ${uniLarga} × ${cop(tarifa)} = *${cop(total)}*`, `*Total a pagar: ${cop(total)}*`, ``,
     ...(mediosOk.length ? ['*Medios de pago*', ...mediosOk.map(m => `• ${m.tipo}: ${m.detalle}${m.titular ? ' (' + m.titular + ')' : ''}`)] : []),
     ...(empresa.condiciones ? ['', empresa.condiciones] : []),
   ].join('\n')
@@ -777,7 +818,7 @@ export function CuentaCobro({ cargaId, carga: cargaInicial, onVolver, onCerrar }
 export function ModalAviso({ carga, etapa, cliente, bodega, onCerrar }) {
   const { empresa } = useDatosLRM()
   const plantilla = AVISOS_LRM[etapa] || AVISOS_LRM.transito
-  const kg = n2(carga.peso_cobrable_kg), total = Math.round(kg * n2(carga.tarifa_cliente))
+  const kg = n2(carga.peso_cobrable_kg), total = Math.round(cobroCarga(carga))
   const vars = {
     nombre: (cliente?.nombre || '').split(' ')[0] || 'hola', mercancia: (carga.categoria && carga.categoria !== 'Otro' ? carga.categoria : 'mercancía').toLowerCase(),
     cajas: carga.piezas, origen: origenDe(bodega), dias: DIAS_TRANSITO[carga.modalidad] || 8, kg: fmt(kg, 1), total: cop(total), guia: carga.guia,

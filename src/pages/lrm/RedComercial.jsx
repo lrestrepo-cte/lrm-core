@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { hoyISO, fechaCorta, linkWhatsApp } from './LRMClientes'
+import { cobroCarga, costoCarga } from './tarifasLRM'
 
 const cop = n => '$' + Math.round(Math.abs(n || 0)).toLocaleString('es-CO')
 const n2 = v => Number(String(v ?? '').replace(',', '.')) || 0
@@ -22,8 +23,8 @@ const tipoDe = id => TIPOS_COMISION.find(t => t.id === id) || TIPOS_COMISION[0]
 
 // Lo que deja una carga: cobro al cliente − costo de la bodega
 export function gananciaCarga(c) {
-  const cobro = n2(c.peso_cobrable_kg) * n2(c.tarifa_cliente)
-  const costo = c.tarifa_costo_usd ? n2(c.libras) * LB_A_KG * n2(c.tarifa_costo_usd) * n2(c.trm) : n2(c.peso_cobrable_kg) * n2(c.tarifa_costo)
+  const cobro = cobroCarga(c)
+  const costo = costoCarga(c)
   return { cobro, costo, ganancia: cobro - costo }
 }
 export function comisionSugerida(v, c) {
