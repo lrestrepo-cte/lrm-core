@@ -1,3 +1,5 @@
+import { IconoNegocio, LogoLRM } from './IconosMarca'
+
 const NEGOCIOS = [
   { id:'zabu',        nombre:'ZABÚ',            color:'#C9A84C', estado:'activo'  },
   { id:'rv',          nombre:'RV Sports',       color:'#378ADD', estado:'activo'  },
@@ -165,7 +167,7 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onIrC
   return (
     <div className="sidebar">
       <div className="sb-logo">
-        <div className="sb-trade">LRM CORE</div>
+        <div style={{ display:'flex', alignItems:'center', gap:8 }}><LogoLRM size={26} /><div className="sb-trade" style={{ margin:0 }}>LRM CORE</div></div>
         <div className="sb-name" style={{ color: isNeg ? colorNeg : 'var(--text)' }}>
           {isNeg ? tituloNeg : 'Business'}
         </div>
@@ -237,7 +239,7 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onIrC
             onClick={() => ACTIVOS.includes(n.id) && onEntrarNegocio && onEntrarNegocio(n.id)}
             style={{ cursor: ACTIVOS.includes(n.id) ? 'pointer' : 'default', opacity: ACTIVOS.includes(n.id) ? 1 : 0.5 }}
           >
-            <div style={{ width:7, height:7, borderRadius:'50%', background:n.color, flexShrink:0 }} />
+            <span style={{ display:'flex', flexShrink:0 }}><IconoNegocio id={n.id} size={16} color={n.color} /></span>
             <span className="sb-item-txt">{n.nombre}</span>
             <span className={`badge badge-${n.estado}`}>
               {n.estado==='activo'?'Activo':n.estado==='dev'?'Dev':'Pronto'}

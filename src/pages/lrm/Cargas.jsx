@@ -552,6 +552,7 @@ function ModalDetalle({ carga, cliente, clienteFicha, bodega, onAvanzar, onAvisa
   const [piezas, setPiezas] = useState([])
   const [eventos, setEventos] = useState([])
   const [confirmar, setConfirmar] = useState(false)
+  const [editar, setEditar] = useState(false)
   useEffect(() => {
     supabase.from('lrm_carga_piezas').select('*').eq('carga_id', carga.id).then(r => setPiezas(r.data || []))
     supabase.from('lrm_carga_eventos').select('*').eq('carga_id', carga.id).order('fecha').then(r => setEventos(r.data || []))
@@ -571,6 +572,7 @@ function ModalDetalle({ carga, cliente, clienteFicha, bodega, onAvanzar, onAvisa
   }
 
   if (verCuenta) return <CuentaCobro carga={carga} onVolver={() => setVerCuenta(false)} onCerrar={onCerrar} />
+  if (editar) return <ModalEditarValores carga={carga} bodega={bodega} onCerrar={() => setEditar(false)} onGuardado={() => { setEditar(false); onCambio() }} />
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:12 }}>
       <div style={{ background:'var(--bg2)', borderRadius:16, padding:22, width:'100%', maxWidth:620, border:'1px solid var(--border)', maxHeight:'94vh', overflowY:'auto' }}>
@@ -608,6 +610,7 @@ function ModalDetalle({ carga, cliente, clienteFicha, bodega, onAvanzar, onAvisa
 
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
           <button onClick={() => setVerCuenta(true)} className="btn-gold">🧾 Generar cuenta de cobro</button>
+          <button id="det-editar" onClick={() => setEditar(true)} className="btn">✏️ Editar cobro y costo</button>
           <button onClick={() => onAvisar(carga)} className="btn">📣 Avisar al cliente</button>
           {sig && <button onClick={async () => { await onAvanzar(carga, sig.id); onCambio() }} className="btn">→ {sig.label}</button>}
           {ant && <button onClick={retroceder} className="btn">← Devolver a {ant.label}</button>}
@@ -615,6 +618,116 @@ function ModalDetalle({ carga, cliente, clienteFicha, bodega, onAvanzar, onAvisa
             {confirmar ? '¿Seguro? Se borra con su cobro y costo' : 'Borrar carga'}
           </button>
           <button onClick={onCerrar} className="btn" style={{ marginLeft:'auto' }}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Editar lo que se cobra y lo que cuesta una carga ya guardada ───────────
+// Actualiza la carga y sus movimientos en Caja (cuenta por cobrar y factura del proveedor).
+function ModalEditarValores({ carga, bodega, onCerrar, onGuardado }) {
+  const conTarifaUsd = !!n2(carga.tarifa_costo_usd)
+  const [f, setF] = useState({
+    cobro_por: carga.cobro_por || 'kg', kg: String(carga.peso_cobrable_kg ?? ''), unidades: String(carga.unidades ?? ''),
+    tarifa: String(carga.tarifa_cliente ?? ''), trm: String(carga.trm ?? ''),
+    modo: conTarifaUsd ? 'tarifa' : 'total',
+    costo_valor: conTarifaUsd ? String(carga.tarifa_costo_usd) : '', costo_moneda: 'USD', costo_unidad: 'kg',
+    costo_total: String(Math.round(costoCarga(carga)) || ''),
+    proveedor: bodega?.operador || bodega?.nombre || carga.proveedor || '',
+  })
+  const [movs, setMovs] = useState([])
+  const [cerrados, setCerrados] = useState([])
+  const [tieneComision, setTieneComision] = useState(false)
+  const [error, setError] = useState('')
+  const [guardando, setGuardando] = useState(false)
+  const set = k => e => setF(p => ({ ...p, [k]: e.target.value }))
+  useEffect(() => {
+    supabase.from('lrm_movimientos').select('*').eq('carga_id', carga.id).then(r => setMovs(r.data || []))
+    supabase.from('lrm_cierres').select('mes').then(r => setCerrados((r.data || []).map(x => x.mes)))
+    supabase.from('lrm_comisiones').select('id').eq('carga_id', carga.id).then(r => setTieneComision(!!r.data?.length))
+  }, [carga.id])
+
+  const kgCli = n2(f.kg)
+  const cant = f.cobro_por === 'unidad' ? n2(f.unidades) : f.cobro_por === 'lb' ? kgCli / LB_A_KG : kgCli
+  const cobro = Math.round(cant * n2(f.tarifa))
+  const base = f.costo_unidad === 'unidad' ? n2(f.unidades) : f.costo_unidad === 'lb' ? n2(carga.libras) : n2(carga.peso_kg) || n2(carga.libras) * LB_A_KG
+  const costo = f.modo === 'total' ? Math.round(n2(String(f.costo_total).replace(/\./g, '')))
+    : Math.round(base * n2(f.costo_valor) * (f.costo_moneda === 'USD' ? n2(f.trm) : 1))
+  const movCobro = movs.find(m => m.tipo === 'cobro_cliente'), movCosto = movs.find(m => m.tipo === 'costo_proveedor')
+  const mesCerrado = [movCobro, movCosto].filter(Boolean).find(m => cerrados.includes((m.fecha || '').slice(0, 7)))
+
+  const guardar = async () => {
+    if (mesCerrado) return setError(`El mes ${mesCerrado.fecha.slice(0, 7)} está cerrado en Caja. Reábrelo para poder corregir.`)
+    if (!n2(f.tarifa)) return setError('Escribe la tarifa al cliente.')
+    if ((f.cobro_por === 'unidad' || (f.modo === 'tarifa' && f.costo_unidad === 'unidad')) && !n2(f.unidades)) return setError('Escribe las unidades.')
+    setGuardando(true); setError('')
+    const ref = `WR ${carga.guia}`
+    const notaCobro = `${fmt(cant)} ${UNIDAD_CORTA[f.cobro_por]} × ${cop(n2(f.tarifa))}`
+    const notaCosto = f.modo === 'total' ? 'Costo corregido a mano'
+      : `${fmt(base)} ${f.costo_unidad === 'unidad' ? 'u' : f.costo_unidad + ' reales'} × ${f.costo_moneda === 'USD' ? 'US$' + fmt(f.costo_valor, 2) + ' · TRM ' + fmt(f.trm, 2) : cop(f.costo_valor)}`
+    const { error: e } = await supabase.from('lrm_cargas').update({
+      cobro_por: f.cobro_por, unidades: n2(f.unidades) || null, peso_cobrable_kg: kgCli, tarifa_cliente: n2(f.tarifa), trm: n2(f.trm),
+      costo_total: costo, tarifa_costo: Math.round(costo / Math.max(kgCli, 0.0001)),
+      tarifa_costo_usd: f.modo === 'tarifa' && f.costo_moneda === 'USD' && f.costo_unidad === 'kg' ? n2(f.costo_valor) : null,
+    }).eq('id', carga.id)
+    if (e) { setGuardando(false); return setError('No se pudo guardar: ' + e.message) }
+    // Cuenta por cobrar al cliente
+    if (movCobro) await supabase.from('lrm_movimientos').update({ monto: cobro, notas: notaCobro }).eq('id', movCobro.id)
+    else if (cobro > 0) await supabase.from('lrm_movimientos').insert({ tipo:'cobro_cliente', concepto:'flete', cliente_id: carga.cliente_id || null, carga_id: carga.id, monto: cobro, fecha: hoyISO(), referencia: ref, notas: notaCobro })
+    // Factura del proveedor (tu costo)
+    if (movCosto && costo > 0) await supabase.from('lrm_movimientos').update({ monto: costo, notas: notaCosto, proveedor: f.proveedor || movCosto.proveedor }).eq('id', movCosto.id)
+    else if (movCosto && costo <= 0) await supabase.from('lrm_movimientos').delete().eq('id', movCosto.id)
+    else if (costo > 0) await supabase.from('lrm_movimientos').insert({ tipo:'costo_proveedor', concepto:'flete', proveedor: f.proveedor || null, carga_id: carga.id, monto: costo, fecha: hoyISO(), referencia: ref, notas: notaCosto })
+    await supabase.from('lrm_carga_eventos').insert({ carga_id: carga.id, etapa: carga.etapa, nota: `Valores corregidos: cobro ${cop(cobro)} · costo ${cop(costo)}` })
+    setGuardando(false); onGuardado()
+  }
+
+  const Caja2 = ({ titulo, children }) => <div style={{ padding:14, borderRadius:12, background:'var(--bg4)', marginBottom:12 }}><div style={{ fontSize:12, fontWeight:800, color:'var(--text)', marginBottom:8 }}>{titulo}</div>{children}</div>
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:12 }}>
+      <div style={{ background:'var(--bg2)', borderRadius:16, padding:22, width:'100%', maxWidth:620, border:'1px solid var(--gold-border)', maxHeight:'94vh', overflowY:'auto' }}>
+        <div style={{ fontSize:11, color:'var(--text3)' }}>Orden #{carga.orden} · WR {carga.guia}</div>
+        <div style={{ fontSize:18, fontWeight:800, color:'var(--text)', marginBottom:4 }}>Editar cobro y costo</div>
+        <div style={{ fontSize:12, color:'var(--text3)', marginBottom:14 }}>Peso real: {fmt(carga.libras, 1)} lb · {fmt(carga.peso_kg)} kg. Al guardar se corrigen la cuenta de cobro, Caja y Cartera.</div>
+
+        <Caja2 titulo="Lo que le cobras al cliente">
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(130px, 100%), 1fr))', gap:8 }}>
+            <div><Etiqueta>Cobras por</Etiqueta><select id="ed-cobro-por" value={f.cobro_por} onChange={set('cobro_por')} style={iStyle}><option value="kg">kg</option><option value="lb">lb</option><option value="unidad">unidad</option></select></div>
+            {f.cobro_por !== 'unidad' && <div><Etiqueta>Kg al cliente</Etiqueta><input id="ed-kg" inputMode="decimal" value={f.kg} onChange={set('kg')} style={iStyle} /></div>}
+            {(f.cobro_por === 'unidad' || f.costo_unidad === 'unidad') && <div><Etiqueta>Unidades</Etiqueta><input id="ed-unidades" inputMode="numeric" value={f.unidades} onChange={set('unidades')} style={iStyle} /></div>}
+            <div><Etiqueta>Tarifa (COP/{UNIDAD_CORTA[f.cobro_por]})</Etiqueta><input id="ed-tarifa" inputMode="numeric" value={f.tarifa} onChange={set('tarifa')} style={iStyle} /></div>
+          </div>
+          <div style={{ fontSize:13, marginTop:8, color:'var(--text2)' }}>Total al cliente: <b style={{ color:'var(--gold)' }}>{cop(cobro)}</b> <span style={{ color:'var(--text4)' }}>(antes {cop(movCobro?.monto ?? cobroCarga(carga))})</span></div>
+        </Caja2>
+
+        <Caja2 titulo="Lo que te cuesta (flete de la bodega)">
+          <div style={{ display:'flex', gap:6, marginBottom:8, flexWrap:'wrap' }}>
+            {[['tarifa','Calcular con tarifa'],['total','Escribir el total en pesos']].map(([id, l]) => (
+              <button key={id} type="button" onClick={() => setF(p => ({ ...p, modo:id }))} className={f.modo === id ? 'btn-gold' : 'btn'} style={{ fontSize:11, padding:'5px 10px', width:'auto' }}>{l}</button>
+            ))}
+          </div>
+          {f.modo === 'tarifa' ? (
+            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(110px, 100%), 1fr))', gap:8 }}>
+              <div><Etiqueta>Valor</Etiqueta><input id="ed-costo-valor" inputMode="decimal" value={f.costo_valor} onChange={set('costo_valor')} placeholder="5" style={iStyle} /></div>
+              <div><Etiqueta>Moneda</Etiqueta><select value={f.costo_moneda} onChange={set('costo_moneda')} style={iStyle}><option>USD</option><option>COP</option></select></div>
+              <div><Etiqueta>Por</Etiqueta><select value={f.costo_unidad} onChange={set('costo_unidad')} style={iStyle}><option value="kg">kg real</option><option value="lb">lb real</option><option value="unidad">unidad</option></select></div>
+              {f.costo_moneda === 'USD' && <div><Etiqueta>TRM</Etiqueta><input id="ed-trm" inputMode="decimal" value={f.trm} onChange={set('trm')} style={iStyle} /></div>}
+            </div>
+          ) : (
+            <div><Etiqueta>Costo total (COP)</Etiqueta><input id="ed-costo-total" inputMode="numeric" value={f.costo_total} onChange={set('costo_total')} placeholder="1250000" style={iStyle} /></div>
+          )}
+          <div style={{ marginTop:8 }}><Etiqueta>Proveedor</Etiqueta><input value={f.proveedor} onChange={set('proveedor')} style={iStyle} /></div>
+          <div style={{ fontSize:13, marginTop:8, color:'var(--text2)' }}>Tu costo: <b style={{ color:'var(--red)' }}>{cop(costo)}</b> <span style={{ color:'var(--text4)' }}>(antes {cop(movCosto?.monto ?? costoCarga(carga))})</span></div>
+        </Caja2>
+
+        <div style={{ fontSize:14, marginBottom:10, color:'var(--text2)' }}>Te queda: <b style={{ color: cobro - costo >= 0 ? 'var(--green)' : 'var(--red)' }}>{cop(cobro - costo)}</b></div>
+        {tieneComision && <div style={{ fontSize:12, color:'#E8A23A', marginBottom:10 }}>Esta carga ya tiene comisión registrada en Red comercial: revísala, porque no se recalcula sola.</div>}
+        {mesCerrado && <div style={{ fontSize:12, color:'var(--red)', marginBottom:10 }}>El mes {mesCerrado.fecha.slice(0, 7)} está cerrado en Caja. Reábrelo para corregir.</div>}
+        {error && <div style={{ fontSize:12, color:'var(--red)', marginBottom:10 }}>{error}</div>}
+        <div style={{ display:'flex', gap:10 }}>
+          <button id="ed-guardar" onClick={guardar} disabled={guardando} className="btn-green" style={{ flex:1 }}>{guardando ? 'Guardando…' : 'Guardar cambios'}</button>
+          <button onClick={onCerrar} className="btn">Cancelar</button>
         </div>
       </div>
     </div>

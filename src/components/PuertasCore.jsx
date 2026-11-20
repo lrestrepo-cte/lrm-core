@@ -1,6 +1,7 @@
 // Las tres puertas de LRM Core: Business, MySpace y Capitán en Silencio.
 // Se usa en la entrada (antes del login) y en el inicio (ya dentro).
 import { ESPACIOS } from '../lib/espacios'
+import { LogoLRM } from './IconosMarca'
 
 export function IconoEspacio({ tipo, size = 26 }) {
   const p = { width:size, height:size, viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', strokeWidth:1.6, strokeLinecap:'round', strokeLinejoin:'round' }
@@ -21,6 +22,7 @@ export default function PuertasCore({ onElegir, subtitulo }) {
       <div className="core-glow" aria-hidden="true" />
       <div className="core-inner">
         <header className="core-head">
+          <div style={{ display:'flex', justifyContent:'center', marginBottom:14 }}><LogoLRM size={56} /></div>
           <div className="core-eyebrow">LRM CORE</div>
           <h1 className="core-title">Matrix</h1>
           <p className="core-sub">Conectando negocios, construyendo futuro</p>

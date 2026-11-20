@@ -2,6 +2,7 @@
 import { useState } from 'react'
 import { supabase } from '../lib/supabase'
 import PuertasCore, { IconoEspacio } from '../components/PuertasCore'
+import { IconoNegocio } from '../components/IconosMarca'
 import { ESPACIOS, NEGOCIOS, negocioPorId, negocioPorSlug, slugDesdeHash, ponerHash } from '../lib/espacios'
 
 const ROLES_ZABU = [
@@ -151,7 +152,7 @@ export default function Login({ onLogin }) {
     )
     if (negActual) return (
       <div className="neg-marca">
-        <div className="neg-marca-emoji" style={{ background:negActual.color + '1a', border:`1px solid ${negActual.color}40` }}>{negActual.emoji}</div>
+        <div className="neg-marca-emoji" style={{ background:negActual.color + '1a', border:`1px solid ${negActual.color}40` }}><IconoNegocio id={negActual.id} size={30} color={negActual.color} /></div>
         <div className="neg-marca-nombre">{negActual.nombre}</div>
         <div className="neg-marca-desc">{negActual.desc}</div>
         <div className="neg-marca-parte">Business · LRM Core</div>
@@ -185,7 +186,7 @@ export default function Login({ onLogin }) {
             <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
               {NEGOCIOS.map(n => (
                 <button key={n.id} type="button" onClick={() => elegirNegocio(n)} style={cardStyle(n.activo)} {...(n.activo ? hover(n.color) : {})}>
-                  <div style={{ width:44, height:44, borderRadius:12, background:n.color + '18', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0 }}>{n.emoji}</div>
+                  <div style={{ width:44, height:44, borderRadius:12, background:n.color + '18', display:'flex', alignItems:'center', justifyContent:'center', fontSize:22, flexShrink:0, border:`1px solid ${n.color}33` }}><IconoNegocio id={n.id} size={22} color={n.color} /></div>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:15, fontWeight:700, marginBottom:2 }}>{n.nombre}</div>
                     <div style={{ fontSize:12, color:'rgba(255,255,255,0.35)' }}>{n.activo ? n.desc : 'Próximamente'}</div>
