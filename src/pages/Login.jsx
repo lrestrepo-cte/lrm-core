@@ -16,6 +16,10 @@ const ROLES_RV = [
 
 // El dueño entra con Supabase Auth (correo y contraseña guardados en Supabase, no en el código).
 // Solo pasa quien esté en core_usuarios con rol 'dueno'.
+// Se entra con usuario (ej. tuttirestrepov). Por dentro Supabase lo guarda como usuario@lrmcore.app
+export const DOMINIO_USUARIOS = 'lrmcore.app'
+export const correoDeUsuario = v => { const t = String(v || '').trim().toLowerCase(); return t.includes('@') ? t : `${t}@${DOMINIO_USUARIOS}` }
+
 export async function perfilDueno(user) {
   if (!user) return null
   const { data } = await supabase.from('core_usuarios').select('nombre, rol').eq('user_id', user.id).maybeSingle()
@@ -72,10 +76,10 @@ export default function Login({ onLogin }) {
   const destino = () => ({ espacio: espacio || 'business', negocio })
 
   const loginCEO = async () => {
-    if (!email.trim() || !password) return setError('Escribe tu correo y tu contraseña')
+    if (!email.trim() || !password) return setError('Escribe tu usuario y tu contraseña')
     setLoading(true); setError('')
-    const { data, error: err } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password })
-    if (err) { setLoading(false); return setError('Correo o contraseña incorrectos') }
+    const { data, error: err } = await supabase.auth.signInWithPassword({ email: correoDeUsuario(email), password })
+    if (err) { setLoading(false); return setError('Usuario o contraseña incorrectos') }
     const user = await perfilDueno(data.user)
     setLoading(false)
     if (user) onLogin(user, destino())
@@ -201,9 +205,9 @@ export default function Login({ onLogin }) {
             {!(directo && !modoDueno) && back(volverDesdeCorreo)}
             {cabecera()}
             <div style={{ marginBottom:14 }}>
-              <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)', marginBottom:6 }}>Correo</div>
-              <input id="login-email" type="email" value={email} onChange={e=>{setEmail(e.target.value);setError('')}}
-                placeholder="tu@correo.com" autoFocus onKeyDown={e=>e.key==='Enter'&&loginCEO()} style={inputStyle} />
+              <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)', marginBottom:6 }}>Usuario</div>
+              <input id="login-email" type="text" autoCapitalize="none" autoCorrect="off" spellCheck={false} autoComplete="username" value={email} onChange={e=>{setEmail(e.target.value);setError('')}}
+                placeholder="tu usuario" autoFocus onKeyDown={e=>e.key==='Enter'&&loginCEO()} style={inputStyle} />
             </div>
             <div style={{ marginBottom:20 }}>
               <div style={{ fontSize:11, color:'rgba(255,255,255,0.4)', marginBottom:6 }}>Contraseña</div>
