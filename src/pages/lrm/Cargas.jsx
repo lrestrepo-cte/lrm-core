@@ -55,6 +55,7 @@ export default function Cargas() {
   const [detalle, setDetalle] = useState(null)
   const [verBodegas, setVerBodegas] = useState(false)
   const [avisar, setAvisar] = useState(null)            // { carga, etapa } para mandar el aviso al cliente
+  const [relacion, setRelacion] = useState(null)        // ids de cargas con que arranca la relación de carga
 
   const cargar = async () => {
     const [ca, bo, cl] = await Promise.all([
@@ -112,7 +113,10 @@ export default function Cargas() {
           ))}
           <button onClick={() => setVerBodegas(true)} className="btn" style={{ fontSize:11 }}>⚙ Bodegas</button>
         </div>
-        <button onClick={() => setNuevo(true)} className="btn-gold" style={{ padding:'9px 18px' }}>+ Recibo de bodega</button>
+        <div style={{ display:'flex', gap:8 }}>
+          <button id="btn-relacion" onClick={() => setRelacion([])} className="btn" style={{ padding:'9px 14px' }}>📋 Relación de recibidos</button>
+          <button onClick={() => setNuevo(true)} className="btn-gold" style={{ padding:'9px 18px' }}>+ Recibo de bodega</button>
+        </div>
       </div>
 
       {/* Etapas */}
@@ -178,7 +182,8 @@ export default function Cargas() {
 
       {nuevo && <ModalRecibo bodegas={bodegas.filter(b => b.activa)} clientes={clientes} onCerrar={() => setNuevo(false)} onGuardado={() => { setNuevo(false); cargar() }} />}
       {detalle && <ModalDetalle carga={detalle} cliente={nombreCliente(detalle.cliente_id)} clienteFicha={clientes.find(x => x.id === detalle.cliente_id)} bodega={bodegas.find(b => b.id === detalle.bodega_id)}
-        onAvanzar={avanzar} onAvisar={(c) => { setDetalle(null); setAvisar({ carga:c, etapa:c.etapa }) }} onCerrar={() => setDetalle(null)} onCambio={() => { setDetalle(null); cargar() }} />}
+        onAvanzar={avanzar} onAvisar={(c) => { setDetalle(null); setAvisar({ carga:c, etapa:c.etapa }) }} onRelacion={(c) => { setDetalle(null); setRelacion([c.id]) }} onCerrar={() => setDetalle(null)} onCambio={() => { setDetalle(null); cargar() }} />}
+      {relacion && <RelacionCarga cargas={cargas} clientes={clientes} bodegas={bodegas} inicial={relacion} onCerrar={() => setRelacion(null)} />}
       {avisar && <ModalAviso carga={avisar.carga} etapa={avisar.etapa} cliente={clientes.find(x => x.id === avisar.carga.cliente_id)}
         bodega={bodegas.find(b => b.id === avisar.carga.bodega_id)} onCerrar={() => setAvisar(null)} />}
       {verBodegas && <ModalBodegas bodegas={bodegas} onCerrar={() => setVerBodegas(false)} onCambio={cargar} />}
@@ -547,7 +552,7 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
 }
 
 // ── Detalle: piezas, trazabilidad y borrar ─────────────────────────────────
-function ModalDetalle({ carga, cliente, clienteFicha, bodega, onAvanzar, onAvisar, onCerrar, onCambio }) {
+function ModalDetalle({ carga, cliente, clienteFicha, bodega, onAvanzar, onAvisar, onRelacion, onCerrar, onCambio }) {
   const [verCuenta, setVerCuenta] = useState(!!carga._cuenta)
   const [piezas, setPiezas] = useState([])
   const [eventos, setEventos] = useState([])
@@ -612,6 +617,7 @@ function ModalDetalle({ carga, cliente, clienteFicha, bodega, onAvanzar, onAvisa
           <button onClick={() => setVerCuenta(true)} className="btn-gold">🧾 Generar cuenta de cobro</button>
           <button id="det-editar" onClick={() => setEditar(true)} className="btn">✏️ Editar cobro y costo</button>
           <button onClick={() => onAvisar(carga)} className="btn">📣 Avisar al cliente</button>
+          <button onClick={() => onRelacion(carga)} className="btn">📋 Relación de recibidos</button>
           {sig && <button onClick={async () => { await onAvanzar(carga, sig.id); onCambio() }} className="btn">→ {sig.label}</button>}
           {ant && <button onClick={retroceder} className="btn">← Devolver a {ant.label}</button>}
           <button onClick={borrar} onBlur={() => setConfirmar(false)} className="btn" style={{ color:'var(--red)', borderColor:'rgba(224,82,82,0.4)' }}>
@@ -619,6 +625,125 @@ function ModalDetalle({ carga, cliente, clienteFicha, bodega, onAvanzar, onAvisa
           </button>
           <button onClick={onCerrar} className="btn" style={{ marginLeft:'auto' }}>Cerrar</button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+const fechaLarga = iso => { if (!iso) return '—'; const [y, m, d] = iso.split('-').map(Number); return new Date(y, m - 1, d).toLocaleDateString('es-CO', { day:'numeric', month:'short', year:'numeric' }) }
+// ── Relación de carga: lista de warehouse receipts SIN valores, a nombre de LRM Trade ──
+// Informativa: lo que llegó a bodega para un cliente, agrupado por fecha de recibo.
+function RelacionCarga({ cargas, clientes, bodegas, inicial, onCerrar }) {
+  const { empresa } = useDatosLRM()
+  const primera = cargas.find(c => c.id === inicial?.[0])
+  const [sel, setSel] = useState(new Set(inicial || []))
+  const [cliente, setCliente] = useState(primera?.cliente_id || '')
+  const [etapa, setEtapa] = useState('activas')
+  const [titulo, setTitulo] = useState('Relación de recibidos')
+  const [para, setPara] = useState('')
+  const [obs, setObs] = useState('')
+  const [agrupar, setAgrupar] = useState(true)
+  const [copiado, setCopiado] = useState(false)
+  const nombreCli = id => clientes.find(c => c.id === id)?.nombre || ''
+  const bod = id => bodegas.find(b => b.id === id)
+  const visibles = cargas.filter(c => (!cliente || c.cliente_id === cliente) && (etapa === 'todas' || (etapa === 'activas' ? c.etapa !== 'entregada' : c.etapa === etapa)))
+  const elegidas = cargas.filter(c => sel.has(c.id)).sort((a, b) => (a.fecha_recibo || '').localeCompare(b.fecha_recibo || '') || String(a.guia).localeCompare(String(b.guia)))
+  const clientesSel = [...new Set(elegidas.map(c => c.cliente_id))]
+  const destinatario = para.trim() || (clientesSel.length === 1 ? nombreCli(clientesSel[0]) : '')
+  const toggle = id => setSel(p => { const n = new Set(p); n.has(id) ? n.delete(id) : n.add(id); return n })
+  const tot = elegidas.reduce((t, c) => ({ pz: t.pz + n2(c.piezas), lb: t.lb + n2(c.libras), kg: t.kg + n2(c.peso_kg), ft: t.ft + n2(c.pies3), m3: t.m3 + n2(c.cbm) }), { pz:0, lb:0, kg:0, ft:0, m3:0 })
+  const ahora = new Date()
+  const numero = `REL-${hoyISO().replace(/-/g, '')}-${String(ahora.getHours()).padStart(2, '0')}${String(ahora.getMinutes()).padStart(2, '0')}`
+  const fechaTxt = ahora.toLocaleDateString('es-CO', { day:'numeric', month:'long', year:'numeric' })
+  const varios = clientesSel.length > 1
+
+  // Filas: se agrupan por fecha de recibo cuando llegan varios el mismo día
+  const fechas = [...new Set(elegidas.map(c => c.fecha_recibo || ''))]
+  const colspan = varios ? 11 : 10
+  let n = 0
+  const fila = c => `<tr><td>${++n}</td><td><b>${esc(c.guia)}</b></td><td>${fechaLarga(c.fecha_recibo)}</td>${varios ? `<td>${esc(nombreCli(c.cliente_id))}</td>` : ''}<td>${esc(origenDe(bod(c.bodega_id)))}</td><td>${esc(c.remitente || '—')}</td><td>${esc(mercanciaCliente(c))}</td><td class="n">${fmt(c.piezas, 0)}</td><td class="n">${fmt(c.libras, 1)}</td><td class="n">${fmt(c.peso_kg, 1)}</td><td class="n">${fmt(c.pies3, 2)}</td></tr>`
+  const filasHtml = agrupar && fechas.length > 1
+    ? fechas.map(fe => { const g = elegidas.filter(c => (c.fecha_recibo || '') === fe); const st = g.reduce((t, c) => ({ pz: t.pz + n2(c.piezas), kg: t.kg + n2(c.peso_kg) }), { pz:0, kg:0 })
+        return `<tr class="grupo"><td colspan="${colspan}">Recibido el ${fechaLarga(fe)} · ${g.length} WR · ${fmt(st.pz, 0)} piezas · ${fmt(st.kg, 1)} kg</td></tr>` + g.map(fila).join('') }).join('')
+    : elegidas.map(fila).join('')
+  const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(titulo)} ${numero}</title><style>
+    @page{size:letter;margin:10mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#1b1b1b;margin:0;padding:18px;background:#fff;font-size:11px;line-height:1.35}
+    .doc{max-width:780px;margin:0 auto}.top{display:flex;justify-content:space-between;gap:16px;border-bottom:2px solid #C9A84C;padding-bottom:8px}
+    .marca{font-size:18px;font-weight:800}.marca small{display:block;font-size:10px;font-weight:400;color:#777;margin-top:1px}.emp{font-size:10px;color:#555;margin-top:4px}
+    .num{text-align:right}.num .t{font-size:9.5px;letter-spacing:2px;color:#8a6d1f;font-weight:700;text-transform:uppercase}.num .n1{font-size:15px;font-weight:800;margin:1px 0 3px}.num div{font-size:10px;color:#555}
+    h3{font-size:9.5px;letter-spacing:1.5px;color:#8a6d1f;margin:12px 0 4px;text-transform:uppercase}
+    .d{display:flex;gap:8px;border-bottom:1px dotted #ddd;padding:2px 0}.d span{color:#777;min-width:90px}
+    table{width:100%;border-collapse:collapse}th{background:#f6f1e3;text-align:left;font-size:9.5px;padding:5px;color:#5a4a1a}td{padding:5px;border-bottom:1px solid #eee;vertical-align:top}
+    tr{page-break-inside:avoid}.n{text-align:right;white-space:nowrap}.tot td{font-weight:800;border-top:2px solid #1b1b1b;background:#fafafa}
+    tr.grupo td{background:#faf7ee;color:#8a6d1f;font-weight:700;font-size:10px;letter-spacing:.3px;padding:6px 5px}
+    .pie{margin-top:14px;font-size:9.5px;color:#888;text-align:center}
+    .obs{margin-top:10px;font-size:10.5px;background:#faf7ee;border-radius:6px;padding:7px 10px}
+    @media print{body{padding:0}}</style></head><body><div class="doc">
+    <div class="top"><div><div class="marca">${esc(empresa.nombre)}<small>${esc(empresa.lema)}</small></div>
+      <div class="emp">${esc(empresa.responsable)} · ${esc(empresa.ciudad)} · ${esc(empresa.whatsapp)} · ${esc(empresa.correo)}</div></div>
+      <div class="num"><div class="t">${esc(titulo)}</div><div class="n1">${numero}</div><div>${fechaTxt}</div></div></div>
+    <h3>Datos</h3>
+    ${destinatario ? `<div class="d"><span>Para</span><b>${esc(destinatario)}</b></div>` : ''}
+    <div class="d"><span>Recibos</span><b>${elegidas.length} warehouse receipt${elegidas.length === 1 ? '' : 's'} · ${fmt(tot.pz, 0)} piezas</b></div>
+    <h3>Relación de mercancía</h3>
+    <table><tr><th>#</th><th>WR</th><th>Fecha de recibo</th>${varios ? '<th>Cliente</th>' : ''}<th>Origen</th><th>Proveedor</th><th>Mercancía</th><th class="n">Piezas</th><th class="n">Peso lb</th><th class="n">Peso kg</th><th class="n">ft³</th></tr>
+    ${filasHtml}
+    <tr class="tot"><td></td><td>Total</td><td></td>${varios ? '<td></td>' : ''}<td></td><td></td><td></td><td class="n">${fmt(tot.pz, 0)}</td><td class="n">${fmt(tot.lb, 1)}</td><td class="n">${fmt(tot.kg, 1)}</td><td class="n">${fmt(tot.ft, 2)}</td></tr></table>
+    ${obs.trim() ? `<div class="obs"><b>Observaciones:</b> ${esc(obs)}</div>` : ''}
+    <div class="pie">Documento informativo · ${esc(empresa.nombre)}</div>
+    </div></body></html>`
+
+  const texto = [
+    `*${empresa.nombre}* · ${titulo} ${numero}`, `Fecha: ${fechaTxt}`, ...(destinatario ? [`Para: ${destinatario}`] : []), '',
+    ...elegidas.map((c, i) => `${i + 1}. WR ${c.guia} · ${fechaCorta(c.fecha_recibo)}${varios ? ' · ' + nombreCli(c.cliente_id) : ''}${c.remitente ? ' · ' + c.remitente : ''} · ${mercanciaCliente(c)} · ${fmt(c.piezas, 0)} pzs · ${fmt(c.peso_kg, 1)} kg`),
+    '', `*Total: ${elegidas.length} WR · ${fmt(tot.pz, 0)} piezas · ${fmt(tot.kg, 1)} kg · ${fmt(tot.ft, 2)} ft³*`, ...(obs.trim() ? ['', obs] : []),
+  ].join('\n')
+  const imprimir = () => { const w = window.open('', '_blank'); if (!w) return; w.document.write(html.replace('</body>', '<script>window.onload=()=>window.print()<\/script></body>')); w.document.close() }
+  const copiar = async () => { try { await navigator.clipboard.writeText(texto); setCopiado(true); setTimeout(() => setCopiado(false), 2000) } catch {} }
+  const cliTel = clientesSel.length === 1 ? clientes.find(c => c.id === clientesSel[0])?.telefono : null
+  const wa = cliTel ? linkWhatsApp(cliTel, destinatario, texto) : null
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:12 }}>
+      <div style={{ background:'var(--bg2)', borderRadius:16, padding:16, width:'100%', maxWidth:1120, border:'1px solid var(--gold-border)', height:'94vh', display:'grid', gridTemplateColumns:'minmax(0, 340px) minmax(0, 1fr)', gap:14 }}>
+        <div style={{ display:'flex', flexDirection:'column', gap:10, minHeight:0 }}>
+          <div>
+            <div style={{ fontSize:11, letterSpacing:3, color:'var(--gold)', fontWeight:700 }}>RELACIÓN DE RECIBIDOS</div>
+            <div style={{ fontSize:12, color:'var(--text3)' }}>Informativa y sin valores: recibos, proveedor, piezas y pesos.</div>
+          </div>
+          <div className="grid-2" style={{ gap:8 }}>
+            <div><Etiqueta>Cliente</Etiqueta><select id="rel-cliente" value={cliente} onChange={e => setCliente(e.target.value)} style={iStyle}><option value="">Todos</option>{clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select></div>
+            <div><Etiqueta>Cargas</Etiqueta><select value={etapa} onChange={e => setEtapa(e.target.value)} style={iStyle}><option value="activas">Sin entregar</option><option value="todas">Todas</option>{ETAPAS.map(e => <option key={e.id} value={e.id}>{e.label}</option>)}</select></div>
+          </div>
+          <div style={{ display:'flex', gap:6 }}>
+            <button onClick={() => setSel(p => new Set([...p, ...visibles.map(c => c.id)]))} className="btn" style={{ fontSize:11, padding:'4px 9px', width:'auto' }}>Marcar todas</button>
+            <button onClick={() => setSel(new Set())} className="btn" style={{ fontSize:11, padding:'4px 9px', width:'auto' }}>Ninguna</button>
+          </div>
+          <div style={{ flex:1, overflowY:'auto', minHeight:120, border:'1px solid var(--border)', borderRadius:10, padding:6 }}>
+            {visibles.length === 0 && <div style={{ fontSize:12, color:'var(--text4)', padding:10 }}>No hay cargas con ese filtro.</div>}
+            {visibles.map(c => (
+              <label key={c.id} style={{ display:'flex', gap:8, alignItems:'flex-start', padding:'6px 4px', cursor:'pointer', borderBottom:'1px solid var(--border)' }}>
+                <input type="checkbox" className="rel-check" checked={sel.has(c.id)} onChange={() => toggle(c.id)} style={{ marginTop:3 }} />
+                <span style={{ fontSize:12, color:'var(--text2)' }}><b style={{ color:'var(--text)' }}>WR {c.guia}</b> · {nombreCli(c.cliente_id) || c.referencia}<br /><span style={{ color:'var(--text3)' }}>{mercanciaCliente(c)} · {fmt(c.piezas, 0)} pzs · {fmt(c.peso_kg)} kg · {etapaDe(c.etapa).label}</span></span>
+              </label>
+            ))}
+          </div>
+          <div className="grid-2" style={{ gap:8 }}>
+            <div><Etiqueta>Título</Etiqueta><select value={titulo} onChange={e => setTitulo(e.target.value)} style={iStyle}>{['Relación de recibidos','Relación de carga'].map(t => <option key={t}>{t}</option>)}</select></div>
+            <div><Etiqueta>Para (opcional)</Etiqueta><input value={para} onChange={e => setPara(e.target.value)} placeholder={destinatario || 'Nombre'} style={iStyle} /></div>
+          </div>
+          <div><Etiqueta>Observaciones</Etiqueta><input value={obs} onChange={e => setObs(e.target.value)} placeholder="Ej: mercancía en buen estado, cajas selladas" style={iStyle} /></div>
+          <label style={{ display:'flex', gap:8, fontSize:12, color:'var(--text2)', cursor:'pointer' }}><input type="checkbox" checked={agrupar} onChange={e => setAgrupar(e.target.checked)} /> Agrupar por fecha de recibo</label>
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+            <button onClick={imprimir} disabled={!elegidas.length} className="btn-gold" style={{ width:'auto', flex:1 }}>Descargar PDF / Imprimir</button>
+            {wa && <a href={wa} target="_blank" rel="noreferrer" className="btn" style={{ textDecoration:'none', color:'#25D366', borderColor:'rgba(37,211,102,0.4)' }}>WhatsApp</a>}
+            <button onClick={copiar} disabled={!elegidas.length} className="btn" style={{ width:'auto' }}>{copiado ? '✓ Copiado' : 'Copiar'}</button>
+            <button onClick={onCerrar} className="btn" style={{ width:'auto' }}>Cerrar</button>
+          </div>
+        </div>
+        {elegidas.length
+          ? <iframe title="Relación" srcDoc={html} style={{ width:'100%', height:'100%', border:'none', borderRadius:10, background:'#fff' }} />
+          : <div style={{ display:'flex', alignItems:'center', justifyContent:'center', color:'var(--text4)', fontSize:13, border:'1px dashed var(--border)', borderRadius:10 }}>Marca las cargas que van en la relación.</div>}
       </div>
     </div>
   )
