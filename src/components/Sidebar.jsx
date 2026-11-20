@@ -167,9 +167,9 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onIrC
   return (
     <div className="sidebar">
       <div className="sb-logo">
-        <div style={{ display:'flex', alignItems:'center', gap:8 }}><LogoLRM size={26} /><div className="sb-trade" style={{ margin:0 }}>LRM CORE</div></div>
+        {!isInv && <div style={{ display:'flex', alignItems:'center', gap:8 }}><LogoLRM size={26} /><div className="sb-trade" style={{ margin:0 }}>LRM CORE</div></div>}
         {isInv
-          ? <img src="/marca/logo-horizontal.png" alt="LRM Trade Consulting" style={{ width:'100%', maxWidth:200, marginTop:12, display:'block' }} />
+          ? <img src="/marca/logo-horizontal.png" alt="LRM Trade Consulting" style={{ width:'100%', maxWidth:210, display:'block' }} />
           : <div className="sb-name" style={{ color: isNeg ? colorNeg : 'var(--text)' }}>
               {isNeg ? tituloNeg : 'Business'}
             </div>}
