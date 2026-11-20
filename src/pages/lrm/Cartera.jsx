@@ -9,7 +9,7 @@ import { hoyISO, fechaCorta, linkWhatsApp } from './LRMClientes'
 import { ETAPAS } from './Dashboard'
 import { CuentaCobro, mercanciaCliente } from './Cargas'
 import { ModalMovimiento } from './Caja'
-import { useDatosLRM } from './datosLRM'
+import { useDatosLRM, logoDocumentoHTML } from './datosLRM'
 
 const cop = n => (n < 0 ? '−' : '') + '$' + Math.round(Math.abs(n || 0)).toLocaleString('es-CO')
 const fmt = (n, d = 1) => Number(n || 0).toLocaleString('es-CO', { maximumFractionDigits: d })
@@ -101,7 +101,7 @@ function estadoDeCuenta({ fila, empresa, medios, conHistorial }) {
     .pago{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.m{border:1px solid #e5dcc3;border-radius:6px;padding:5px 8px}.m b{display:block;font-size:10.5px}.m span{color:#555;font-size:10px}
     .cond{font-size:9.5px;color:#555;background:#faf7ee;border-radius:6px;padding:6px 10px;margin-top:10px}
     @media print{body{padding:0}}</style></head><body><div class="doc">
-    <div class="top"><div><div class="marca">${esc(empresa.nombre)}<small>${esc(empresa.lema)}</small></div>
+    <div class="top"><div>${logoDocumentoHTML()}
       <div class="emp">${esc(empresa.responsable)} · ${esc(empresa.documento)}<br>${esc(empresa.ciudad)} · ${esc(empresa.whatsapp)} · ${esc(empresa.correo)}</div></div>
       <div class="num"><div class="t">ESTADO DE CUENTA</div><div class="n1">${esc(cliente.nombre)}</div><div>Corte: ${hoy}</div></div></div>
     <h3>Cliente</h3><div class="grid">${dato('Nombre', cliente.nombre)}${dato('Empresa', cliente.empresa)}${dato('Teléfono', cliente.telefono)}${dato('Correo', cliente.correo)}</div>
@@ -144,7 +144,7 @@ function carteraCompleta({ filas, empresa }) {
     .n{text-align:right;white-space:nowrap}.tot td{font-weight:800;border-top:2px solid #1b1b1b}
     .tr{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}.c{border:1px solid #e5dcc3;border-radius:6px;padding:6px 10px}.c span{display:block;font-size:9.5px;color:#777}.c b{font-size:13px}
     @media print{body{padding:0}}</style></head><body>
-    <div class="top"><div class="marca">${esc(empresa.nombre)}</div><div><div class="t">CARTERA POR COBRAR</div><div class="n1">${cop(total)}</div><div style="font-size:10px;color:#555;text-align:right">Corte: ${fechaLarga()}</div></div></div>
+    <div class="top">${logoDocumentoHTML(48)}<div><div class="t">CARTERA POR COBRAR</div><div class="n1">${cop(total)}</div><div style="font-size:10px;color:#555;text-align:right">Corte: ${fechaLarga()}</div></div></div>
     <div class="tr">${porTramo.map(t => `<div class="c"><span>${t.label}</span><b>${cop(t.v)}</b></div>`).join('')}</div>
     <table><tr><th>Cliente</th><th class="n">Cuentas</th><th class="n">En camino</th><th class="n">Entregado sin pagar</th><th class="n">Días</th><th class="n">Saldo</th></tr>
     ${filas.map(f => `<tr><td>${esc(f.cliente.nombre)}${f.cliente.empresa ? ' · ' + esc(f.cliente.empresa) : ''}</td><td class="n">${f.abiertos.length}</td><td class="n">${cop(f.enCamino)}</td><td class="n">${cop(f.entregadoSinPagar)}</td><td class="n">${f.masViejo}</td><td class="n"><b>${cop(f.saldo)}</b></td></tr>`).join('')}

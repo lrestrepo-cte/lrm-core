@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useDivisas } from '../../lib/divisas'
 import { NICHOS_LRM, nichosDe, linkWhatsApp } from './LRMClientes'
-import { useDatosLRM } from './datosLRM'
+import { useDatosLRM, logoDocumentoHTML } from './datosLRM'
 import { useTarifas, escaleraPara, costoPara, ordenar, copiar, sinMarca, LB_A_KG, UNIDADES, UNIDAD_CORTA } from './tarifasLRM'
 
 const cop = n => '$' + Math.round(Math.abs(n || 0)).toLocaleString('es-CO')
@@ -331,7 +331,7 @@ export function PropuestaTarifas({ cliente, categorias, escalera, onCerrar }) {
     .notas{margin-top:16px;font-size:11px;color:#444}.notas li{margin:3px 0}
     .pie{margin-top:18px;padding-top:10px;border-top:1px solid #eee;display:flex;justify-content:space-between;font-size:10.5px;color:#555}
     @media print{body{padding:0}}</style></head><body><div class="doc">
-    <div class="top"><div><div class="marca">${escH(empresa.nombre)}<small>${escH(empresa.lema)}</small></div>
+    <div class="top"><div>${logoDocumentoHTML()}
       <div class="emp">${escH(empresa.ciudad)} · ${escH(empresa.whatsapp)} · ${escH(empresa.correo)}</div></div>
       <div class="num"><div class="t">PROPUESTA DE TARIFAS</div><div class="n1">${escH(cliente?.nombre)}</div><div>${hoyLargo()}${vigencia ? ` · válida ${escH(vigencia)} días` : ''}</div></div></div>
     <div class="intro">Hola ${escH(primer)}, estas son tus tarifas con <b>${escH(empresa.nombre)}</b>. Entre más compras, menos pagas por cada ${cats.some(c => escalera(c).unidad !== 'unidad') ? 'kilo o unidad' : 'unidad'}.</div>

@@ -8,7 +8,7 @@ import { supabase } from '../../lib/supabase'
 import { hoyISO, fechaCorta, NICHOS_LRM, nichoPrincipal } from './LRMClientes'
 import { ETAPAS } from './Dashboard'
 import { useDivisas } from '../../lib/divisas'
-import { BODEGA_POR_DEFECTO, useDatosLRM, AVISOS_LRM, DIAS_TRANSITO } from './datosLRM'
+import { BODEGA_POR_DEFECTO, useDatosLRM, AVISOS_LRM, DIAS_TRANSITO, logoDocumentoHTML } from './datosLRM'
 import { linkWhatsApp } from './LRMClientes'
 import { useTarifas, escaleraPara, costoPara, escalonDe, tramoTexto, cobroCarga, cantidadCobro, unidadCobro, costoCarga, UNIDAD_CORTA } from './tarifasLRM'
 
@@ -679,7 +679,7 @@ function RelacionCarga({ cargas, clientes, bodegas, inicial, onCerrar }) {
     .pie{margin-top:14px;font-size:9.5px;color:#888;text-align:center}
     .obs{margin-top:10px;font-size:10.5px;background:#faf7ee;border-radius:6px;padding:7px 10px}
     @media print{body{padding:0}}</style></head><body><div class="doc">
-    <div class="top"><div><div class="marca">${esc(empresa.nombre)}<small>${esc(empresa.lema)}</small></div>
+    <div class="top"><div>${logoDocumentoHTML()}
       <div class="emp">${esc(empresa.responsable)} · ${esc(empresa.ciudad)} · ${esc(empresa.whatsapp)} · ${esc(empresa.correo)}</div></div>
       <div class="num"><div class="t">${esc(titulo)}</div><div class="n1">${numero}</div><div>${fechaTxt}</div></div></div>
     <h3>Datos</h3>
@@ -966,7 +966,7 @@ export function htmlCuentaCobro({ carga, piezas, cliente, bodega, empresa, medio
     .pie{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-top:10px}
     .cond{font-size:9.5px;color:#555;background:#faf7ee;border-radius:6px;padding:6px 10px;flex:1}.firma{font-size:10px;color:#555;text-align:center}.firma .l{border-top:1px solid #999;width:200px;padding-top:3px;margin-top:26px}
     @media print{body{padding:0}}</style></head><body><div class="doc">
-    <div class="top"><div><div class="marca">${esc(empresa.nombre)}<small>${esc(empresa.lema)}</small></div>
+    <div class="top"><div>${logoDocumentoHTML()}
       <div class="emp">${esc(empresa.responsable)} · ${esc(empresa.documento)}<br>${esc(empresa.ciudad)} · ${esc(empresa.whatsapp)} · ${esc(empresa.correo)}</div></div>
       <div class="num"><div class="t">CUENTA DE COBRO</div><div class="n1">${numero}</div><div>Fecha: ${fechaHoy}</div></div></div>
     <h3>Cliente</h3><div class="grid">${dato('Nombre', cliente?.nombre || '')}${dato('Empresa', cliente?.empresa)}${dato('Teléfono', cliente?.telefono)}</div>

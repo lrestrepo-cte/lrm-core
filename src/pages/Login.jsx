@@ -150,6 +150,12 @@ export default function Login({ onLogin }) {
         <div className="neg-marca-desc">Elige el negocio</div>
       </div>
     )
+    if (negActual?.id === 'inversiones') return (
+      <div className="neg-marca">
+        <img src="/marca/logo-vertical.png" alt="LRM Trade Consulting" style={{ width:'100%', maxWidth:280, margin:'0 auto 8px', display:'block' }} />
+        <div className="neg-marca-parte">Business · LRM Core</div>
+      </div>
+    )
     if (negActual) return (
       <div className="neg-marca">
         <div className="neg-marca-emoji" style={{ background:negActual.color + '1a', border:`1px solid ${negActual.color}40` }}><IconoNegocio id={negActual.id} size={30} color={negActual.color} /></div>

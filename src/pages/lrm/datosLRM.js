@@ -39,6 +39,11 @@ export const DATOS_BANCARIOS_LRM = {
   titular: 'Luis Pablo Restrepo Valderrama', cedula: 'CC 1.082.938.048', banco: 'Bancolombia', tipoCuenta: 'Ahorros', cuenta: '483-865611-01',
 }
 
+// Logo para los documentos (cuentas de cobro, estados de cuenta, propuestas, relaciones).
+// Va con la dirección completa para que se vea también al imprimir o guardar en PDF.
+export const urlMarca = (archivo) => (typeof window !== 'undefined' ? window.location.origin : '') + '/marca/' + archivo
+export const logoDocumentoHTML = (alto = 58) => `<img src="${urlMarca('logo-documento.png')}" alt="LRM Trade Consulting" style="height:${alto}px;display:block;margin-bottom:4px">`
+
 // Bodega que se crea sola si no hay ninguna
 export const BODEGA_POR_DEFECTO = {
   nombre: 'RD Star 1', operador: 'RD Star - Ok Cargo', pais: 'Estados Unidos', ciudad: 'Doral, FL 33126',

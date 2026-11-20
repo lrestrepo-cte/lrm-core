@@ -33,7 +33,11 @@ const TRAZOS = {
   puffys: <><rect x="4" y="9" width="16" height="3" rx="1.5"/><rect x="3.5" y="12.8" width="17" height="3" rx="1.5"/><rect x="4" y="16.6" width="16" height="3" rx="1.5"/><path d="M9 9V6.5M12 9V5M15 9V6.5"/></>,
 }
 
+// Negocios con logo propio (imagen en public/marca)
+const LOGOS = { inversiones: '/marca/isotipo.png' }
+
 export function IconoNegocio({ id, size = 22, color = 'currentColor' }) {
+  if (LOGOS[id]) return <img src={LOGOS[id]} alt="" width={size * 1.25} height={size * 1.25} style={{ objectFit:'contain', display:'block' }} />
   const t = TRAZOS[id]
   if (!t) return <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="1.6"><rect x="4" y="4" width="16" height="16" rx="4"/></svg>
   return (
