@@ -6,7 +6,7 @@
 //   2) PRECIOS AL CLIENTE con escalera de valor:
 //      · Escalera general por categoría (lrm_ajustes, clave 'escaleras')
 //      · Escalera propia de cada cliente por categoría (lrm_clientes.tarifas). Si el cliente no tiene, usa la general.
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 
 export const LB_A_KG = 0.45359237
@@ -30,6 +30,7 @@ export const COSTOS_LRM = [
 ]
 
 export const copiar = x => JSON.parse(JSON.stringify(x))
+export { sinMarca }
 export const ordenar = esc => [...(esc?.escalones || [])].sort((a, b) => a.desde - b.desde)
 export const escalonDe = (esc, cantidad) => [...esc.escalones].sort((a, b) => b.desde - a.desde).find(e => cantidad >= e.desde) || ordenar(esc)[0]
 export const siguienteDe = (esc, cantidad) => ordenar(esc).find(e => e.desde > cantidad)
@@ -74,18 +75,41 @@ export const costoCarga = c => c?.costo_total != null && c.costo_total !== ''
   : Number(c?.peso_cobrable_kg || 0) * Number(c?.tarifa_costo || 0)
 
 // Carga escaleras generales y tabla de costos
+// Precio sugerido = tu costo + margen, redondeado (pesos al mil de arriba, dólares a 10 centavos)
+export const MARGEN_SUGERIDO = 30
+const redondear = (v, moneda) => moneda === 'USD' ? Math.ceil(v * 10) / 10 : Math.ceil(v / 1000) * 1000
+// Escalera de arranque para una categoría que tiene costo pero no tiene escalera de precios
+export function escaleraSugerida(costo, margen = MARGEN_SUGERIDO) {
+  if (!costo?.valor) return null
+  return { unidad: costo.unidad, moneda: costo.moneda, minimo: 0, sugerida: true,
+    escalones: [{ desde: costo.unidad === 'unidad' ? 1 : 0, precio: redondear(costo.valor * (1 + Number(margen || 0) / 100), costo.moneda) }] }
+}
+const sinMarca = e => { if (!e) return e; const { sugerida, ...r } = e; return r }
+
 export function useTarifas() {
-  const [escaleras, setEscaleras] = useState(ESCALERAS_LRM)
+  const [propias, setEscaleras] = useState(ESCALERAS_LRM)   // las escaleras que tú guardaste
   const [costos, setCostos] = useState(COSTOS_LRM)
+  const [margen, setMargen] = useState(MARGEN_SUGERIDO)
   const [listo, setListo] = useState(false)
+  // Toda categoría con costo en la tabla maestra tiene escalera: la tuya, o la sugerida (costo + margen)
+  const escaleras = useMemo(() => {
+    const out = { ...propias }
+    costos.forEach(c => {
+      if (!c.categoria || c.categoria === 'General' || out[c.categoria]) return
+      const sug = escaleraSugerida(costos.find(x => x.categoria === c.categoria && !x.bodega_id) || c, margen)
+      if (sug) out[c.categoria] = sug
+    })
+    return out
+  }, [propias, costos, margen])
   const recargar = async () => {
-    const { data } = await supabase.from('lrm_ajustes').select('clave, valor').in('clave', ['escaleras', 'costos'])
+    const { data } = await supabase.from('lrm_ajustes').select('clave, valor').in('clave', ['escaleras', 'costos', 'margen_sugerido'])
     let crudas = null, hayCostos = false
     ;(data || []).forEach(r => {
       try {
         const v = JSON.parse(r.valor)
         if (r.clave === 'escaleras') { crudas = v; setEscaleras(limpiarEscaleras({ ...ESCALERAS_LRM, ...v })) }
         if (r.clave === 'costos' && Array.isArray(v)) { hayCostos = true; setCostos(v) }
+        if (r.clave === 'margen_sugerido' && v !== null && !isNaN(Number(v))) setMargen(Number(v))
       } catch { /* se quedan las de arranque */ }
     })
     // Primera vez: si los costos estaban dentro de las escaleras viejas, se pasan a la tabla maestra
@@ -97,8 +121,9 @@ export function useTarifas() {
     setListo(true)
   }
   useEffect(() => { recargar() }, [])
+  // Solo se guardan las que tú definiste o cambiaste; las sugeridas se siguen calculando solas
   const guardarEscaleras = async (nuevas) => {
-    const limpias = limpiarEscaleras(nuevas)
+    const limpias = limpiarEscaleras(Object.fromEntries(Object.entries(nuevas).filter(([, v]) => !v?.sugerida)))
     setEscaleras(limpias)
     return supabase.from('lrm_ajustes').upsert({ clave:'escaleras', valor: JSON.stringify(limpias) })
   }
@@ -106,7 +131,11 @@ export function useTarifas() {
     setCostos(nuevos)
     return supabase.from('lrm_ajustes').upsert({ clave:'costos', valor: JSON.stringify(nuevos) })
   }
-  return { escaleras, costos, listo, recargar, guardarEscaleras, guardarCostos }
+  const guardarMargen = async (m) => {
+    setMargen(Number(m) || 0)
+    return supabase.from('lrm_ajustes').upsert({ clave:'margen_sugerido', valor: JSON.stringify(Number(m) || 0) })
+  }
+  return { escaleras, propias, costos, margen, listo, recargar, guardarEscaleras, guardarCostos, guardarMargen }
 }
 
 // Las escaleras viejas traían el costo adentro: ahora el costo vive en la tabla maestra
