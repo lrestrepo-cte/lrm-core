@@ -14,10 +14,14 @@ const ROLES_RV = [
   { id:'gerente',  nombre:'Gerente',  desc:'Administración y reportes', emoji:'📊' },
 ]
 
-// Acceso del dueño. TEMPORAL: pasa a Supabase Auth en la fase de usuarios y roles.
-const CEOS = [
-  { id:1, nombre:'Luis Restrepo', email:'luis@zabu.co', password:'zabu2026', rol:'ceo', negocio:'lrm', carrito:null },
-]
+// El dueño entra con Supabase Auth (correo y contraseña guardados en Supabase, no en el código).
+// Solo pasa quien esté en core_usuarios con rol 'dueno'.
+export async function perfilDueno(user) {
+  if (!user) return null
+  const { data } = await supabase.from('core_usuarios').select('nombre, rol').eq('user_id', user.id).maybeSingle()
+  if (!data || data.rol !== 'dueno') return null
+  return { id: user.id, nombre: data.nombre || 'Luis Restrepo', email: user.email, rol:'ceo', negocio:'lrm', carrito:null }
+}
 
 // RV Sports todavía no tiene su propia tabla de empleados — se mantiene el PIN demo
 // hasta que se construya el módulo de personal de RV (mismo patrón que ZABÚ).
@@ -67,14 +71,15 @@ export default function Login({ onLogin }) {
 
   const destino = () => ({ espacio: espacio || 'business', negocio })
 
-  const loginCEO = () => {
-    setLoading(true)
-    setTimeout(() => {
-      const user = CEOS.find(u => u.email === email.trim().toLowerCase() && u.password === password)
-      if (user) onLogin(user, destino())
-      else setError('Correo o contraseña incorrectos')
-      setLoading(false)
-    }, 500)
+  const loginCEO = async () => {
+    if (!email.trim() || !password) return setError('Escribe tu correo y tu contraseña')
+    setLoading(true); setError('')
+    const { data, error: err } = await supabase.auth.signInWithPassword({ email: email.trim().toLowerCase(), password })
+    if (err) { setLoading(false); return setError('Correo o contraseña incorrectos') }
+    const user = await perfilDueno(data.user)
+    setLoading(false)
+    if (user) onLogin(user, destino())
+    else { await supabase.auth.signOut(); setError('Este usuario no tiene acceso de dueño') }
   }
 
   // Busca el PIN en zabu_empleados (real) para ZABÚ, o en el demo fijo para RV.

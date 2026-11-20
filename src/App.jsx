@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import Login from './pages/Login'
+import Login, { perfilDueno } from './pages/Login'
+import { supabase } from './lib/supabase'
 import Sidebar from './components/Sidebar'
 import Topbar from './components/Topbar'
 import LRMDashboard from './pages/LRMDashboard'
@@ -15,7 +16,7 @@ import { AperturaTurno, PanelTurno } from './modules/zabu/ZabuTurno'
 import { useBreakpoint } from './hooks/useBreakpoint'
 import PuertasCore from './components/PuertasCore'
 import CapitanEnSilencio from './pages/CapitanEnSilencio'
-import { negocioPorId, ponerHash } from './lib/espacios'
+import { negocioPorId, negocioPorSlug, slugDesdeHash, ponerHash } from './lib/espacios'
 
 const TITULOS = {
   dashboard:     'Business · Grupo LRM',
@@ -104,14 +105,24 @@ function CocinaApp({ usuario, onCerrarSesion }) {
 }
 
 export default function App() {
-  useEffect(() => { localStorage.removeItem('lrm_usuario') }, [])
   const [usuario,     setUsuario]     = useState(null)
+  const [revisando,   setRevisando]   = useState(true)    // revisando si ya hay sesión abierta
   const [vista,       setVista]       = useState('core')   // core | lrm | zabu | rv | inversiones | lrm-inversiones | myspace | capitan
   const [navActivo,   setNavActivo]   = useState('dashboard')
   const [negNav,      setNegNav]      = useState('dashboard')
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const { isMobile, isTablet } = useBreakpoint()
+
+  // Si el dueño ya había iniciado sesión en este equipo, entra directo
+  useEffect(() => {
+    localStorage.removeItem('lrm_usuario')
+    supabase.auth.getSession().then(async ({ data }) => {
+      const u = await perfilDueno(data.session?.user)
+      if (u) handleLogin(u, { negocio: negocioPorSlug(slugDesdeHash())?.activo ? negocioPorSlug(slugDesdeHash()).id : null })
+      setRevisando(false)
+    })
+  }, [])
   const esMovilOTablet = isMobile || isTablet
 
   // Entra a un negocio y deja el link directo en la barra (#/lrm-trade, #/zabu, ...)
@@ -134,13 +145,14 @@ export default function App() {
     else if (destino.espacio === 'myspace' || destino.espacio === 'capitan') setVista(destino.espacio)
     else setVista('core')
   }
-  const cerrarSesion  = () => { localStorage.removeItem('lrm_usuario'); setUsuario(null); setVista('core'); setNavActivo('dashboard'); setSidebarOpen(false); ponerHash('') }
+  const cerrarSesion  = () => { supabase.auth.signOut(); localStorage.removeItem('lrm_usuario'); setUsuario(null); setVista('core'); setNavActivo('dashboard'); setSidebarOpen(false); ponerHash('') }
   const handleNav     = (id) => {
     if (vista==='zabu'||vista==='rv') { setNegNav(id); setNavActivo(id) }
     else { setNavActivo(id) }
     setSidebarOpen(false)
   }
 
+  if (revisando)                return <div style={{ minHeight:'100vh', background:'#0a0a0a' }} />
   if (!usuario)                 return <Login onLogin={handleLogin} />
   if (usuario.rol==='vendedor') return <VendedorApp usuario={usuario} onCerrarSesion={cerrarSesion} />
   if (usuario.rol==='cocina')   return <CocinaApp   usuario={usuario} onCerrarSesion={cerrarSesion} />
