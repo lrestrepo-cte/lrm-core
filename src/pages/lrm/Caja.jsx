@@ -371,7 +371,7 @@ function Fila({ titulo, sub, subColor, valor, color, accion }) {
 }
 
 // ── Formulario de movimiento ────────────────────────────────────────────────
-function ModalMovimiento({ tipo, inicial = {}, cuentas, clientes, proveedores, cerrado, onCerrar, onGuardado }) {
+export function ModalMovimiento({ tipo, inicial = {}, cuentas, clientes, proveedores, cerrado, onCerrar, onGuardado }) {
   const t = TIPOS[tipo]
   const usaCliente   = tipo === 'abono_cliente' || tipo === 'cobro_cliente'
   const usaProveedor = tipo === 'pago_proveedor' || tipo === 'costo_proveedor'

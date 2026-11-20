@@ -104,6 +104,7 @@ const NAV_TRADE = [
   ] },
   { seccion:'Finanzas',  items:[
       { id:'caja',        label:'Caja',           icono:'caja',       activo:true  },
+      { id:'cartera',     label:'Cartera',        icono:'cartera',    activo:true  },
   ] },
   { seccion:'Sistema',   items:[ { id:'ajustes',     label:'Ajustes',        icono:'ajustes',    activo:true  } ] },
 ]
@@ -119,6 +120,7 @@ export function IconoNav({ tipo, size = 16 }) {
     case 'cargas':      return <svg {...p}><path d="M21 8 12 3 3 8v8l9 5 9-5z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>
     case 'operaciones': return <svg {...p}><path d="M4 7h16M4 12h16M4 17h10"/></svg>
     case 'caja':        return <svg {...p}><rect x="2.5" y="6" width="19" height="13" rx="2"/><path d="M2.5 10h19"/><path d="M16 14.5h2.5"/></svg>
+    case 'cartera':     return <svg {...p}><path d="M6 2.5h12v19l-3-2-3 2-3-2-3 2z"/><path d="M9 7.5h6M9 11h6M9 14.5h3.5"/></svg>
     case 'ajustes':     return <svg {...p}><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.2 6.2l2.1 2.1M17.7 15.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 17.8l2.1-2.1M17.7 8.3l2.1-2.1"/></svg>
     case 'cobro':       return <svg {...p}><path d="M6 2.5h9l4 4v15H6z"/><path d="M15 2.5v4h4M9 12h7M9 16h5"/></svg>
     default: return null

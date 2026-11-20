@@ -631,7 +631,7 @@ function ModalBodegas({ bodegas, onCerrar, onCambio }) {
 const DICCIONARIO = [
   [/\b(CRTNS?|CTNS?|CARTONS?|CARTS?|BOX(ES)?|BXS?|CAJAS?)\b/gi, 'cajas'], [/\b(PCS|PC|PIECES?|PZS?)\b/gi, 'piezas'],
   [/\b(PALLETS?|PLTS?)\b/gi, 'estibas'], [/\b(BAGS?)\b/gi, 'bolsas'], [/\bWITH\b/gi, 'con'], [/\bAND\b/gi, 'y'],
-  [/\bPERFUMES?\b/gi, 'perfumes'], [/\bFRAGRANCES?\b/gi, 'perfumes'], [/\bCOSMETICS?\b/gi, 'cosméticos'], [/\bMAKE ?UP\b/gi, 'maquillaje'],
+  [/\bPERF[UE]{1,3}M[EI]{0,2}S?\b/gi, 'perfumes'], [/\bFRAGRANCES?\b/gi, 'perfumes'], [/\bCOSMETICS?\b/gi, 'cosméticos'], [/\bMAKE ?UP\b/gi, 'maquillaje'],
   [/\b(CELL ?PHONES?|PHONES?|CELLULARS?)\b/gi, 'celulares'], [/\b(LAPTOPS?|COMPUTERS?)\b/gi, 'computadores'], [/\bTABLETS?\b/gi, 'tablets'],
   [/\bELECTRONICS?\b/gi, 'electrónica'], [/\bCLOTH(ES|ING)\b/gi, 'ropa'], [/\bSHOES?\b/gi, 'zapatos'], [/\b(AUTO )?PARTS?\b/gi, 'repuestos'],
   [/\bACCESSOR(Y|IES)\b/gi, 'accesorios'], [/\bGENERAL MERCHANDISE\b/gi, 'mercancía general'], [/\bTOYS?\b/gi, 'juguetes'],
