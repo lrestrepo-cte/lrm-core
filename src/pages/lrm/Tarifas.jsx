@@ -24,7 +24,7 @@ const Titulo = ({ children, sub }) => (
 
 // Costo en COP por unidad de la escalera (para mostrar el margen de cada escalón)
 function costoPorUnidad(costo, unidadEsc, trm) {
-  if (!costo?.valor) return null
+  if (!costo?.valor || (costo.moneda === 'USD' && !trm)) return null   // sin TRM no se puede calcular
   const enCOP = costo.moneda === 'USD' ? costo.valor * (trm || 0) : costo.valor
   if (costo.unidad === unidadEsc) return enCOP
   if (costo.unidad === 'kg' && unidadEsc === 'lb') return enCOP * LB_A_KG
@@ -125,8 +125,13 @@ function PorCliente({ clientes, escaleras, costos, trm, onGuardado }) {
     return [...new Set(s)]
   }, [cli, tarifas])
   const cambiado = JSON.stringify(tarifas) !== JSON.stringify(cli?.tarifas || {})
+  // Solo se guarda como precio propio lo que de verdad cambiaste; lo demás sigue al general
+  const igual = (a, b) => JSON.stringify(normal(a)) === JSON.stringify(normal(b))
+  const normal = e => e && { unidad: e.unidad, moneda: e.moneda, minimo: Number(e.minimo || 0), aiu: !!e.aiu, escalones: ordenar(e).map(x => ({ desde: Number(x.desde), precio: Number(x.precio) })) }
   const guardar = async () => {
-    const { error } = await supabase.from('lrm_clientes').update({ tarifas }).eq('id', cli.id)
+    const limpias = Object.fromEntries(Object.entries(tarifas).filter(([cat, esc]) => !igual(esc, escaleraPara(null, escaleras, cat).esc)))
+    setTarifas(limpias)
+    const { error } = await supabase.from('lrm_clientes').update({ tarifas: limpias, nicho: categorias.join(', ') || cli.nicho }).eq('id', cli.id)
     setEstado(error ? 'No se pudo guardar: ' + error.message : '✓ Tarifas guardadas')
     if (!error) onGuardado()
   }
@@ -155,7 +160,7 @@ function PorCliente({ clientes, escaleras, costos, trm, onGuardado }) {
             <div className="panel" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, flexWrap:'wrap' }}>
               <div>
                 <div style={{ fontSize:17, fontWeight:800, color:'var(--text)' }}>{cli.nombre}</div>
-                <div style={{ fontSize:12, color:'var(--text3)' }}>Cada categoría usa su precio propio; si no tiene, usa el general.</div>
+                <div style={{ fontSize:12, color:'var(--text3)' }}>Cada categoría arranca con el precio general. Lo que cambies queda como precio propio de este cliente.</div>
               </div>
               <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
                 <select value={extra} onChange={e => { const n = e.target.value; if (!n) return; setTarifas(p => ({ ...p, [n]: copiar(escaleraPara(null, escaleras, n).esc) })); setExtra('') }} style={{ ...iStyle, width:'auto', marginTop:0 }}>
@@ -170,20 +175,16 @@ function PorCliente({ clientes, escaleras, costos, trm, onGuardado }) {
             {propuesta && <PropuestaTarifas cliente={cli} categorias={categorias} escalera={cat => escaleraPara({ tarifas }, escaleras, cat).esc} trm={trm} onCerrar={() => setPropuesta(false)} />}
             {categorias.length === 0 && <div className="panel" style={{ fontSize:13, color:'var(--text3)' }}>Este cliente no tiene categorías. Márcalas en el CRM ("Qué compra") o agrégalas con "+ Otra categoría".</div>}
             {categorias.map(cat => {
-              const propia = tarifas[cat]
               const general = escaleraPara(null, escaleras, cat).esc
+              const propia = tarifas[cat] && !igual(tarifas[cat], general) ? tarifas[cat] : null
               const costo = costoPara(costos, null, cat)
               return (
                 <div key={cat} className="panel" style={{ border: propia ? '1px solid var(--gold-border)' : undefined }}>
                   <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom: propia ? 12 : 4 }}>
-                    <div style={{ fontSize:14, fontWeight:800, color:'var(--text)' }}>{cat} <span style={{ fontSize:11, fontWeight:600, color: propia ? 'var(--gold)' : 'var(--text3)' }}>· {propia ? 'precio propio' : 'usa el general'}</span></div>
-                    {propia
-                      ? <button onClick={() => setTarifas(p => { const { [cat]: _, ...r } = p; return r })} className="btn" style={{ fontSize:11, width:'auto', color:'var(--red)' }}>Quitar (usar el general)</button>
-                      : <button className="btn-gold tar-propia" onClick={() => setTarifas(p => ({ ...p, [cat]: copiar(general) }))} style={{ fontSize:11, width:'auto', flex:'none' }}>Darle precio propio</button>}
+                    <div style={{ fontSize:14, fontWeight:800, color:'var(--text)' }}>{cat} <span style={{ fontSize:11, fontWeight:600, color: propia ? 'var(--gold)' : 'var(--text3)' }}>· {propia ? 'precio propio de este cliente' : 'precio general (cámbialo aquí si quieres)'}</span></div>
+                    {propia && <button onClick={() => setTarifas(p => { const { [cat]: _, ...r } = p; return r })} className="btn" style={{ fontSize:11, width:'auto', color:'var(--red)' }}>↺ Volver al general</button>}
                   </div>
-                  {propia
-                    ? <EditorEscalera esc={propia} costo={costo} trm={trm} onChange={nueva => setTarifas(p => ({ ...p, [cat]: nueva }))} />
-                    : <div style={{ fontSize:12, color:'var(--text3)' }}>Por {UNIDAD_CORTA[general.unidad]}: {resumen(general)}</div>}
+                  <EditorEscalera esc={tarifas[cat] || general} costo={costo} trm={trm} onChange={nueva => setTarifas(p => ({ ...p, [cat]: nueva }))} />
                 </div>
               )
             })}
