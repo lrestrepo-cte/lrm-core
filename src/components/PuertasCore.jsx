@@ -1,7 +1,7 @@
 // Las tres puertas de LRM Core: Business, MySpace y Capitán en Silencio.
 // Se usa en la entrada (antes del login) y en el inicio (ya dentro).
-import { ESPACIOS } from '../lib/espacios'
-import { LogoLRM } from './IconosMarca'
+import { ESPACIOS, NEGOCIOS } from '../lib/espacios'
+import { LogoLRM, IconoNegocio } from './IconosMarca'
 
 export function IconoEspacio({ tipo, size = 26 }) {
   const p = { width:size, height:size, viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', strokeWidth:1.6, strokeLinecap:'round', strokeLinejoin:'round' }
@@ -43,6 +43,36 @@ export default function PuertasCore({ onElegir, subtitulo }) {
           ))}
         </div>
 
+        <footer className="core-pie">Barranquilla · LRM Core Matrix</footer>
+      </div>
+    </div>
+  )
+}
+// Ya dentro: Business → elige el negocio (mismo listado de la entrada)
+export function PuertasNegocios({ onElegir, onVolver }) {
+  return (
+    <div className="core-wrap">
+      <div className="core-glow" aria-hidden="true" />
+      <div className="core-inner">
+        <button type="button" onClick={onVolver} className="btn" style={{ marginBottom:18, width:'auto', alignSelf:'flex-start' }}>← LRM Core</button>
+        <header className="core-head">
+          <div className="core-eyebrow">LRM CORE</div>
+          <h1 className="core-title">Business</h1>
+          <p className="core-sub">Elige el negocio</p>
+        </header>
+        <div className="core-puertas">
+          {NEGOCIOS.map((n, i) => (
+            <button key={n.id} type="button" className="core-puerta" disabled={!n.activo} onClick={() => n.activo && onElegir(n.id)}
+              style={{ '--acento': n.color, animationDelay: `${i * 50}ms`, ...(n.activo ? {} : { opacity:0.45, cursor:'default' }) }}>
+              <span className="core-puerta-icono"><IconoNegocio id={n.id} size={24} color={n.color} /></span>
+              <span className="core-puerta-txt">
+                <span className="core-puerta-nombre">{n.nombre}</span>
+                <span className="core-puerta-desc">{n.activo ? n.desc : 'Próximamente'}</span>
+              </span>
+              <span className="core-puerta-flecha" aria-hidden="true">{n.activo ? '→' : ''}</span>
+            </button>
+          ))}
+        </div>
         <footer className="core-pie">Barranquilla · LRM Core Matrix</footer>
       </div>
     </div>

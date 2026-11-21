@@ -14,7 +14,7 @@ import RVApp from './modules/rv/RVApp'
 import MySpace from './pages/MySpace'
 import { AperturaTurno, PanelTurno } from './modules/zabu/ZabuTurno'
 import { useBreakpoint } from './hooks/useBreakpoint'
-import PuertasCore from './components/PuertasCore'
+import PuertasCore, { PuertasNegocios } from './components/PuertasCore'
 import CapitanEnSilencio from './pages/CapitanEnSilencio'
 import { negocioPorId, negocioPorSlug, slugDesdeHash, ponerHash } from './lib/espacios'
 
@@ -133,7 +133,7 @@ export default function App() {
     ponerHash(n?.slug || '')
   }
   const irCore    = () => { setVista('core'); setNavActivo('dashboard'); setSidebarOpen(false); ponerHash('') }
-  const volverLRM = () => { setVista('lrm'); setNavActivo('dashboard'); setSidebarOpen(false); ponerHash('') }
+  const volverLRM = () => { setVista('negocios'); setNavActivo('dashboard'); setSidebarOpen(false); ponerHash('') }
   const elegirEspacio = (id) => {
     if (id === 'business') return volverLRM()
     setVista(id); setSidebarOpen(false); ponerHash('')
@@ -159,6 +159,9 @@ export default function App() {
 
   // LRM Core: las tres puertas
   if (vista === 'core') return <PuertasCore onElegir={elegirEspacio} subtitulo={`Hola, ${usuario.nombre?.split(' ')[0] || ''}. ¿A dónde vamos?`} />
+
+  // Business: elegir el negocio
+  if (vista === 'negocios') return <PuertasNegocios onElegir={entrarNegocio} onVolver={irCore} />
 
   // MySpace y Capitán en Silencio: espacios privados, sin la barra de negocios
   if (vista === 'myspace' || vista === 'capitan') return (
