@@ -12,6 +12,7 @@ import { CONTENEDORES } from './Aliados'
 import { useDatosLRM } from './datosLRM'
 import { useTarifas, escaleraPara, costoPara, escalonDe, tramoTexto, CONSOLIDADO } from './tarifasLRM'
 import ModalListaEmpaque from './ListaEmpaque'
+import CotizacionConsolidado from './CotizacionConsolidado'
 import { descargarExcel } from './leerListaEmpaque'
 
 // Precio por m³ de un item, en su moneda (columnas nuevas tarifa_m3 + moneda; las viejas eran tarifa_m3_usd)
@@ -134,8 +135,10 @@ function ModalConsolidado({ cons, tarifas, onCerrar, onGuardado, onBorrado }) {
   const guardar = async () => {
     if (!f.nombre.trim()) return setError('Ponle un nombre, ej. "Shanghái · diciembre".')
     const datos = { nombre: f.nombre.trim(), origen: f.origen, destino: f.destino, fecha_cierre: f.fecha_cierre || null, notas: f.notas || null }
+    if (f.etd || f.eta || (cons && 'etd' in cons)) Object.assign(datos, { etd: f.etd || null, eta: f.eta || null })
+    if (f.etd && f.eta && f.eta < f.etd) return setError('La llegada (ETA) no puede ser antes de la salida (ETD).')
     const r = f.id ? await supabase.from('lrm_consolidados').update(datos).eq('id', f.id).select().single() : await supabase.from('lrm_consolidados').insert(datos).select().single()
-    if (r.error) return setError('No se pudo guardar: ' + r.error.message)
+    if (r.error) return setError(/etd|eta/.test(r.error.message) ? 'Para guardar las fechas de salida y llegada corre en Supabase el archivo 17_lrm_consolidado_fechas.sql.' : 'No se pudo guardar: ' + r.error.message)
     onGuardado(r.data?.id || f.id)
   }
   return (
@@ -147,6 +150,16 @@ function ModalConsolidado({ cons, tarifas, onCerrar, onGuardado, onBorrado }) {
           <div><Etiqueta>Origen</Etiqueta><input id="cs-origen" list="cs-origenes" value={f.origen} onChange={set('origen')} style={iStyle} /><datalist id="cs-origenes">{origenes.map(o => <option key={o} value={o} />)}</datalist></div>
           <div><Etiqueta>Destino</Etiqueta><input value={f.destino} onChange={set('destino')} style={iStyle} /></div>
           <div><Etiqueta>Recibe carga hasta</Etiqueta><input type="date" value={f.fecha_cierre || ''} onChange={set('fecha_cierre')} style={iStyle} /></div>
+          <div><Etiqueta>Salida estimada (ETD)</Etiqueta><input id="cs-etd" type="date" value={f.etd || ''} onChange={set('etd')} style={iStyle} /></div>
+          <div><Etiqueta>Llegada estimada (ETA)</Etiqueta><input id="cs-eta" type="date" value={f.eta || ''} onChange={set('eta')} style={iStyle} /></div>
+          {(() => {
+            // Sugerencia de llegada: salida + días de tránsito que te dio tu aliado para esa ruta
+            const dt = tarifas.filter(t => t.origen === f.origen && t.destino === f.destino && Number(t.transito_dias)).map(t => Number(t.transito_dias))
+            if (!f.etd || !dt.length) return null
+            const d = Math.max(...dt), x = new Date(f.etd + 'T12:00:00'); x.setDate(x.getDate() + d)
+            const sug = x.toISOString().slice(0, 10)
+            return f.eta === sug ? null : <div style={{ gridColumn:'1 / -1', fontSize:11, color:'var(--text3)' }}>Tu aliado da {d} días de tránsito: llegaría el {fechaCorta(sug)}. <button type="button" onClick={() => setF(p => ({ ...p, eta: sug }))} className="btn" style={{ fontSize:11, padding:'2px 8px', width:'auto' }}>Usar</button></div>
+          })()}
         </div>
         <div style={{ marginBottom:14 }}><Etiqueta>Notas</Etiqueta><input value={f.notas || ''} onChange={set('notas')} style={iStyle} /></div>
         {error && <div style={{ fontSize:12, color:'var(--red)', marginBottom:10 }}>{error}</div>}
@@ -166,6 +179,7 @@ function Detalle({ cons, items: todos, productos, tarifas, clientes, onVolver, o
   const canceladas = todos.filter(i => !activa(i))
   const nProd = id => (productos || []).filter(p => p.item_id === id).length
   const [lista, setLista] = useState(null)
+  const [cotizar, setCotizar] = useState(null)
   const [bajando, setBajando] = useState(false)
   const divisas = useDivisas()
   const trm = divisas?.find(d => d.id === 'USD')?.hoy || 0
@@ -229,7 +243,7 @@ function Detalle({ cons, items: todos, productos, tarifas, clientes, onVolver, o
       <div className="panel" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, flexWrap:'wrap' }}>
         <div>
           <button onClick={onVolver} className="btn" style={{ fontSize:11, padding:'3px 9px', width:'auto', marginBottom:6 }}>← Consolidados</button>
-          <div style={{ fontSize:11, color:'var(--text3)' }}>CONS-{String(cons.numero || '').padStart(3, '0')} · {cons.origen} → {cons.destino}{cons.fecha_cierre ? ` · recibe hasta ${fechaCorta(cons.fecha_cierre)}` : ''}</div>
+          <div style={{ fontSize:11, color:'var(--text3)' }}>CONS-{String(cons.numero || '').padStart(3, '0')} · {cons.origen} → {cons.destino}{cons.fecha_cierre ? ` · recibe hasta ${fechaCorta(cons.fecha_cierre)}` : ''}{cons.etd ? ` · sale ${fechaCorta(cons.etd)}` : ''}{cons.eta ? ` · llega ${fechaCorta(cons.eta)}` : ''}</div>
           <div style={{ fontSize:20, fontWeight:800, color:'var(--text)' }}>{cons.nombre}</div>
         </div>
         <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
@@ -314,6 +328,7 @@ function Detalle({ cons, items: todos, productos, tarifas, clientes, onVolver, o
                 <div style={{ fontSize:14, fontWeight:800, color:'var(--text)' }}>{c.nombre} <span style={{ fontSize:12, fontWeight:400, color:'var(--text3)' }}>· {fmt(c.m3, 2)} m³ · {fmt(c.kg, 0)} kg{c.bultos ? ` · ${c.bultos} bultos` : ''} · {fmt(m3 ? c.m3 / m3 * 100 : 0, 0)}% del envío</span></div>
                 <div style={{ display:'flex', gap:6, alignItems:'center' }}>
                   <b style={{ color:'var(--gold)' }}>{cop(c.total)}</b>
+                  <button onClick={() => setCotizar(c)} className="btn-gold cs-cotizar" style={{ fontSize:11, padding:'4px 9px', width:'auto' }}>📄 Cotización</button>
                   {wa && <a href={wa} target="_blank" rel="noreferrer" className="btn" style={{ fontSize:11, padding:'4px 9px', textDecoration:'none', color:'#25D366' }}>WhatsApp</a>}
                   <button onClick={() => copiar(txt, c.id)} className="btn" style={{ fontSize:11, padding:'4px 9px', width:'auto' }}>{copiado === c.id ? '✓' : 'Copiar'}</button>
                 </div>
@@ -350,6 +365,7 @@ function Detalle({ cons, items: todos, productos, tarifas, clientes, onVolver, o
         )}
       </div>
 
+      {cotizar && <CotizacionConsolidado cons={cons} cliente={cotizar} valorItem={valorItem} tarifaDe={tarifaItem} trm={trmUso} onCerrar={() => { setCotizar(null); onCambio() }} />}
       {lista && <ModalListaEmpaque item={lista} consolidado={cons} cliente={nombreCli(lista.cliente_id)} onCerrar={() => setLista(null)} onGuardado={() => { setLista(null); onCambio() }} />}
       {item && <ModalItem item={item} clientes={clientes} items={items} conLista={!!productos} onLista={() => { const i = item; setItem(null); setLista(i) }} escaleras={escaleras} trm={trmUso} onCerrar={() => setItem(null)} onGuardado={() => { setItem(null); onCambio() }} />}
       {editar && <ModalConsolidado cons={cons} tarifas={tarifas} onCerrar={() => setEditar(false)} onGuardado={() => { setEditar(false); onCambio() }} onBorrado={() => { setEditar(false); onVolver(); onCambio() }} />}
