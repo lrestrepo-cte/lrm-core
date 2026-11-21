@@ -104,6 +104,7 @@ const NAV_TRADE = [
   ] },
   { seccion:'Logística', items:[
       { id:'logistica',   label:'Cargas y guías', icono:'cargas',     activo:true  },
+      { id:'servicios',   label:'Servicios',      icono:'servicios', activo:true  },
       { id:'aliados',     label:'Aliados y fletes', icono:'aliados',   activo:true  },
       { id:'consolidador', label:'Consolidador',  icono:'consolidador', activo:true },
   ] },
@@ -126,6 +127,7 @@ export function IconoNav({ tipo, size = 16 }) {
     case 'operaciones': return <svg {...p}><path d="M4 7h16M4 12h16M4 17h10"/></svg>
     case 'caja':        return <svg {...p}><rect x="2.5" y="6" width="19" height="13" rx="2"/><path d="M2.5 10h19"/><path d="M16 14.5h2.5"/></svg>
     case 'tarifas':     return <svg {...p}><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></svg>
+    case 'servicios':   return <svg {...p}><path d="M2.5 7h11v9h-11z"/><path d="M13.5 10h4l3 3.2V16h-7"/><circle cx="6.5" cy="17.5" r="1.8"/><circle cx="16.5" cy="17.5" r="1.8"/></svg>
     case 'aliados':     return <svg {...p}><path d="M3 15.5h13l3.5-4H6.5"/><path d="M4 15.5l1.5 4h12l2-4"/><path d="M9 11.5V7h5v4.5"/><path d="M11.5 7V4"/></svg>
     case 'consolidador': return <svg {...p}><rect x="2.5" y="7" width="19" height="11" rx="1.5"/><path d="M7 7v11M11.5 7v11M16 7v11"/><path d="M6 4h12"/></svg>
     case 'cartera':     return <svg {...p}><path d="M6 2.5h12v19l-3-2-3 2-3-2-3 2z"/><path d="M9 7.5h6M9 11h6M9 14.5h3.5"/></svg>

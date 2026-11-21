@@ -37,6 +37,8 @@ export default function Rastreo({ token }) {
   }, [token])
 
   const consolidados = d?.consolidados || []
+  const servicios = d?.servicios || []
+  const srvActivos = servicios.filter(x => x.activo)
   const consActivos = consolidados.filter(x => x.estado !== 'entregado')
   const activas = (d?.cargas || []).filter(c => c.etapa !== 'entregada')
   const entregadas = (d?.cargas || []).filter(c => c.etapa === 'entregada')
@@ -63,9 +65,10 @@ export default function Rastreo({ token }) {
           <>
             <h1 style={{ fontSize:26, fontWeight:800, margin:'0 0 4px', letterSpacing:-0.5 }}>Hola{d.cliente ? `, ${d.cliente}` : ''}</h1>
             <p style={{ fontSize:14, color:C.suave, margin:'0 0 22px' }}>
-              {activas.length + consActivos.length ? `Tienes ${activas.length + consActivos.length} ${activas.length + consActivos.length === 1 ? 'envío en curso' : 'envíos en curso'}.` : 'No tienes cargas en camino en este momento.'}
+              {activas.length + consActivos.length + srvActivos.length ? `Tienes ${activas.length + consActivos.length + srvActivos.length} ${activas.length + consActivos.length + srvActivos.length === 1 ? 'envío en curso' : 'envíos en curso'}.` : 'No tienes cargas en camino en este momento.'}
             </p>
 
+            {srvActivos.map(x => <Servicio key={'s' + x.numero} x={x} />)}
             {consActivos.map((x, k) => <Consolidado key={'c' + k} x={x} />)}
             {activas.map(c => <Carga key={c.guia + c.fecha_recibo} c={c} />)}
 
@@ -202,6 +205,35 @@ function Consolidado({ x }) {
           {x.fecha_cierre && <div style={{ fontSize:12, color:C.suave, marginTop:4 }}>Recibimos carga hasta el {fecha(x.fecha_cierre)}.</div>}
         </div>
       )}
+    </Caja>
+  )
+}
+// Servicio de transporte / coteros / escolta
+const ETAPAS_SRV = [
+  { id:'aceptado',   corto:'Confirmado' },
+  { id:'programado', corto:'Programado' },
+  { id:'en_curso',   corto:'En camino' },
+  { id:'completado', corto:'Completado' },
+]
+function Servicio({ x }) {
+  const i = Math.max(0, ETAPAS_SRV.findIndex(e => e.id === x.estado))
+  return (
+    <Caja>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:14 }}>
+        <div style={{ minWidth:0 }}>
+          <div style={{ fontSize:12, color:C.suave }}>Servicio SRV-{String(x.numero || '').padStart(4, '0')}</div>
+          <div style={{ fontSize:17, fontWeight:800, marginTop:2 }}>{x.titulo || [x.origen, x.destino].filter(Boolean).join(' → ') || 'Servicio'}</div>
+          {(x.origen || x.destino) && <div style={{ fontSize:13, color:C.suave, marginTop:2 }}>{[x.origen, x.destino].filter(Boolean).join(' → ')}</div>}
+        </div>
+        <span style={{ flexShrink:0, fontSize:12, fontWeight:700, padding:'6px 10px', borderRadius:999, background:C.oroClaro, color:'#7A5E14' }}>{ETAPAS_SRV[i].corto}</span>
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns:`repeat(${ETAPAS_SRV.length}, 1fr)`, gap:4 }}>
+        {ETAPAS_SRV.map((e, k) => <div key={e.id} style={{ height:6, borderRadius:3, background: k <= i ? C.oro : C.linea }} />)}
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:14 }}>
+        <div style={{ fontSize:13, background:C.fondo, borderRadius:10, padding:'10px 12px' }}><div style={{ fontSize:11, color:C.suave }}>Fecha</div><b>{x.fecha ? fecha(x.fecha) : 'Por confirmar'}{x.hora ? ` · ${x.hora}` : ''}</b></div>
+        <div style={{ fontSize:13, background:C.fondo, borderRadius:10, padding:'10px 12px' }}><div style={{ fontSize:11, color:C.suave }}>Vehículo</div><b>{[x.vehiculo, x.placa].filter(Boolean).join(' · ') || 'Por asignar'}</b>{x.conductor ? <div style={{ fontSize:12, color:C.suave }}>Conductor: {x.conductor}</div> : null}</div>
+      </div>
     </Caja>
   )
 }

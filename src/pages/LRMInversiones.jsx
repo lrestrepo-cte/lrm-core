@@ -8,6 +8,7 @@ import Cartera from './lrm/Cartera'
 import Tarifas from './lrm/Tarifas'
 import Aliados from './lrm/Aliados'
 import Consolidador from './lrm/Consolidador'
+import Servicios from './lrm/Servicios'
 import Cargas from './lrm/Cargas'
 import Ajustes from './lrm/Ajustes'
 import RedComercial from './lrm/RedComercial'
@@ -1615,6 +1616,7 @@ export default function LRMInversiones({ modo = 'trade', tab: tabExterno, onTab 
     comex:       { titulo:'Cotizador',        sub:'Escalera de valor: precio, costo y margen al instante' },
     logistica:   { titulo:'Cargas y guías',   sub:'Recibos de bodega y trazabilidad de cada carga' },
     caja:        { titulo:'Caja',             sub:'Lo que entra, lo que sale y el cierre de cada mes' },
+    servicios:   { titulo:'Servicios',        sub:'Transporte, coteros, escolta y todo lo que mueves: cotiza, vende, programa y cobra' },
     consolidador:{ titulo:'Consolidador',     sub:'Junta la carga de tus clientes y llena contenedores al menor costo' },
     aliados:     { titulo:'Aliados y fletes', sub:'Tus aliados, tarifas de contenedores y cotización con tu margen' },
     tarifas:     { titulo:'Tarifas',          sub:'Tus costos y los precios de cada cliente con escalera de valor' },
@@ -1634,7 +1636,7 @@ export default function LRMInversiones({ modo = 'trade', tab: tabExterno, onTab 
         </div>
         <BurbujasDivisas />
       </div>
-      {tab==='dashboard'   && <Dashboard />}
+      {tab==='dashboard'   && <Dashboard onIr={id => onTab ? onTab(id) : setTabInterno(id)} />}
       {tab==='clientes'    && <LRMClientes />}
       {tab==='comex'       && <Cotizador />}
       {tab==='logistica'   && <Cargas />}
@@ -1643,6 +1645,7 @@ export default function LRMInversiones({ modo = 'trade', tab: tabExterno, onTab 
       {tab==='tarifas'     && <Tarifas />}
       {tab==='aliados'     && <Aliados />}
       {tab==='consolidador' && <Consolidador />}
+      {tab==='servicios'   && <Servicios />}
       {tab==='red'         && <RedComercial />}
       {tab==='ajustes'     && <Ajustes />}
     </div>

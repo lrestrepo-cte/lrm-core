@@ -1,6 +1,7 @@
 // @ts-nocheck
 // LRM Trade Consulting · Dashboard — lo primero que se ve al entrar a la empresa.
 // Lee de Supabase: lrm_clientes, lrm_cargas, lrm_movimientos, lrm_contactos, lrm_temas, lrm_ajustes
+// y (si existen) lrm_consolidados, lrm_consolidado_items, lrm_tarifas_flete, lrm_tarifas_terrestre
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { linkWhatsApp, hoyISO, fechaCorta } from './LRMClientes'
@@ -24,7 +25,9 @@ const EMBUDO = [
   { id:'propuesta',    label:'Propuesta',    color:'#E8A23A' },
   { id:'activo',       label:'Activos',      color:'#4caf50' },
 ]
-const ICONO = { contactar:'📞', cobrar:'💵', pagar:'🧾', carga:'📦' }
+const ICONO = { contactar:'📞', cobrar:'💵', pagar:'🧾', carga:'📦', consolidado:'🚢', novedad:'⚠️', tarifa:'🏷️', servicio:'🚚' }
+const ESTADO_CONS = { abierto:{ l:'Recibiendo carga', c:'#4caf50' }, cerrado:{ l:'Cerrado', c:'#E8A23A' }, despachado:{ l:'En camino', c:'#378ADD' }, entregado:{ l:'Entregado', c:'#8A94A6' } }
+const tarifaVencida = t => t.vigente_hasta && t.vigente_hasta < hoyISO()
 const MESES = ['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre']
 
 // Saldo abierto aplicando los pagos a lo más viejo primero (FIFO)
@@ -41,7 +44,7 @@ function saldoFIFO(cargos, pagos) {
   return { saldo: Math.max(0, sumar(cargos) - sumar(pagos)), masViejo }
 }
 
-function calcular({ clientes, cargas, movs, contactos, temas, ajustes }) {
+function calcular({ clientes, cargas, movs, contactos, temas, ajustes, consolidados = [], itemsCons = [], tarifasAliados = [], servicios = [], lineasSrv = [] }) {
   const hoy = hoyISO()
   const mesActual = hoy.slice(0, 7)
   const cli = Object.fromEntries(clientes.map(c => [c.id, c]))
@@ -98,12 +101,61 @@ function calcular({ clientes, cargas, movs, contactos, temas, ajustes }) {
     else if (c.etapa !== 'entregada' && c.fecha_llegada_est && c.fecha_llegada_est < hoy)
       hoyLista.push({ tipo:'carga', quien:`Guía ${c.guia}`, que:`Debía llegar el ${fechaCorta(c.fecha_llegada_est)} — revisar con ${c.proveedor || 'el proveedor'}`, alerta:true })
   })
+  // Consolidados: novedades, cierres de recepción, salidas, llegadas y facturación pendiente
+  const activosCons = consolidados.filter(c => c.estado !== 'entregado')
+  const consInfo = activosCons.map(c => {
+    const its = itemsCons.filter(i => i.consolidado_id === c.id && i.estado !== 'cancelado')
+    const facturado = sumar(movs.filter(m => m.consolidado_id === c.id && m.tipo === 'cobro_cliente'))
+    const valor = its.reduce((s, i) => s + Number(i.cbm || 0) * Number(i.tarifa_m3 || 0) * (i.moneda === 'USD' && Number(i.tarifa_m3) < 10000 ? 0 : 1), 0)
+    return { ...c, its, m3: its.reduce((s, i) => s + Number(i.cbm || 0), 0), clientes: new Set(its.map(i => i.cliente_id)).size,
+      porLlegar: its.filter(i => i.estado === 'por_llegar').length, novedades: its.filter(i => i.estado === 'novedad'), facturado, valor }
+  })
+  consInfo.forEach(c => {
+    const nom = c.nombre
+    c.novedades.forEach(i => hoyLista.push({ tipo:'novedad', quien:`${nombreCli(i.cliente_id)} · ${nom}`, que:`Novedad: ${i.motivo || i.descripcion || 'revisar'}`, alerta:true, ir:'consolidador' }))
+    if (c.estado === 'abierto' && c.fecha_cierre && c.fecha_cierre <= masDias(hoy, 2))
+      hoyLista.push({ tipo:'consolidado', quien:nom, que:`${c.fecha_cierre < hoy ? 'Se pasó la fecha de recepción (' + fechaCorta(c.fecha_cierre) + ')' : 'Cierra recepción ' + (c.fecha_cierre === hoy ? 'hoy' : 'el ' + fechaCorta(c.fecha_cierre))}${c.porLlegar ? ` · ${c.porLlegar} carga${c.porLlegar === 1 ? '' : 's'} por llegar` : ''}`, alerta: c.fecha_cierre < hoy, ir:'consolidador' })
+    if ((c.estado === 'abierto' || c.estado === 'cerrado') && c.etd && c.etd <= masDias(hoy, 5))
+      hoyLista.push({ tipo:'consolidado', quien:nom, que: c.etd < hoy ? `Debía zarpar el ${fechaCorta(c.etd)}: confirma con el aliado y márcalo En camino` : `Zarpa el ${fechaCorta(c.etd)}`, alerta: c.etd < hoy, ir:'consolidador' })
+    if (c.estado === 'despachado' && c.eta && c.eta <= masDias(hoy, 3))
+      hoyLista.push({ tipo:'consolidado', quien:nom, que: c.eta < hoy ? `Debía llegar el ${fechaCorta(c.eta)}: revisar con el aliado` : `Llega el ${fechaCorta(c.eta)}: coordina entregas`, alerta: c.eta < hoy, ir:'consolidador' })
+    if (c.estado !== 'abierto' && c.its.length && c.facturado < 1)
+      hoyLista.push({ tipo:'cobrar', quien:nom, que:'Sin pasar a Caja: factúrale a los clientes', alerta:true, ir:'consolidador' })
+  })
+  // Servicios: lo de hoy y mañana, lo que falta programar, cotizaciones sin respuesta y saldos
+  const srvCod = sv => `SRV-${String(sv.numero || '').padStart(4, '0')}`
+  const totalSrv = id => lineasSrv.filter(l => l.servicio_id === id).reduce((t, l) => t + Number(l.cantidad || 0) * Number(l.precio || 0), 0)
+  const abonadoSrv = id => sumar(movs.filter(m => m.servicio_id === id && m.tipo === 'abono_cliente'))
+  const manana = masDias(hoy, 1)
+  const proximos = servicios.filter(sv => ['aceptado', 'programado', 'en_curso'].includes(sv.estado))
+    .map(sv => ({ ...sv, cliente: nombreCli(sv.cliente_id), total: totalSrv(sv.id), abonado: abonadoSrv(sv.id) }))
+    .sort((a, b) => (a.fecha || '9999').localeCompare(b.fecha || '9999'))
+  proximos.forEach(sv => {
+    const quien = `${srvCod(sv)} · ${sv.cliente}`
+    if (sv.estado !== 'en_curso' && sv.fecha && sv.fecha < hoy) hoyLista.push({ tipo:'servicio', quien, que:`Era el ${fechaCorta(sv.fecha)} y sigue sin completar`, alerta:true, ir:'servicios' })
+    else if (sv.fecha && sv.fecha <= manana && sv.estado !== 'en_curso') {
+      const sinGente = !sv.conductor && !(Array.isArray(sv.equipo) && sv.equipo.length)
+      hoyLista.push({ tipo:'servicio', quien, que:`${sv.fecha === hoy ? 'Hoy' : 'Mañana'}${sv.hora ? ' ' + sv.hora : ''} · ${sv.titulo || 'servicio'}${sinGente ? ' · falta asignar quién va' : sv.placa ? ' · ' + sv.placa : ''}`, alerta: sinGente, ir:'servicios' })
+    }
+    if (sv.condicion_pago === 'anticipo_50' && sv.abonado < 1 && sv.fecha && sv.fecha <= masDias(hoy, 2))
+      hoyLista.push({ tipo:'cobrar', quien, que:`Falta el anticipo del 50% (${cop(sv.total / 2)}) antes del servicio`, alerta:true, ir:'servicios' })
+  })
+  servicios.filter(sv => sv.estado === 'completado' && totalSrv(sv.id) - abonadoSrv(sv.id) > 1).forEach(sv =>
+    hoyLista.push({ tipo:'cobrar', quien:`${srvCod(sv)} · ${nombreCli(sv.cliente_id)}`, que:`Completado con saldo de ${cop(totalSrv(sv.id) - abonadoSrv(sv.id))}`, monto: totalSrv(sv.id) - abonadoSrv(sv.id), ir:'servicios', telefono: cli[sv.cliente_id]?.telefono, cliente_id: sv.cliente_id }))
+  const sinRespuesta = servicios.filter(sv => sv.estado === 'cotizado' && diasDesde(sv.created_at?.slice(0, 10)) >= 3)
+  if (sinRespuesta.length) hoyLista.push({ tipo:'servicio', quien:'Cotizaciones sin respuesta', que:`${sinRespuesta.length} de hace 3 días o más: haz seguimiento`, ir:'servicios' })
+
+  const vencidas = tarifasAliados.filter(tarifaVencida)
+  if (vencidas.length) hoyLista.push({ tipo:'tarifa', quien:'Tarifas de aliados', que:`${vencidas.length} tarifa${vencidas.length === 1 ? '' : 's'} vencida${vencidas.length === 1 ? '' : 's'}: pide precios nuevos`, ir:'aliados' })
+
   hoyLista.sort((a, b) => (b.alerta ? 1 : 0) - (a.alerta ? 1 : 0))
 
   return {
     hoy: hoyLista, cartera, porPagar, mes, embudo, proyeccion, temas,
     cargas: cargas.map(c => ({ ...c, cliente: nombreCli(c.cliente_id) })),
     contactosSemana: contactos.length,
+    consolidados: consInfo,
+    servicios: proximos,
   }
 }
 
@@ -130,7 +182,7 @@ function Kpi({ label, valor, sub, color = 'var(--text)', subColor = 'var(--text3
   )
 }
 
-export default function Dashboard() {
+export default function Dashboard({ onIr }) {
   const [datos, setDatos] = useState(null)
   const [faltaTabla, setFaltaTabla] = useState(false)
   const [nuevoTema, setNuevoTema] = useState('')
@@ -146,7 +198,18 @@ export default function Dashboard() {
       supabase.from('lrm_ajustes').select('*'),
     ])
     if ([cl, ca, mo, co, te, aj].some(r => r.error)) { setFaltaTabla(true); return }
-    setDatos(calcular({ clientes: cl.data || [], cargas: ca.data || [], movs: mo.data || [], contactos: co.data || [], temas: te.data || [], ajustes: aj.data || [] }))
+    // Módulos nuevos: si alguna tabla todavía no existe, el inicio sigue funcionando sin ella
+    const [cs, ci, tf, tt, sv, sl] = await Promise.all([
+      supabase.from('lrm_consolidados').select('*').order('created_at', { ascending:false }),
+      supabase.from('lrm_consolidado_items').select('id,consolidado_id,cliente_id,descripcion,cbm,peso_kg,bultos,estado,motivo,tarifa_m3,moneda'),
+      supabase.from('lrm_tarifas_flete').select('id,vigente_hasta'),
+      supabase.from('lrm_tarifas_terrestre').select('id,vigente_hasta'),
+      supabase.from('lrm_servicios').select('*').neq('estado', 'cancelado'),
+      supabase.from('lrm_servicio_lineas').select('servicio_id,cantidad,precio,costo'),
+    ])
+    setDatos(calcular({ clientes: cl.data || [], cargas: ca.data || [], movs: mo.data || [], contactos: co.data || [], temas: te.data || [], ajustes: aj.data || [],
+      consolidados: cs.error ? [] : cs.data || [], itemsCons: ci.error ? [] : ci.data || [], tarifasAliados: [...(tf.error ? [] : tf.data || []), ...(tt.error ? [] : tt.data || [])],
+      servicios: sv.error ? [] : sv.data || [], lineasSrv: sl.error ? [] : sl.data || [] }))
   }
   useEffect(() => { cargar() }, [])
 
@@ -206,7 +269,7 @@ export default function Dashboard() {
           {datos.hoy.length === 0 ? <Vacio>Nada pendiente para hoy.</Vacio> : (
             <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
               {datos.hoy.map((h, i) => (
-                <div key={i} style={{ display:'flex', gap:12, alignItems:'center', padding:'10px 12px', borderRadius:10,
+                <div key={i} onClick={h.ir && onIr ? () => onIr(h.ir) : undefined} className={h.ir ? 'db-hoy-ir' : undefined} style={{ cursor: h.ir && onIr ? 'pointer' : undefined, display:'flex', gap:12, alignItems:'center', padding:'10px 12px', borderRadius:10,
                   background: h.alerta ? 'var(--red-dim)' : 'var(--bg4)', border:`1px solid ${h.alerta ? 'rgba(224,82,82,0.25)' : 'var(--border)'}` }}>
                   <div style={{ fontSize:18, width:24, textAlign:'center' }}>{ICONO[h.tipo]}</div>
                   <div style={{ flex:1, minWidth:0 }}>
@@ -214,8 +277,9 @@ export default function Dashboard() {
                     <div style={{ fontSize:12, color: h.alerta ? 'rgba(224,82,82,0.9)' : 'var(--text3)' }}>{h.que}{h.nota ? ` · ${h.nota}` : ''}</div>
                   </div>
                   {h.monto ? <div style={{ fontSize:12, fontWeight:700, color:'var(--text2)', whiteSpace:'nowrap' }}>{cop(h.monto)}</div> : null}
+                  {h.ir && <div style={{ fontSize:16, color:'var(--text4)' }}>→</div>}
                   {h.telefono && (
-                    <button onClick={() => escribir(h)} style={{ fontSize:10, padding:'4px 8px', borderRadius:8, background:'rgba(37,211,102,0.12)', color:'#25D366', border:'1px solid rgba(37,211,102,0.3)', whiteSpace:'nowrap', cursor:'pointer', fontFamily:'inherit' }}>WhatsApp</button>
+                    <button onClick={ev => { ev.stopPropagation(); escribir(h) }} style={{ fontSize:10, padding:'4px 8px', borderRadius:8, background:'rgba(37,211,102,0.12)', color:'#25D366', border:'1px solid rgba(37,211,102,0.3)', whiteSpace:'nowrap', cursor:'pointer', fontFamily:'inherit' }}>WhatsApp</button>
                   )}
                 </div>
               ))}
@@ -223,7 +287,7 @@ export default function Dashboard() {
           )}
         </Bloque>
 
-        <Bloque titulo="Cargas en movimiento" extra={`${enMovimiento.length} activas · ${enMovimiento.reduce((s, c) => s + Number(c.libras || 0), 0)} lb`}>
+        <Bloque titulo="Cargas en movimiento" extra={`${enMovimiento.length} activas · ${Math.round(enMovimiento.reduce((s, c) => s + Number(c.libras || 0), 0)).toLocaleString('es-CO')} lb`}>
           <div style={{ display:'flex', gap:4, marginBottom:14 }}>
             {ETAPAS.map(e => {
               const n = e.id === 'entregada' ? entregadas30.length : datos.cargas.filter(c => c.etapa === e.id).length
@@ -244,7 +308,7 @@ export default function Dashboard() {
                   <div key={c.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:10, background:'var(--bg4)', borderLeft:`3px solid ${e.color}` }}>
                     <div style={{ flex:1, minWidth:0 }}>
                       <div style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{c.cliente}</div>
-                      <div style={{ fontSize:11, color:'var(--text3)' }}>{c.guia} · {c.categoria} · {Number(c.libras || 0)} lb{c.fecha_llegada_est ? ` · llega ${fechaCorta(c.fecha_llegada_est)}` : ''}</div>
+                      <div style={{ fontSize:11, color:'var(--text3)' }}>{c.guia} · {c.categoria} · {Number(c.libras || 0).toLocaleString('es-CO', { maximumFractionDigits: 1 })} lb{c.fecha_llegada_est ? ` · llega ${fechaCorta(c.fecha_llegada_est)}` : ''}</div>
                     </div>
                     <div style={{ fontSize:11, fontWeight:700, color:e.color, whiteSpace:'nowrap' }}>{e.label}</div>
                   </div>
@@ -254,6 +318,61 @@ export default function Dashboard() {
           )}
         </Bloque>
       </div>
+
+      {datos.servicios.length > 0 && (
+        <Bloque titulo="Servicios en marcha" extra={<button onClick={() => onIr && onIr('servicios')} className="btn" style={{ fontSize:11, padding:'3px 9px' }}>Abrir Servicios →</button>}>
+          <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
+            {datos.servicios.slice(0, 8).map(sv => {
+              const c = { aceptado:'#378ADD', programado:'#9C7BFF', en_curso:'#E8A23A' }[sv.estado] || '#8A94A6'
+              const pct = sv.total ? Math.min(100, sv.abonado / sv.total * 100) : 0
+              return (
+                <div key={sv.id} onClick={() => onIr && onIr('servicios')} className="db-srv" style={{ cursor:'pointer', display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:10, background:'var(--bg4)', borderLeft:`3px solid ${c}` }}>
+                  <div style={{ width:70, flexShrink:0 }}>
+                    <div style={{ fontSize:12, fontWeight:800, color: sv.fecha && sv.fecha < hoyISO() ? 'var(--red)' : 'var(--text)' }}>{sv.fecha ? (sv.fecha === hoyISO() ? 'Hoy' : fechaCorta(sv.fecha)) : 'Sin fecha'}</div>
+                    <div style={{ fontSize:10.5, color:'var(--text3)' }}>{sv.hora || ''}</div>
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{sv.cliente} <span style={{ fontWeight:400, color:'var(--text3)', fontSize:11 }}>· SRV-{String(sv.numero || '').padStart(4, '0')}</span></div>
+                    <div style={{ fontSize:11, color:'var(--text3)', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{sv.titulo}{sv.placa ? ` · ${sv.placa}` : ''}{sv.conductor ? ` · ${sv.conductor}` : ''}</div>
+                  </div>
+                  <div style={{ textAlign:'right', flexShrink:0 }}>
+                    <div style={{ fontSize:12.5, fontWeight:800, color:'var(--gold)' }}>{cop(sv.total)}</div>
+                    <div style={{ fontSize:10.5, color: pct >= 99 ? 'var(--green)' : pct > 0 ? '#E8A23A' : 'var(--red)' }}>{pct >= 99 ? 'Pagado' : pct > 0 ? `Abonó ${Math.round(pct)}%` : 'Sin abono'}</div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </Bloque>
+      )}
+
+      {datos.consolidados.length > 0 && (
+        <Bloque titulo="Consolidados" extra={<button onClick={() => onIr && onIr('consolidador')} className="btn" style={{ fontSize:11, padding:'3px 9px' }}>Abrir Consolidador →</button>}>
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(min(300px, 100%), 1fr))', gap:10 }}>
+            {datos.consolidados.map(c => {
+              const e = ESTADO_CONS[c.estado] || ESTADO_CONS.abierto
+              const falta = Math.max(0, c.valor - c.facturado)
+              return (
+                <div key={c.id} onClick={() => onIr && onIr('consolidador')} className="db-cons" style={{ cursor:'pointer', padding:'12px 14px', borderRadius:10, background:'var(--bg4)', borderLeft:`3px solid ${e.c}` }}>
+                  <div style={{ display:'flex', justifyContent:'space-between', gap:8 }}>
+                    <div style={{ fontSize:14, fontWeight:800, color:'var(--text)' }}>{c.nombre}</div>
+                    <div style={{ fontSize:11, fontWeight:700, color:e.c, whiteSpace:'nowrap' }}>{e.l}</div>
+                  </div>
+                  <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>{c.origen} → {c.destino}{c.etd ? ` · sale ${fechaCorta(c.etd)}` : ''}{c.eta ? ` · llega ${fechaCorta(c.eta)}` : ''}</div>
+                  <div style={{ fontSize:12.5, color:'var(--text2)', marginTop:6 }}>
+                    <b style={{ color:'var(--text)' }}>{Number(c.m3).toLocaleString('es-CO', { maximumFractionDigits: 2 })} m³</b> · {c.clientes} cliente{c.clientes === 1 ? '' : 's'}
+                    {c.porLlegar ? <span style={{ color:'#E8A23A' }}> · {c.porLlegar} por llegar</span> : null}
+                    {c.novedades.length ? <span style={{ color:'var(--red)' }}> · {c.novedades.length} con novedad</span> : null}
+                  </div>
+                  <div style={{ fontSize:11.5, marginTop:4, color: c.facturado >= c.valor - 1 && c.valor ? 'var(--green)' : 'var(--text3)' }}>
+                    {c.valor ? (c.facturado >= c.valor - 1 ? `✓ Facturado ${cop(c.facturado)}` : `Facturado ${cop(c.facturado)} de ${cop(c.valor)} · falta ${cop(falta)}`) : 'Sin tarifas cargadas'}
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        </Bloque>
+      )}
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap:14 }}>
         <Bloque titulo="Cartera" extra="por antigüedad">
