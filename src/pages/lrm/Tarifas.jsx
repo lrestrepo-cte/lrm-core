@@ -85,6 +85,7 @@ export function EditorEscalera({ esc, onChange, costo, trm }) {
         <div><Etiqueta>Mínimo por envío</Etiqueta><input inputMode="decimal" value={esc.minimo || ''} onChange={e => upd({ minimo: n2(e.target.value) })} placeholder="0" style={iStyle} /></div>
         <div><Etiqueta>AIU interno</Etiqueta><select value={esc.aiu ? 'si' : 'no'} onChange={e => upd({ aiu: e.target.value === 'si' })} style={iStyle}><option value="no">No</option><option value="si">Sí (2 lb/caja)</option></select></div>
       </div>
+      {esc.moneda === 'USD' && (esc.escalones || []).some(x => Number(x.precio) > 10000) && <div style={{ fontSize:12, color:'var(--red)', marginBottom:8 }}>⚠️ Tienes precios en pesos pero la moneda dice USD. Cámbiala a COP.</div>}
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1.1fr 32px', gap:6, fontSize:10, color:'var(--text4)', textTransform:'uppercase', letterSpacing:1 }}>
         <span>Desde ({UNIDADES[esc.unidad]})</span><span>Precio ({esc.moneda} / {UNIDAD_CORTA[esc.unidad]})</span><span>Te queda por {UNIDAD_CORTA[esc.unidad]}</span><span />
       </div>

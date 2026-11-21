@@ -13,7 +13,9 @@ import { useDatosLRM } from './datosLRM'
 import { useTarifas, escaleraPara, costoPara, escalonDe, tramoTexto, CONSOLIDADO } from './tarifasLRM'
 
 // Precio por m³ de un item, en su moneda (columnas nuevas tarifa_m3 + moneda; las viejas eran tarifa_m3_usd)
-const tarifaItem = i => i.tarifa_m3 != null && i.tarifa_m3 !== '' ? { v: n2Raw(i.tarifa_m3), m: i.moneda || 'COP' } : { v: n2Raw(i.tarifa_m3_usd), m: 'USD' }
+// Nadie cobra más de US$10.000 por m³: si viene "en dólares" con una cifra así, en realidad son pesos
+export const monedaReal = (v, m) => m === 'USD' && Number(v) > 10000 ? 'COP' : (m || 'COP')
+const tarifaItem = i => i.tarifa_m3 != null && i.tarifa_m3 !== '' ? { v: n2Raw(i.tarifa_m3), m: monedaReal(i.tarifa_m3, i.moneda) } : { v: n2Raw(i.tarifa_m3_usd), m: monedaReal(i.tarifa_m3_usd, 'USD') }
 function n2Raw(v) { return Number(v) || 0 }
 
 const usd = n => 'US$' + Number(n || 0).toLocaleString('es-CO', { maximumFractionDigits: 0 })
@@ -161,7 +163,7 @@ function Detalle({ cons, items, tarifas, clientes, onVolver, onCambio }) {
   const ingreso = items.reduce((s, i) => s + valorItem(i), 0)
   const modo = cons.costo_modo || 'fijo'
   const costoFijo = costoPara(costos, null, CONSOLIDADO)
-  const costoFijoTotal = costoFijo?.unidad === 'cbm' ? aCOP(m3 * n2(costoFijo.valor), costoFijo.moneda) : null
+  const costoFijoTotal = costoFijo?.unidad === 'cbm' ? aCOP(m3 * n2(costoFijo.valor), monedaReal(costoFijo.valor, costoFijo.moneda)) : null
   const opciones = useMemo(() => planes(m3, kg, ruta), [m3, kg, ruta.length])
   const elegido = opciones.find(o => o.texto === cons.plan) || opciones[0]
   const costoCont = elegido?.total != null ? elegido.total * trmUso : null
@@ -199,12 +201,12 @@ function Detalle({ cons, items, tarifas, clientes, onVolver, onCambio }) {
         </div>
       </div>
 
-      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(150px, 100%), 1fr))', gap:10 }}>
+      <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(170px, 100%), 1fr))', gap:10 }}>
         {[['Volumen', `${fmt(m3, 2)} m³`, 'var(--text)'], ['Peso', `${fmt(kg, 0)} kg`, 'var(--text)'], ['Clientes', porCliente.length, 'var(--text)'],
           ['Le cobras', cop(ingreso), 'var(--gold)'], ['Te cuesta', costo == null ? '—' : cop(costo), 'var(--red)'], ['Ganas', costo == null ? '—' : cop(ingreso - costo), ingreso - (costo || 0) >= 0 ? 'var(--green)' : 'var(--red)']].map(([l, v, c]) => (
-          <div key={l} className="panel" style={{ padding:'12px 14px' }}>
+          <div key={l} className="panel" style={{ padding:'12px 14px', minWidth:0, overflow:'hidden' }}>
             <div style={{ fontSize:10, letterSpacing:1.5, color:'var(--text3)', textTransform:'uppercase', fontWeight:700 }}>{l}</div>
-            <div style={{ fontSize:19, fontWeight:800, color:c, marginTop:2 }}>{v}</div>
+            <div className="cs-kpi" style={{ fontSize: String(v).length > 13 ? 16 : 19, fontWeight:800, color:c, marginTop:2, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }} title={String(v)}>{v}</div>
             {l === 'Ganas' && costo != null && ingreso ? <div style={{ fontSize:11, color:'var(--text3)' }}>{fmt((ingreso - costo) / ingreso * 100, 0)}% de lo que cobras</div> : null}
             {l === 'Te cuesta' ? <div style={{ fontSize:11, color:'var(--text3)' }}>{modo === 'fijo' ? (costoFijo?.unidad === 'cbm' ? `${fmt(m3, 2)} m³ × ${costoFijo.moneda === 'USD' ? 'US$' + fmt(costoFijo.valor, 2) : cop(costoFijo.valor)}` : 'pon el costo por m³ en Tarifas') : 'por contenedores'}</div> : null}
           </div>
@@ -306,13 +308,13 @@ function ModalItem({ item, clientes, items, escaleras, trm, onCerrar, onGuardado
   const { esc, fuente } = escaleraPara(cli, escaleras, CONSOLIDADO)
   const m3Cliente = items.filter(i => i.cliente_id === f.cliente_id && i.id !== f.id).reduce((s, i) => s + n2(i.cbm), 0) + n2(f.cbm)
   const escalon = escalonDe(esc, m3Cliente)
-  useEffect(() => { if (auto && esc.unidad === 'cbm') setF(p => ({ ...p, tarifa_m3: String(escalon.precio), moneda: esc.moneda })) }, [auto, f.cliente_id, f.cbm, escalon?.precio, esc.moneda])
+  useEffect(() => { if (auto && esc.unidad === 'cbm') setF(p => ({ ...p, tarifa_m3: String(escalon.precio), moneda: monedaReal(escalon.precio, esc.moneda) })) }, [auto, f.cliente_id, f.cbm, escalon?.precio, esc.moneda])
   const total = n2(f.cbm) * n2(f.tarifa_m3)
   const guardar = async () => {
     if (!f.cliente_id) return setError('Elige el cliente.')
     if (!n2(f.cbm)) return setError('Pon los m³.')
     const { id, created_at, ...d } = f
-    const datos = { ...d, bultos: Math.round(n2(d.bultos)), cbm: n2(d.cbm), peso_kg: n2(d.peso_kg), tarifa_m3: n2(d.tarifa_m3), moneda: d.moneda, tarifa_m3_usd: d.moneda === 'USD' ? n2(d.tarifa_m3) : 0 }
+    const datos = { ...d, bultos: Math.round(n2(d.bultos)), cbm: n2(d.cbm), peso_kg: n2(d.peso_kg), tarifa_m3: n2(d.tarifa_m3), moneda: monedaReal(n2(d.tarifa_m3), d.moneda), tarifa_m3_usd: monedaReal(n2(d.tarifa_m3), d.moneda) === 'USD' ? n2(d.tarifa_m3) : 0 }
     const r = id ? await supabase.from('lrm_consolidado_items').update(datos).eq('id', id) : await supabase.from('lrm_consolidado_items').insert(datos)
     if (r.error) return setError(r.error.message.includes('tarifa_m3') || r.error.message.includes('moneda') ? 'Falta correr en Supabase el SQL 12 nuevo (columnas tarifa_m3 y moneda).' : 'No se pudo guardar: ' + r.error.message)
     onGuardado()
