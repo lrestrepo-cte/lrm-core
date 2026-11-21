@@ -8,7 +8,7 @@ import { supabase } from '../../lib/supabase'
 import { hoyISO, fechaCorta, NICHOS_LRM, nichoPrincipal } from './LRMClientes'
 import { ETAPAS } from './Dashboard'
 import { useDivisas } from '../../lib/divisas'
-import { BODEGA_POR_DEFECTO, useDatosLRM, AVISOS_LRM, DIAS_TRANSITO, logoDocumentoHTML } from './datosLRM'
+import { BODEGA_POR_DEFECTO, useDatosLRM, AVISOS_LRM, DIAS_TRANSITO, logoDocumentoHTML, linkRastreo } from './datosLRM'
 import { linkWhatsApp } from './LRMClientes'
 import { useTarifas, escaleraPara, costoPara, escalonDe, tramoTexto, cobroCarga, cantidadCobro, unidadCobro, costoCarga, UNIDAD_CORTA } from './tarifasLRM'
 
@@ -1062,7 +1062,8 @@ export function ModalAviso({ carga, etapa, cliente, bodega, onCerrar }) {
     cajas: carga.piezas, origen: origenDe(bodega), dias: DIAS_TRANSITO[carga.modalidad] || 8, kg: fmt(kg, 1), total: cop(total), guia: carga.guia,
   }
   const llenar = t => t.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '')
-  const [texto, setTexto] = useState(llenar(plantilla.texto) + `\n\n${empresa.nombre} · ${empresa.whatsapp}`)
+  const rastreo = etapa !== 'entregada' ? linkRastreo(cliente) : null
+  const [texto, setTexto] = useState(llenar(plantilla.texto) + (rastreo ? `\n\nSigue tu carga aquí: ${rastreo}` : '') + `\n\n${empresa.nombre} · ${empresa.whatsapp}`)
   const [estado, setEstado] = useState('')
   const asunto = `${empresa.nombre} · ${plantilla.asunto} · Envío WR ${carga.guia}`
   const registrar = async (tipo) => { if (cliente?.id) await supabase.from('lrm_contactos').insert({ cliente_id: cliente.id, tipo, resumen: `${plantilla.asunto} (WR ${carga.guia})` }) }
