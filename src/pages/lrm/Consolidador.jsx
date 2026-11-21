@@ -3,7 +3,7 @@
 // Juntas la carga de varios clientes en un mismo envío (ej. Shanghái → Barranquilla) y el sistema te dice
 // cuántos contenedores llenas, qué combinación te sale más barata con las tarifas de tus aliados,
 // cuánto le cobras a cada cliente y cuánto ganas.
-// Tablas: lrm_consolidados, lrm_consolidado_items (SQL 12) · usa lrm_tarifas_flete (SQL 11)
+// Tablas: lrm_consolidados, lrm_consolidado_items (SQL 12), lrm_consolidado_productos (SQL 16) · usa lrm_tarifas_flete (SQL 11)
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useDivisas } from '../../lib/divisas'
@@ -11,6 +11,8 @@ import { linkWhatsApp, hoyISO, fechaCorta } from './LRMClientes'
 import { CONTENEDORES } from './Aliados'
 import { useDatosLRM } from './datosLRM'
 import { useTarifas, escaleraPara, costoPara, escalonDe, tramoTexto, CONSOLIDADO } from './tarifasLRM'
+import ModalListaEmpaque from './ListaEmpaque'
+import { descargarExcel } from './leerListaEmpaque'
 
 // Precio por m³ de un item, en su moneda (columnas nuevas tarifa_m3 + moneda; las viejas eran tarifa_m3_usd)
 // Nadie cobra más de US$10.000 por m³: si viene "en dólares" con una cifra así, en realidad son pesos
@@ -25,6 +27,14 @@ const fmt = (v, d = 1) => Number(v || 0).toLocaleString('es-CO', { maximumFracti
 const iStyle = { width:'100%', padding:'8px 10px', borderRadius:8, background:'rgba(255,255,255,0.06)', border:'1px solid var(--border)', color:'var(--text)', fontSize:13, fontFamily:'inherit', outline:'none', marginTop:4 }
 const Etiqueta = ({ children }) => <div style={{ fontSize:11, color:'var(--text3)' }}>{children}</div>
 const Vacio = ({ children }) => <div style={{ fontSize:12, color:'var(--text4)', padding:'24px 0', textAlign:'center' }}>{children}</div>
+// Estado de la carga de cada cliente. Las canceladas no cuentan en volumen, peso ni cobro.
+const ESTADO_ITEM = {
+  por_llegar: { l:'Por llegar', c:'#E8A23A' },
+  en_bodega:  { l:'✓ En bodega', c:'var(--green)' },
+  novedad:    { l:'⚠ Con novedad', c:'#E05252' },
+  cancelado:  { l:'Cancelada', c:'var(--text4)' },
+}
+const activa = i => i.estado !== 'cancelado'
 const ESTADOS = { abierto:{ l:'Abierto · recibiendo carga', c:'#4caf50' }, cerrado:{ l:'Cerrado', c:'#E8A23A' }, despachado:{ l:'Despachado', c:'#378ADD' }, entregado:{ l:'Entregado', c:'#8A94A6' } }
 const TIPOS_FCL = ['40HC', '40GP', '20GP']
 const vigente = t => !t.vigente_hasta || t.vigente_hasta >= hoyISO()
@@ -62,6 +72,7 @@ export default function Consolidador() {
   const [items, setItems] = useState([])
   const [tarifas, setTarifas] = useState([])
   const [clientes, setClientes] = useState([])
+  const [productos, setProductos] = useState([])
   const [abierto, setAbierto] = useState(null)
   const [nuevo, setNuevo] = useState(false)
   const [faltaTabla, setFaltaTabla] = useState(false)
@@ -74,12 +85,14 @@ export default function Consolidador() {
     ])
     if (c.error || i.error) { setFaltaTabla(true); return }
     setLista(c.data || []); setItems(i.data || []); setTarifas(t.data || []); setClientes(cl.data || [])
+    const pr = await supabase.from('lrm_consolidado_productos').select('id,item_id,consolidado_id')
+    setProductos(pr.error ? null : (pr.data || []))   // null = falta el SQL 16
   }
   useEffect(() => { cargar() }, [])
   if (faltaTabla) return <div className="panel" style={{ border:'1px solid var(--gold-border)', color:'var(--gold)', fontSize:13 }}>Para usar el Consolidador corre en Supabase el archivo <b>12_lrm_consolidados.sql</b>.</div>
 
   const cons = lista.find(c => c.id === abierto)
-  if (cons) return <Detalle cons={cons} items={items.filter(i => i.consolidado_id === cons.id)} tarifas={tarifas} clientes={clientes} onVolver={() => setAbierto(null)} onCambio={cargar} />
+  if (cons) return <Detalle cons={cons} items={items.filter(i => i.consolidado_id === cons.id)} productos={productos} tarifas={tarifas} clientes={clientes} onVolver={() => setAbierto(null)} onCambio={cargar} />
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, flexWrap:'wrap' }}>
@@ -89,7 +102,7 @@ export default function Consolidador() {
       {lista.length === 0 ? <div className="panel"><Vacio>Crea tu primer consolidado, por ejemplo "Shanghái · diciembre".</Vacio></div> : (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(min(320px, 100%), 1fr))', gap:12 }}>
           {lista.map(c => {
-            const its = items.filter(i => i.consolidado_id === c.id)
+            const its = items.filter(i => i.consolidado_id === c.id && activa(i))
             const m3 = its.reduce((s, i) => s + n2(i.cbm), 0)
             const nCli = new Set(its.map(i => i.cliente_id)).size
             const mejor = planes(m3, its.reduce((s, i) => s + n2(i.peso_kg), 0), tarifas.filter(t => t.origen === c.origen && t.destino === c.destino))[0]
@@ -111,11 +124,13 @@ export default function Consolidador() {
   )
 }
 
-function ModalConsolidado({ cons, tarifas, onCerrar, onGuardado }) {
+function ModalConsolidado({ cons, tarifas, onCerrar, onGuardado, onBorrado }) {
   const origenes = [...new Set(['Shanghái', 'Ningbo', 'Shenzhen', 'Guangzhou', 'Colón (Panamá)', ...tarifas.map(t => t.origen)])]
   const [f, setF] = useState({ nombre:'', origen:'Shanghái', destino:'Barranquilla', fecha_cierre:'', notas:'', ...(cons || {}) })
   const [error, setError] = useState('')
   const set = k => e => setF(p => ({ ...p, [k]: e.target.value }))
+  const [confirmar, setConfirmar] = useState(false)
+  const borrarCons = async () => { if (!confirmar) return setConfirmar(true); await supabase.from('lrm_consolidados').delete().eq('id', f.id); onBorrado ? onBorrado() : onGuardado() }
   const guardar = async () => {
     if (!f.nombre.trim()) return setError('Ponle un nombre, ej. "Shanghái · diciembre".')
     const datos = { nombre: f.nombre.trim(), origen: f.origen, destino: f.destino, fecha_cierre: f.fecha_cierre || null, notas: f.notas || null }
@@ -137,6 +152,7 @@ function ModalConsolidado({ cons, tarifas, onCerrar, onGuardado }) {
         {error && <div style={{ fontSize:12, color:'var(--red)', marginBottom:10 }}>{error}</div>}
         <div style={{ display:'flex', gap:8 }}>
           <button id="cs-guardar" onClick={guardar} className="btn-green" style={{ flex:1 }}>Guardar</button>
+          {f.id && <button onClick={borrarCons} onBlur={() => setConfirmar(false)} className="btn" title="Borra el consolidado con toda su carga y listas de empaque" style={{ width:'auto', color:'var(--red)' }}>{confirmar ? '¿Borrar todo el consolidado?' : 'Borrar'}</button>}
           <button onClick={onCerrar} className="btn" style={{ width:'auto' }}>Cancelar</button>
         </div>
       </div>
@@ -145,7 +161,12 @@ function ModalConsolidado({ cons, tarifas, onCerrar, onGuardado }) {
 }
 
 // ── Un consolidado por dentro ──────────────────────────────────────────────
-function Detalle({ cons, items, tarifas, clientes, onVolver, onCambio }) {
+function Detalle({ cons, items: todos, productos, tarifas, clientes, onVolver, onCambio }) {
+  const items = todos.filter(activa)
+  const canceladas = todos.filter(i => !activa(i))
+  const nProd = id => (productos || []).filter(p => p.item_id === id).length
+  const [lista, setLista] = useState(null)
+  const [bajando, setBajando] = useState(false)
   const divisas = useDivisas()
   const trm = divisas?.find(d => d.id === 'USD')?.hoy || 0
   const { empresa } = useDatosLRM()
@@ -179,10 +200,27 @@ function Detalle({ cons, items, tarifas, clientes, onVolver, onCambio }) {
   const setModo = async m => { await supabase.from('lrm_consolidados').update({ costo_modo: m }).eq('id', cons.id); onCambio() }
   const textoCliente = c => [
     `Hola ${c.nombre.split(' ')[0]}, este es el resumen de tu carga en nuestro consolidado *${cons.nombre}* (${cons.origen} → ${cons.destino}):`, '',
-    ...c.its.map(i => `• ${i.descripcion || 'Mercancía'}${i.bultos ? ` · ${i.bultos} bultos` : ''} · ${fmt(i.cbm, 2)} m³${i.peso_kg ? ` · ${fmt(i.peso_kg, 0)} kg` : ''}${i.estado === 'en_bodega' ? ' · ✓ en bodega' : ' · por llegar'}`),
+    ...c.its.map(i => `• ${i.descripcion || 'Mercancía'}${i.bultos ? ` · ${i.bultos} bultos` : ''} · ${fmt(i.cbm, 2)} m³${i.peso_kg ? ` · ${fmt(i.peso_kg, 0)} kg` : ''}${i.estado === 'en_bodega' ? ' · ✓ en bodega' : i.estado === 'novedad' ? ` · novedad${i.motivo ? ': ' + i.motivo : ''}` : ' · por llegar'}`),
     '', `Total: ${fmt(c.m3, 2)} m³ · *${cop(c.total)}*`,
     ...(cons.fecha_cierre ? [`Recibimos carga hasta el ${fechaCorta(cons.fecha_cierre)}.`] : []), '', `*${empresa.nombre}* · We bring it. Safe and on time.`,
   ].join('\n')
+  // Excel con todos los productos del consolidado (para el aliado / agente de carga)
+  const bajarConsolidada = async () => {
+    setBajando(true)
+    const { data, error } = await supabase.from('lrm_consolidado_productos').select('*').eq('consolidado_id', cons.id).order('linea')
+    setBajando(false)
+    if (error) return
+    const orden = porCliente.flatMap(c => c.its)
+    const filas = []
+    orden.forEach(it => {
+      const ps = (data || []).filter(p => p.item_id === it.id)
+      const base = { Cliente: nombreCli(it.cliente_id), Carga: it.descripcion || '' }
+      if (!ps.length) filas.push({ ...base, Referencia:'', 'Descripción': it.descripcion || 'Sin lista de empaque', Cantidad:'', Unidad:'', Bultos: it.bultos || '', 'Peso kg': it.peso_kg || '', 'm³': it.cbm || '', 'Valor US$':'', Subpartida:'' })
+      ps.forEach(p => filas.push({ ...base, Referencia: p.referencia || '', 'Descripción': p.descripcion || '', Cantidad: p.cantidad ?? '', Unidad: p.unidad || '', Bultos: p.bultos ?? '', 'Peso kg': p.peso_kg ?? '', 'm³': p.cbm ?? '', 'Valor US$': p.valor_usd ?? '', Subpartida: p.subpartida || '' }))
+    })
+    const resumen = porCliente.map(c => ({ Cliente: c.nombre, Cargas: c.its.length, Bultos: c.bultos, 'Peso kg': Math.round(c.kg * 10) / 10, 'm³': Math.round(c.m3 * 1000) / 1000, Productos: c.its.reduce((s, i) => s + nProd(i.id), 0) }))
+    descargarExcel(`Lista de empaque - ${cons.nombre}.xlsx`.replace(/[\\/:*?"<>|]/g, '-'), filas, resumen)
+  }
   const copiar = async (t, k) => { try { await navigator.clipboard.writeText(t); setCopiado(k); setTimeout(() => setCopiado(''), 2000) } catch {} }
   const e = ESTADOS[cons.estado] || ESTADOS.abierto
 
@@ -197,6 +235,7 @@ function Detalle({ cons, items, tarifas, clientes, onVolver, onCambio }) {
         <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
           <select value={cons.estado} onChange={setEstado} style={{ ...iStyle, marginTop:0, width:'auto', color:e.c }}>{Object.entries(ESTADOS).map(([k, x]) => <option key={k} value={k}>{x.l}</option>)}</select>
           <button onClick={() => setEditar(true)} className="btn" style={{ width:'auto' }}>Editar</button>
+          {productos && items.length > 0 && <button id="cs-bajar" onClick={bajarConsolidada} className="btn" style={{ width:'auto' }}>{bajando ? 'Armando…' : '⬇ Lista de empaque'}</button>}
           <button id="cs-item-nuevo" onClick={() => setItem({ consolidado_id: cons.id, cliente_id:'', descripcion:'', proveedor:'', bultos:'', cbm:'', peso_kg:'', tarifa_m3:'', moneda:'COP', estado:'por_llegar' })} className="btn-gold" style={{ width:'auto' }}>+ Carga de un cliente</button>
         </div>
       </div>
@@ -279,24 +318,46 @@ function Detalle({ cons, items, tarifas, clientes, onVolver, onCambio }) {
                   <button onClick={() => copiar(txt, c.id)} className="btn" style={{ fontSize:11, padding:'4px 9px', width:'auto' }}>{copiado === c.id ? '✓' : 'Copiar'}</button>
                 </div>
               </div>
-              {c.its.map(i => (
-                <div key={i.id} onClick={() => setItem(i)} className="cs-item" style={{ display:'flex', justifyContent:'space-between', gap:8, fontSize:12, color:'var(--text2)', padding:'5px 8px', marginTop:4, borderRadius:8, background:'var(--bg4)', cursor:'pointer' }}>
-                  <span>{i.descripcion || 'Mercancía'}{i.proveedor ? ` · ${i.proveedor}` : ''}{i.bultos ? ` · ${i.bultos} bultos` : ''} · {fmt(i.cbm, 2)} m³{i.peso_kg ? ` · ${fmt(i.peso_kg, 0)} kg` : ''}</span>
-                  <span style={{ color: i.estado === 'en_bodega' ? 'var(--green)' : '#E8A23A', whiteSpace:'nowrap' }}>{i.estado === 'en_bodega' ? '✓ En bodega' : 'Por llegar'} · {cop(valorItem(i))}</span>
-                </div>
-              ))}
+              {c.its.map(i => {
+                const e = ESTADO_ITEM[i.estado] || ESTADO_ITEM.por_llegar, n = nProd(i.id)
+                return (
+                  <div key={i.id} className="cs-item" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:8, flexWrap:'wrap', fontSize:12, color:'var(--text2)', padding:'6px 8px', marginTop:4, borderRadius:8, background:'var(--bg4)', borderLeft:`3px solid ${e.c}` }}>
+                    <span onClick={() => setItem(i)} style={{ cursor:'pointer', flex:'1 1 260px', minWidth:0 }}>
+                      {i.descripcion || 'Mercancía'}{i.proveedor ? ` · ${i.proveedor}` : ''}{i.bultos ? ` · ${i.bultos} bultos` : ''} · {fmt(i.cbm, 2)} m³{i.peso_kg ? ` · ${fmt(i.peso_kg, 0)} kg` : ''}
+                      {i.estado === 'novedad' && i.motivo ? <span style={{ color:'#E05252' }}> · {i.motivo}</span> : null}
+                    </span>
+                    <span style={{ display:'flex', gap:6, alignItems:'center', whiteSpace:'nowrap' }}>
+                      <span style={{ color:e.c }}>{e.l}</span> · {cop(valorItem(i))}
+                      {productos && <button onClick={() => setLista(i)} className="btn cs-lista" style={{ fontSize:11, padding:'3px 8px', width:'auto', color: n ? 'var(--gold)' : undefined }}>📋 {n ? `${n} producto${n === 1 ? '' : 's'}` : 'Lista de empaque'}</button>}
+                      <button onClick={() => setItem(i)} className="btn cs-editar" title="Editar, cancelar o borrar" style={{ fontSize:11, padding:'3px 8px', width:'auto' }}>✏️ Editar</button>
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           )
         })}
+        {canceladas.length > 0 && (
+          <details style={{ marginTop:12 }}>
+            <summary style={{ fontSize:12, color:'var(--text3)', cursor:'pointer' }}>Canceladas ({canceladas.length}) · no cuentan en el envío</summary>
+            {canceladas.map(i => (
+              <div key={i.id} onClick={() => setItem(i)} className="cs-cancelada" style={{ display:'flex', justifyContent:'space-between', gap:8, fontSize:12, color:'var(--text4)', padding:'6px 8px', marginTop:4, borderRadius:8, background:'var(--bg4)', cursor:'pointer' }}>
+                <span style={{ textDecoration:'line-through' }}>{nombreCli(i.cliente_id)} · {i.descripcion || 'Mercancía'} · {fmt(i.cbm, 2)} m³</span>
+                <span>{i.motivo || 'Sin motivo'} · ✏️</span>
+              </div>
+            ))}
+          </details>
+        )}
       </div>
 
-      {item && <ModalItem item={item} clientes={clientes} items={items} escaleras={escaleras} trm={trmUso} onCerrar={() => setItem(null)} onGuardado={() => { setItem(null); onCambio() }} />}
-      {editar && <ModalConsolidado cons={cons} tarifas={tarifas} onCerrar={() => setEditar(false)} onGuardado={() => { setEditar(false); onCambio() }} />}
+      {lista && <ModalListaEmpaque item={lista} consolidado={cons} cliente={nombreCli(lista.cliente_id)} onCerrar={() => setLista(null)} onGuardado={() => { setLista(null); onCambio() }} />}
+      {item && <ModalItem item={item} clientes={clientes} items={items} conLista={!!productos} onLista={() => { const i = item; setItem(null); setLista(i) }} escaleras={escaleras} trm={trmUso} onCerrar={() => setItem(null)} onGuardado={() => { setItem(null); onCambio() }} />}
+      {editar && <ModalConsolidado cons={cons} tarifas={tarifas} onCerrar={() => setEditar(false)} onGuardado={() => { setEditar(false); onCambio() }} onBorrado={() => { setEditar(false); onVolver(); onCambio() }} />}
     </div>
   )
 }
 
-function ModalItem({ item, clientes, items, escaleras, trm, onCerrar, onGuardado }) {
+function ModalItem({ item, clientes, items, escaleras, trm, conLista, onLista, onCerrar, onGuardado }) {
   const t0 = item.id ? tarifaItem(item) : { v: '', m: 'COP' }
   const [f, setF] = useState({ ...item, bultos: String(item.bultos ?? ''), cbm: String(item.cbm ?? ''), peso_kg: String(item.peso_kg ?? ''), tarifa_m3: String(t0.v ?? ''), moneda: t0.m })
   const [auto, setAuto] = useState(!item.id)
@@ -313,10 +374,12 @@ function ModalItem({ item, clientes, items, escaleras, trm, onCerrar, onGuardado
   const guardar = async () => {
     if (!f.cliente_id) return setError('Elige el cliente.')
     if (!n2(f.cbm)) return setError('Pon los m³.')
+    if ((f.estado === 'cancelado' || f.estado === 'novedad') && !String(f.motivo || '').trim()) return setError(f.estado === 'cancelado' ? 'Escribe por qué se canceló.' : 'Escribe cuál es la novedad.')
     const { id, created_at, ...d } = f
+    if (d.estado !== 'cancelado' && d.estado !== 'novedad') d.motivo = null
     const datos = { ...d, bultos: Math.round(n2(d.bultos)), cbm: n2(d.cbm), peso_kg: n2(d.peso_kg), tarifa_m3: n2(d.tarifa_m3), moneda: monedaReal(n2(d.tarifa_m3), d.moneda), tarifa_m3_usd: monedaReal(n2(d.tarifa_m3), d.moneda) === 'USD' ? n2(d.tarifa_m3) : 0 }
     const r = id ? await supabase.from('lrm_consolidado_items').update(datos).eq('id', id) : await supabase.from('lrm_consolidado_items').insert(datos)
-    if (r.error) return setError(r.error.message.includes('tarifa_m3') || r.error.message.includes('moneda') ? 'Falta correr en Supabase el SQL 12 nuevo (columnas tarifa_m3 y moneda).' : 'No se pudo guardar: ' + r.error.message)
+    if (r.error) return setError(r.error.message.includes('motivo') || r.error.message.includes('estado_check') ? 'Falta correr en Supabase el archivo 16_lrm_lista_empaque.sql.' : r.error.message.includes('tarifa_m3') || r.error.message.includes('moneda') ? 'Falta correr en Supabase el SQL 13 (columnas tarifa_m3 y moneda).' : 'No se pudo guardar: ' + r.error.message)
     onGuardado()
   }
   const borrar = async () => { if (!confirmar) return setConfirmar(true); await supabase.from('lrm_consolidado_items').delete().eq('id', f.id); onGuardado() }
@@ -326,7 +389,15 @@ function ModalItem({ item, clientes, items, escaleras, trm, onCerrar, onGuardado
         <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:14 }}>{f.id ? 'Editar carga' : 'Carga de un cliente'}</div>
         <div className="grid-2" style={{ gap:10, marginBottom:10 }}>
           <div><Etiqueta>Cliente</Etiqueta><select id="ci-cliente" value={f.cliente_id || ''} onChange={set('cliente_id')} style={iStyle}><option value="">Elegir…</option>{clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select></div>
-          <div><Etiqueta>Estado</Etiqueta><select value={f.estado} onChange={set('estado')} style={iStyle}><option value="por_llegar">Por llegar a bodega</option><option value="en_bodega">En bodega</option></select></div>
+          <div><Etiqueta>Estado</Etiqueta><select id="ci-estado" value={f.estado} onChange={set('estado')} style={{ ...iStyle, color:(ESTADO_ITEM[f.estado] || {}).c }}>
+            <option value="por_llegar">Por llegar a bodega</option><option value="en_bodega">En bodega</option>
+            <option value="novedad">Con novedad (incompleta, dañada, falta producto…)</option><option value="cancelado">Cancelada (no cuenta en el envío)</option></select></div>
+          {(f.estado === 'novedad' || f.estado === 'cancelado') && (
+            <div style={{ gridColumn:'1 / -1' }}><Etiqueta>{f.estado === 'cancelado' ? '¿Por qué se canceló?' : '¿Qué novedad tiene?'}</Etiqueta>
+              <input id="ci-motivo" list="ci-motivos" value={f.motivo || ''} onChange={set('motivo')} placeholder={f.estado === 'cancelado' ? 'Ej: el cliente no se decidió' : 'Ej: llegaron 8 de 10 cajas'} style={iStyle} />
+              <datalist id="ci-motivos">{(f.estado === 'cancelado' ? ['El cliente no se decidió', 'El proveedor no tenía el producto', 'No llegó a tiempo a bodega', 'El cliente canceló el pedido', 'Se pasa para el próximo consolidado'] : ['Llegó incompleta', 'Llegó con daños', 'Falta un producto', 'Falta la lista de empaque', 'Medidas distintas a las informadas']).map(m => <option key={m} value={m} />)}</datalist>
+            </div>
+          )}
           <div><Etiqueta>Mercancía</Etiqueta><input id="ci-desc" value={f.descripcion || ''} onChange={set('descripcion')} placeholder="Ej: accesorios para celular" style={iStyle} /></div>
           <div><Etiqueta>Proveedor / fábrica</Etiqueta><input value={f.proveedor || ''} onChange={set('proveedor')} style={iStyle} /></div>
           <div><Etiqueta>Volumen (m³)</Etiqueta><input id="ci-cbm" inputMode="decimal" value={f.cbm} onChange={set('cbm')} style={iStyle} /></div>
@@ -347,7 +418,8 @@ function ModalItem({ item, clientes, items, escaleras, trm, onCerrar, onGuardado
         {error && <div style={{ fontSize:12, color:'var(--red)', marginBottom:10 }}>{error}</div>}
         <div style={{ display:'flex', gap:8 }}>
           <button id="ci-guardar" onClick={guardar} className="btn-green" style={{ flex:1 }}>Guardar</button>
-          {f.id && <button onClick={borrar} onBlur={() => setConfirmar(false)} className="btn" style={{ width:'auto', color:'var(--red)' }}>{confirmar ? '¿Seguro?' : 'Borrar'}</button>}
+          {f.id && conLista && <button onClick={onLista} className="btn" style={{ width:'auto' }}>📋 Lista de empaque</button>}
+          {f.id && <button id="ci-borrar" onClick={borrar} onBlur={() => setConfirmar(false)} className="btn" title="Borra la carga y su lista de empaque. Si solo se canceló, mejor cambia el estado a Cancelada." style={{ width:'auto', color:'var(--red)' }}>{confirmar ? '¿Borrar del todo?' : 'Borrar'}</button>}
           <button onClick={onCerrar} className="btn" style={{ width:'auto' }}>Cancelar</button>
         </div>
       </div>
