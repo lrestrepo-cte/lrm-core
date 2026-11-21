@@ -36,6 +36,8 @@ export default function Rastreo({ token }) {
     })
   }, [token])
 
+  const consolidados = d?.consolidados || []
+  const consActivos = consolidados.filter(x => x.estado !== 'entregado')
   const activas = (d?.cargas || []).filter(c => c.etapa !== 'entregada')
   const entregadas = (d?.cargas || []).filter(c => c.etapa === 'entregada')
   const wa = d?.empresa?.whatsapp ? `https://wa.me/${(d.empresa.whatsapp.replace(/\D/g, '').length === 10 ? '57' : '') + d.empresa.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(`Hola, soy ${d.cliente}. Quiero preguntar por mi carga.`)}` : null
@@ -61,11 +63,17 @@ export default function Rastreo({ token }) {
           <>
             <h1 style={{ fontSize:26, fontWeight:800, margin:'0 0 4px', letterSpacing:-0.5 }}>Hola{d.cliente ? `, ${d.cliente}` : ''}</h1>
             <p style={{ fontSize:14, color:C.suave, margin:'0 0 22px' }}>
-              {activas.length ? `Tienes ${activas.length} ${activas.length === 1 ? 'carga en camino' : 'cargas en camino'}.` : 'No tienes cargas en camino en este momento.'}
+              {activas.length + consActivos.length ? `Tienes ${activas.length + consActivos.length} ${activas.length + consActivos.length === 1 ? 'envío en curso' : 'envíos en curso'}.` : 'No tienes cargas en camino en este momento.'}
             </p>
 
+            {consActivos.map((x, k) => <Consolidado key={'c' + k} x={x} />)}
             {activas.map(c => <Carga key={c.guia + c.fecha_recibo} c={c} />)}
 
+            {consolidados.filter(x => x.estado === 'entregado').map((x, k) => (
+              <Caja key={'ce' + k} pad="12px 18px"><div style={{ display:'flex', justifyContent:'space-between', gap:10, fontSize:13 }}>
+                <div><b>{x.nombre}</b> <span style={{ color:C.suave }}>· {x.origen} → {x.destino}</span></div>
+                <div style={{ color:C.verde, fontWeight:700 }}>✓ Entregado</div></div></Caja>
+            ))}
             {entregadas.length > 0 && (
               <>
                 <div style={{ fontSize:11, letterSpacing:2, fontWeight:700, color:C.suave, margin:'28px 0 10px' }}>ENTREGADAS · ÚLTIMOS 90 DÍAS</div>
@@ -141,6 +149,57 @@ function Carga({ c }) {
       {c.etapa === 'destino' && (
         <div style={{ marginTop:14, fontSize:13, background:'#EAF5EE', color:'#1F5F3B', borderRadius:10, padding:'10px 12px' }}>
           Tu mercancía ya está en Barranquilla. Te contactamos para coordinar la entrega.
+        </div>
+      )}
+    </Caja>
+  )
+}
+// Carga dentro de un consolidado (China u otro origen)
+const ETAPAS_CONS = [
+  { id:'abierto',    corto:'En bodega origen' },
+  { id:'cerrado',    corto:'Lista para zarpar' },
+  { id:'despachado', corto:'En camino' },
+  { id:'entregado',  corto:'Entregada' },
+]
+const ESTADO_ITEM = { por_llegar:'Por llegar a la bodega', en_bodega:'✓ En bodega', novedad:'Con novedad · te contactamos' }
+function Consolidado({ x }) {
+  const i = Math.max(0, ETAPAS_CONS.findIndex(e => e.id === x.estado))
+  const items = x.items || []
+  const tot = items.reduce((t, it) => ({ b: t.b + Number(it.bultos || 0), kg: t.kg + Number(it.kg || 0), m3: t.m3 + Number(it.cbm || 0) }), { b:0, kg:0, m3:0 })
+  const etiqueta = x.estado === 'abierto' ? 'Recibiendo carga' : x.estado === 'cerrado' ? 'Lista para zarpar' : x.estado === 'despachado' ? 'En camino' : 'Entregada'
+  return (
+    <Caja>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:14 }}>
+        <div style={{ minWidth:0 }}>
+          <div style={{ fontSize:12, color:C.suave }}>Carga consolidada · {x.origen} → {x.destino}</div>
+          <div style={{ fontSize:17, fontWeight:800, marginTop:2 }}>{x.nombre}</div>
+          <div style={{ fontSize:13, color:C.suave, marginTop:2 }}>
+            {tot.b ? `${kg(tot.b)} bultos · ` : ''}{tot.kg ? `${kg(tot.kg)} kg · ` : ''}{Number(tot.m3).toLocaleString('es-CO', { maximumFractionDigits: 2 })} m³ · Marítimo
+          </div>
+        </div>
+        <span style={{ flexShrink:0, fontSize:12, fontWeight:700, padding:'6px 10px', borderRadius:999, background:C.oroClaro, color:'#7A5E14' }}>{etiqueta}</span>
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns:`repeat(${ETAPAS_CONS.length}, 1fr)`, gap:4 }}>
+        {ETAPAS_CONS.map((e, k) => <div key={e.id} style={{ height:6, borderRadius:3, background: k <= i ? C.oro : C.linea }} />)}
+      </div>
+      <div style={{ display:'grid', gridTemplateColumns:`repeat(${ETAPAS_CONS.length}, 1fr)`, gap:4, marginTop:6 }}>
+        {ETAPAS_CONS.map((e, k) => <div key={e.id} style={{ fontSize:10.5, lineHeight:1.3, color: k <= i ? C.tinta : '#A9A294', fontWeight: k === i ? 800 : 500 }}>{e.corto}</div>)}
+      </div>
+      {(x.etd || x.eta) && (
+        <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:14 }}>
+          <div style={{ fontSize:13, background:C.fondo, borderRadius:10, padding:'10px 12px' }}><div style={{ fontSize:11, color:C.suave }}>Salida estimada</div><b>{x.etd ? fecha(x.etd) : 'Por confirmar'}</b></div>
+          <div style={{ fontSize:13, background:C.fondo, borderRadius:10, padding:'10px 12px' }}><div style={{ fontSize:11, color:C.suave }}>Llegada estimada</div><b>{x.eta ? fecha(x.eta) : 'Por confirmar'}</b></div>
+        </div>
+      )}
+      {x.estado === 'abierto' && items.length > 0 && (
+        <div style={{ marginTop:12, borderTop:`1px solid ${C.linea}`, paddingTop:8 }}>
+          {items.map((it, k) => (
+            <div key={k} style={{ display:'flex', justifyContent:'space-between', gap:10, fontSize:12.5, padding:'5px 0' }}>
+              <span>{it.descripcion || 'Mercancía'}{it.productos ? <span style={{ color:C.suave }}> · {it.productos} producto{it.productos === 1 ? '' : 's'}</span> : null}</span>
+              <span style={{ color: it.estado === 'en_bodega' ? C.verde : it.estado === 'novedad' ? '#B4442F' : C.suave, fontWeight:600, whiteSpace:'nowrap' }}>{ESTADO_ITEM[it.estado] || ''}</span>
+            </div>
+          ))}
+          {x.fecha_cierre && <div style={{ fontSize:12, color:C.suave, marginTop:4 }}>Recibimos carga hasta el {fecha(x.fecha_cierre)}.</div>}
         </div>
       )}
     </Caja>

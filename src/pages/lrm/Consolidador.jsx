@@ -74,6 +74,8 @@ export default function Consolidador() {
   const [tarifas, setTarifas] = useState([])
   const [clientes, setClientes] = useState([])
   const [productos, setProductos] = useState([])
+  const [movsCaja, setMovsCaja] = useState([])
+  const [cierres, setCierres] = useState([])
   const [abierto, setAbierto] = useState(null)
   const [nuevo, setNuevo] = useState(false)
   const [faltaTabla, setFaltaTabla] = useState(false)
@@ -88,12 +90,18 @@ export default function Consolidador() {
     setLista(c.data || []); setItems(i.data || []); setTarifas(t.data || []); setClientes(cl.data || [])
     const pr = await supabase.from('lrm_consolidado_productos').select('id,item_id,consolidado_id')
     setProductos(pr.error ? null : (pr.data || []))   // null = falta el SQL 16
+    const [mv, ci] = await Promise.all([
+      supabase.from('lrm_movimientos').select('id,tipo,monto,fecha,cliente_id,proveedor,consolidado_id,notas').not('consolidado_id', 'is', null),
+      supabase.from('lrm_cierres').select('mes'),
+    ])
+    setMovsCaja(mv.error ? null : (mv.data || []))   // null = falta el SQL 18
+    setCierres((ci.data || []).map(x => x.mes))
   }
   useEffect(() => { cargar() }, [])
   if (faltaTabla) return <div className="panel" style={{ border:'1px solid var(--gold-border)', color:'var(--gold)', fontSize:13 }}>Para usar el Consolidador corre en Supabase el archivo <b>12_lrm_consolidados.sql</b>.</div>
 
   const cons = lista.find(c => c.id === abierto)
-  if (cons) return <Detalle cons={cons} items={items.filter(i => i.consolidado_id === cons.id)} productos={productos} tarifas={tarifas} clientes={clientes} onVolver={() => setAbierto(null)} onCambio={cargar} />
+  if (cons) return <Detalle cons={cons} items={items.filter(i => i.consolidado_id === cons.id)} productos={productos} movsCaja={movsCaja && movsCaja.filter(m => m.consolidado_id === cons.id)} cierres={cierres} tarifas={tarifas} clientes={clientes} onVolver={() => setAbierto(null)} onCambio={cargar} />
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, flexWrap:'wrap' }}>
@@ -174,7 +182,8 @@ function ModalConsolidado({ cons, tarifas, onCerrar, onGuardado, onBorrado }) {
 }
 
 // ── Un consolidado por dentro ──────────────────────────────────────────────
-function Detalle({ cons, items: todos, productos, tarifas, clientes, onVolver, onCambio }) {
+function Detalle({ cons, items: todos, productos, movsCaja, cierres, tarifas, clientes, onVolver, onCambio }) {
+  const [pasarCaja, setPasarCaja] = useState(false)
   const items = todos.filter(activa)
   const canceladas = todos.filter(i => !activa(i))
   const nProd = id => (productos || []).filter(p => p.item_id === id).length
@@ -265,6 +274,28 @@ function Detalle({ cons, items: todos, productos, tarifas, clientes, onVolver, o
           </div>
         ))}
       </div>
+
+      {/* Caja: lo facturado a los clientes y el costo registrado */}
+      {(() => {
+        if (!items.length) return null
+        if (movsCaja === null) return <div className="panel" style={{ fontSize:12, color:'var(--gold)' }}>Para pasar este consolidado a Caja corre en Supabase el archivo <b>18_lrm_consolidado_caja.sql</b>.</div>
+        const fact = movsCaja.filter(m => m.tipo === 'cobro_cliente').reduce((s, m) => s + Number(m.monto || 0), 0)
+        const costoReg = movsCaja.filter(m => m.tipo === 'costo_proveedor').reduce((s, m) => s + Number(m.monto || 0), 0)
+        const pendientes = porCliente.filter(c => Math.abs(c.total - movsCaja.filter(m => m.tipo === 'cobro_cliente' && m.cliente_id === c.id).reduce((s, m) => s + Number(m.monto || 0), 0)) > 1).length
+        const costoDif = costo != null && Math.abs(costo - costoReg) > 1
+        const todoOk = !pendientes && !costoDif
+        return (
+          <div className="panel" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, flexWrap:'wrap', border:`1px solid ${todoOk ? 'rgba(76,175,80,0.35)' : 'var(--gold-border)'}` }}>
+            <div style={{ fontSize:12.5, color:'var(--text2)' }}>
+              <span style={{ fontSize:11, letterSpacing:2, fontWeight:700, color: todoOk ? 'var(--green)' : 'var(--gold)', marginRight:10 }}>CAJA</span>
+              Facturado a clientes <b style={{ color:'var(--text)' }}>{cop(fact)}</b> de {cop(ingreso)} · Costo registrado <b style={{ color:'var(--text)' }}>{cop(costoReg)}</b>{costo != null ? ` de ${cop(costo)}` : ''}
+              {todoOk ? <span style={{ color:'var(--green)' }}> · ✓ al día</span> : <span style={{ color:'#E8A23A' }}>{pendientes ? ` · ${pendientes} cliente${pendientes === 1 ? '' : 's'} por facturar o ajustar` : ''}{costoDif ? ' · falta el costo' : ''}</span>}
+            </div>
+            {!todoOk && <button id="cs-caja" onClick={() => setPasarCaja(true)} className="btn-gold" style={{ width:'auto' }}>💵 Pasar a Caja</button>}
+            {todoOk && <button onClick={() => setPasarCaja(true)} className="btn" style={{ width:'auto', fontSize:11 }}>Ver</button>}
+          </div>
+        )
+      })()}
 
       {/* Planeador de contenedores */}
       <div className="panel" style={{ border:'1px solid var(--gold-border)' }}>
@@ -365,6 +396,7 @@ function Detalle({ cons, items: todos, productos, tarifas, clientes, onVolver, o
         )}
       </div>
 
+      {pasarCaja && <ModalPasarCaja cons={cons} porCliente={porCliente} movs={movsCaja || []} cierres={cierres || []} costo={costo} tarifaDe={tarifaItem} onCerrar={() => setPasarCaja(false)} onGuardado={() => { setPasarCaja(false); onCambio() }} />}
       {cotizar && <CotizacionConsolidado cons={cons} cliente={cotizar} valorItem={valorItem} tarifaDe={tarifaItem} trm={trmUso} onCerrar={() => { setCotizar(null); onCambio() }} />}
       {lista && <ModalListaEmpaque item={lista} consolidado={cons} cliente={nombreCli(lista.cliente_id)} onCerrar={() => setLista(null)} onGuardado={() => { setLista(null); onCambio() }} />}
       {item && <ModalItem item={item} clientes={clientes} items={items} conLista={!!productos} onLista={() => { const i = item; setItem(null); setLista(i) }} escaleras={escaleras} trm={trmUso} onCerrar={() => setItem(null)} onGuardado={() => { setItem(null); onCambio() }} />}
@@ -437,6 +469,110 @@ function ModalItem({ item, clientes, items, escaleras, trm, conLista, onLista, o
           {f.id && conLista && <button onClick={onLista} className="btn" style={{ width:'auto' }}>📋 Lista de empaque</button>}
           {f.id && <button id="ci-borrar" onClick={borrar} onBlur={() => setConfirmar(false)} className="btn" title="Borra la carga y su lista de empaque. Si solo se canceló, mejor cambia el estado a Cancelada." style={{ width:'auto', color:'var(--red)' }}>{confirmar ? '¿Borrar del todo?' : 'Borrar'}</button>}
           <button onClick={onCerrar} className="btn" style={{ width:'auto' }}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+// ── Pasar el consolidado a Caja: cuenta de cobro por cliente + factura del proveedor ──
+// Si ya estaba y el valor cambió: se corrige el mismo registro; si ese mes ya se cerró, se agrega la diferencia.
+function ModalPasarCaja({ cons, porCliente, movs, cierres, costo, tarifaDe, onCerrar, onGuardado }) {
+  const ref = `CONS-${String(cons.numero || '').padStart(3, '0')} · ${cons.nombre}`
+  const hoy = hoyISO()
+  const yaCobrado = id => movs.filter(m => m.tipo === 'cobro_cliente' && m.cliente_id === id)
+  const yaCosto = movs.filter(m => m.tipo === 'costo_proveedor')
+  const suma = arr => arr.reduce((s, m) => s + Number(m.monto || 0), 0)
+  const filas = porCliente.filter(c => c.id).map(c => {
+    const prev = yaCobrado(c.id), antes = suma(prev)
+    return { c, prev, antes, dif: Math.round(c.total) - antes }
+  })
+  const [marcados, setMarcados] = useState(Object.fromEntries(filas.map(f => [f.c.id, Math.abs(f.dif) > 1])))
+  const costoAntes = suma(yaCosto)
+  const [conCosto, setConCosto] = useState(costo != null && Math.abs(costo - costoAntes) > 1)
+  const [proveedor, setProveedor] = useState(yaCosto[0]?.proveedor || `Consolidado ${cons.origen}`)
+  const [montoCosto, setMontoCosto] = useState(String(Math.round(costo || 0)))
+  const [fecha, setFecha] = useState(hoy)
+  const [vence, setVence] = useState('')
+  const [error, setError] = useState('')
+  const [guardando, setGuardando] = useState(false)
+  const cerrado = f => cierres.includes((f || '').slice(0, 7))
+  const sinCliente = porCliente.some(c => !c.id)
+
+  const notaDe = c => `Consolidado ${cons.origen} → ${cons.destino} · ` + c.its.map(i => { const t = tarifaDe(i); return `${fmt(i.cbm, 3)} m³ × ${t.m === 'USD' ? 'US$' + fmt(t.v, 2) : cop(t.v)}` }).join(' + ')
+
+  // Un valor nuevo sobre registros que ya existen: corrige el último si su mes está abierto; si no, agrega la diferencia
+  const ajustar = async (prev, nuevo, base) => {
+    const antes = suma(prev), dif = Math.round(nuevo) - antes
+    if (!prev.length) return supabase.from('lrm_movimientos').insert({ ...base, monto: Math.round(nuevo) })
+    const ultimo = prev[prev.length - 1]
+    if (!cerrado(ultimo.fecha)) {
+      const m = Number(ultimo.monto || 0) + dif
+      if (m <= 0) return supabase.from('lrm_movimientos').delete().eq('id', ultimo.id)
+      return supabase.from('lrm_movimientos').update({ monto: m, notas: base.notas }).eq('id', ultimo.id)
+    }
+    if (dif > 0) return supabase.from('lrm_movimientos').insert({ ...base, monto: dif, notas: `Ajuste · ${base.notas}` })
+    return { error: { message: `El cobro anterior está en un mes cerrado (${ultimo.fecha.slice(0, 7)}). Para bajar el valor registra un ajuste en Caja.` } }
+  }
+
+  const guardar = async () => {
+    if (cerrado(fecha)) return setError('Ese mes ya está cerrado en Caja. Cambia la fecha o reábrelo.')
+    setGuardando(true); setError('')
+    for (const f of filas) {
+      if (!marcados[f.c.id]) continue
+      const r = await ajustar(f.prev, f.c.total, { tipo:'cobro_cliente', concepto:'flete', cliente_id: f.c.id, consolidado_id: cons.id, fecha, vence: vence || null, referencia: ref, notas: notaDe(f.c) })
+      if (r?.error) { setGuardando(false); return setError(`${f.c.nombre}: ${r.error.message}`) }
+    }
+    if (conCosto && n2(montoCosto) > 0) {
+      if (!proveedor.trim()) { setGuardando(false); return setError('Escribe a quién le pagas el consolidado.') }
+      const r = await ajustar(yaCosto, n2(montoCosto), { tipo:'costo_proveedor', concepto:'flete', proveedor: proveedor.trim(), consolidado_id: cons.id, fecha, vence: vence || null, referencia: ref, notas: `Consolidado ${cons.origen} → ${cons.destino} · ${cons.nombre}` })
+      if (r?.error) { setGuardando(false); return setError('Costo: ' + r.error.message) }
+    }
+    setGuardando(false); onGuardado()
+  }
+  const nada = !filas.some(f => marcados[f.c.id]) && !conCosto
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:110, padding:12 }}>
+      <div style={{ background:'var(--bg2)', borderRadius:16, padding:22, width:'100%', maxWidth:620, maxHeight:'92vh', overflowY:'auto', border:'1px solid var(--gold-border)' }}>
+        <div style={{ fontSize:11, letterSpacing:2, fontWeight:700, color:'var(--gold)' }}>PASAR A CAJA</div>
+        <div style={{ fontSize:17, fontWeight:800, color:'var(--text)', marginBottom:4 }}>{cons.nombre}</div>
+        <div style={{ fontSize:12, color:'var(--text3)', marginBottom:14 }}>Cada cliente queda con su cuenta de cobro en Caja y Cartera, y el costo como factura por pagar.</div>
+
+        <div style={{ fontSize:11, letterSpacing:1.5, fontWeight:700, color:'var(--text3)', marginBottom:6 }}>CLIENTES</div>
+        {filas.map(f => (
+          <label key={f.c.id} className="pc-fila" style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:8, background:'var(--bg4)', marginBottom:6, cursor:'pointer' }}>
+            <input type="checkbox" checked={!!marcados[f.c.id]} onChange={e => setMarcados(p => ({ ...p, [f.c.id]: e.target.checked }))} />
+            <span style={{ flex:1, minWidth:0 }}>
+              <span style={{ fontSize:13, fontWeight:700, color:'var(--text)' }}>{f.c.nombre}</span>
+              <span style={{ display:'block', fontSize:11, color: Math.abs(f.dif) <= 1 ? 'var(--green)' : f.antes ? '#E8A23A' : 'var(--text3)' }}>
+                {Math.abs(f.dif) <= 1 ? '✓ Ya está en Caja' : f.antes ? `En Caja ${cop(f.antes)} · ${f.dif > 0 ? 'sube' : 'baja'} ${cop(Math.abs(f.dif))}` : 'Sin facturar'}
+              </span>
+            </span>
+            <b style={{ color:'var(--gold)', whiteSpace:'nowrap' }}>{cop(f.c.total)}</b>
+          </label>
+        ))}
+        {sinCliente && <div style={{ fontSize:11, color:'#E8A23A', marginBottom:6 }}>Hay carga sin cliente asignado: no se puede facturar hasta que le pongas cliente.</div>}
+
+        <div style={{ fontSize:11, letterSpacing:1.5, fontWeight:700, color:'var(--text3)', margin:'14px 0 6px' }}>TU COSTO</div>
+        <label style={{ display:'flex', gap:8, alignItems:'center', fontSize:13, color:'var(--text2)', cursor:'pointer', marginBottom:8 }}>
+          <input type="checkbox" checked={conCosto} onChange={e => setConCosto(e.target.checked)} />
+          Registrar la factura del proveedor {costoAntes ? <span style={{ fontSize:11, color:'var(--text3)' }}>(en Caja hoy: {cop(costoAntes)})</span> : null}
+        </label>
+        {conCosto && (
+          <div className="grid-2" style={{ gap:10 }}>
+            <div><Etiqueta>A quién le pagas</Etiqueta><input id="pc-proveedor" value={proveedor} onChange={e => setProveedor(e.target.value)} style={iStyle} /></div>
+            <div><Etiqueta>Valor (COP)</Etiqueta><input id="pc-costo" inputMode="numeric" value={montoCosto ? Number(n2(montoCosto)).toLocaleString('es-CO') : ''} onChange={e => setMontoCosto(e.target.value.replace(/\D/g, ''))} style={iStyle} /></div>
+          </div>
+        )}
+
+        <div className="grid-2" style={{ gap:10, marginTop:12 }}>
+          <div><Etiqueta>Fecha</Etiqueta><input type="date" value={fecha} onChange={e => setFecha(e.target.value)} style={iStyle} /></div>
+          <div><Etiqueta>Vence (opcional)</Etiqueta><input type="date" value={vence} onChange={e => setVence(e.target.value)} style={iStyle} /></div>
+        </div>
+        {error && <div style={{ fontSize:12, color:'var(--red)', marginTop:10 }}>{error}</div>}
+        <div style={{ display:'flex', gap:8, marginTop:14 }}>
+          <button id="pc-guardar" onClick={guardar} disabled={guardando || nada} className="btn-green" style={{ flex:1, opacity: nada ? 0.5 : 1 }}>{guardando ? 'Guardando…' : 'Registrar en Caja'}</button>
+          <button onClick={onCerrar} className="btn" style={{ width:'auto' }}>Cerrar</button>
         </div>
       </div>
     </div>
