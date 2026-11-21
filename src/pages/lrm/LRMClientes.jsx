@@ -7,6 +7,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { PITCHES_LRM, ETAPAS_PITCH, PUBLICOS_PITCH, unirPitches } from './pitchesLRM'
 import { cobroCarga } from './tarifasLRM'
+import { linkRastreo } from './datosLRM'
 
 export const NICHOS_LRM = ['Perfumes','Cosméticos','Celulares','Computadores','Tablets','Electrónica','Electrodomésticos','Relojes','Accesorios','Ropa y calzado','Partes y repuestos','Mercancía doméstica','Otro']
 // Un cliente puede comprar varias cosas: se guardan juntas en el mismo campo, separadas por coma
@@ -369,6 +370,7 @@ function Ficha({ cliente: c, onCerrar, onEditar, onEstado, onCambio }) {
           {wa && <a href={wa} target="_blank" rel="noreferrer" className="btn" style={{ color:'#25D366', borderColor:'rgba(37,211,102,0.4)', textDecoration:'none' }}>💬 WhatsApp</a>}
           {c.correo && <a href={`mailto:${c.correo}`} className="btn" style={{ textDecoration:'none' }}>✉️ Correo</a>}
           <button onClick={() => onEditar(c)} className="btn">✏️ Editar</button>
+          <BotonRastreo cliente={c} />
           <select value={c.estado} onChange={e => onEstado(c, e.target.value)} style={{ ...iStyle, width:'auto', marginTop:0, padding:'6px 10px', fontSize:12, color:est.color }}>
             {ESTADOS_CLIENTE.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
           </select>
@@ -555,6 +557,31 @@ function EnviarPitch({ pitch, clientes, onCerrar }) {
         </div>
         <div style={{ fontSize:11, color:'var(--text4)', marginTop:8 }}>Queda registrado en el historial del cliente.</div>
       </div>
+    </div>
+  )
+}
+// Link del portal de rastreo: copiar o mandarlo por WhatsApp
+function BotonRastreo({ cliente }) {
+  const [abierto, setAbierto] = useState(false)
+  const [copiado, setCopiado] = useState(false)
+  const link = linkRastreo(cliente)
+  if (!link) return <button className="btn" title="Corre en Supabase el archivo 15_lrm_portal_rastreo.sql" style={{ opacity:0.6 }} onClick={() => setAbierto(a => !a)}>📍 Rastreo{abierto ? ': corre el SQL 15' : ''}</button>
+  const texto = `Hola ${(cliente.nombre || '').split(' ')[0]}, aquí puedes ver en todo momento dónde va tu carga con LRM Trade Consulting:\n${link}\n\nGuárdalo, es tu link personal.`
+  const wa = linkWhatsApp(cliente.telefono, cliente.nombre, texto)
+  return (
+    <div style={{ position:'relative' }}>
+      <button id="cl-rastreo" onClick={() => setAbierto(a => !a)} className="btn">📍 Rastreo</button>
+      {abierto && (
+        <div style={{ position:'absolute', top:'110%', right:0, zIndex:5, width:'min(300px, 80vw)', background:'var(--bg3)', border:'1px solid var(--border2)', borderRadius:10, padding:12, boxShadow:'0 8px 24px rgba(0,0,0,0.4)' }}>
+          <div style={{ fontSize:11, color:'var(--text3)', marginBottom:6 }}>Link personal de {cliente.nombre}. Ve solo sus cargas, sin precios.</div>
+          <div id="cl-rastreo-link" style={{ fontSize:11.5, color:'var(--gold)', wordBreak:'break-all', marginBottom:10 }}>{link}</div>
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+            <button onClick={async () => { try { await navigator.clipboard.writeText(link); setCopiado(true); setTimeout(() => setCopiado(false), 2000) } catch {} }} className="btn" style={{ fontSize:11 }}>{copiado ? '✓ Copiado' : 'Copiar'}</button>
+            {wa && <a href={wa} target="_blank" rel="noreferrer" className="btn" style={{ fontSize:11, color:'#25D366', textDecoration:'none' }}>Enviar por WhatsApp</a>}
+            <a href={link} target="_blank" rel="noreferrer" className="btn" style={{ fontSize:11, textDecoration:'none' }}>Ver</a>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

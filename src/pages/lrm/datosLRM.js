@@ -44,6 +44,9 @@ export const DATOS_BANCARIOS_LRM = {
 export const urlMarca = (archivo) => (typeof window !== 'undefined' ? window.location.origin : '') + '/marca/' + archivo
 export const logoDocumentoHTML = (alto = 58) => `<img src="${urlMarca('logo-documento.png')}" alt="LRM Trade Consulting" style="height:${alto}px;display:block;margin-bottom:4px">`
 
+// Link del portal de rastreo de un cliente (necesita el SQL 15: columna token_rastreo)
+export const linkRastreo = (cliente) => cliente?.token_rastreo ? `${typeof window !== 'undefined' ? window.location.origin : ''}/#/rastreo/${cliente.token_rastreo}` : null
+
 // Bodega que se crea sola si no hay ninguna
 export const BODEGA_POR_DEFECTO = {
   nombre: 'RD Star 1', operador: 'RD Star - Ok Cargo', pais: 'Estados Unidos', ciudad: 'Doral, FL 33126',
