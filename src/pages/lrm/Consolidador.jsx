@@ -10,6 +10,11 @@ import { useDivisas } from '../../lib/divisas'
 import { linkWhatsApp, hoyISO, fechaCorta } from './LRMClientes'
 import { CONTENEDORES } from './Aliados'
 import { useDatosLRM } from './datosLRM'
+import { useTarifas, escaleraPara, costoPara, escalonDe, tramoTexto, CONSOLIDADO } from './tarifasLRM'
+
+// Precio por m³ de un item, en su moneda (columnas nuevas tarifa_m3 + moneda; las viejas eran tarifa_m3_usd)
+const tarifaItem = i => i.tarifa_m3 != null && i.tarifa_m3 !== '' ? { v: n2Raw(i.tarifa_m3), m: i.moneda || 'COP' } : { v: n2Raw(i.tarifa_m3_usd), m: 'USD' }
+function n2Raw(v) { return Number(v) || 0 }
 
 const usd = n => 'US$' + Number(n || 0).toLocaleString('es-CO', { maximumFractionDigits: 0 })
 const cop = n => '$' + Math.round(Math.abs(n || 0)).toLocaleString('es-CO')
@@ -63,7 +68,7 @@ export default function Consolidador() {
       supabase.from('lrm_consolidados').select('*').order('created_at', { ascending:false }),
       supabase.from('lrm_consolidado_items').select('*').order('created_at'),
       supabase.from('lrm_tarifas_flete').select('*'),
-      supabase.from('lrm_clientes').select('id,nombre,telefono').order('nombre'),
+      supabase.from('lrm_clientes').select('*').order('nombre'),
     ])
     if (c.error || i.error) { setFaltaTabla(true); return }
     setLista(c.data || []); setItems(i.data || []); setTarifas(t.data || []); setClientes(cl.data || [])
@@ -142,29 +147,38 @@ function Detalle({ cons, items, tarifas, clientes, onVolver, onCambio }) {
   const divisas = useDivisas()
   const trm = divisas?.find(d => d.id === 'USD')?.hoy || 0
   const { empresa } = useDatosLRM()
+  const { escaleras, costos } = useTarifas()
+  const [trmManual, setTrmManual] = useState('')
+  const trmUso = n2(trmManual) || trm
+  const aCOP = (v, m) => m === 'USD' ? v * trmUso : v
   const [item, setItem] = useState(null)
   const [editar, setEditar] = useState(false)
   const [copiado, setCopiado] = useState('')
   const ruta = tarifas.filter(t => t.origen === cons.origen && t.destino === cons.destino)
-  const lclVenta = ruta.filter(t => t.tipo === 'LCL' && vigente(t)).map(t => n2(t.costo_usd) + n2(t.margen_usd)).sort((a, b) => a - b)[0]
   const m3 = items.reduce((s, i) => s + n2(i.cbm), 0)
   const kg = items.reduce((s, i) => s + n2(i.peso_kg), 0)
-  const ingreso = items.reduce((s, i) => s + n2(i.cbm) * n2(i.tarifa_m3_usd), 0)
+  const valorItem = i => { const t = tarifaItem(i); return aCOP(n2(i.cbm) * t.v, t.m) }
+  const ingreso = items.reduce((s, i) => s + valorItem(i), 0)
+  const modo = cons.costo_modo || 'fijo'
+  const costoFijo = costoPara(costos, null, CONSOLIDADO)
+  const costoFijoTotal = costoFijo?.unidad === 'cbm' ? aCOP(m3 * n2(costoFijo.valor), costoFijo.moneda) : null
   const opciones = useMemo(() => planes(m3, kg, ruta), [m3, kg, ruta.length])
   const elegido = opciones.find(o => o.texto === cons.plan) || opciones[0]
-  const costo = elegido?.total ?? null
+  const costoCont = elegido?.total != null ? elegido.total * trmUso : null
+  const costo = modo === 'fijo' ? costoFijoTotal : costoCont
   const nombreCli = id => clientes.find(c => c.id === id)?.nombre || 'Sin cliente'
   const porCliente = [...new Set(items.map(i => i.cliente_id))].map(id => {
     const its = items.filter(i => i.cliente_id === id)
-    return { id, nombre: nombreCli(id), tel: clientes.find(c => c.id === id)?.telefono, its, m3: its.reduce((s, i) => s + n2(i.cbm), 0), kg: its.reduce((s, i) => s + n2(i.peso_kg), 0), bultos: its.reduce((s, i) => s + n2(i.bultos), 0), total: its.reduce((s, i) => s + n2(i.cbm) * n2(i.tarifa_m3_usd), 0) }
+    return { id, nombre: nombreCli(id), tel: clientes.find(c => c.id === id)?.telefono, its, m3: its.reduce((s, i) => s + n2(i.cbm), 0), kg: its.reduce((s, i) => s + n2(i.peso_kg), 0), bultos: its.reduce((s, i) => s + n2(i.bultos), 0), total: its.reduce((s, i) => s + valorItem(i), 0) }
   }).sort((a, b) => b.m3 - a.m3)
 
   const setEstado = async e => { await supabase.from('lrm_consolidados').update({ estado: e.target.value }).eq('id', cons.id); onCambio() }
   const usarPlan = async p => { await supabase.from('lrm_consolidados').update({ plan: p.texto }).eq('id', cons.id); onCambio() }
+  const setModo = async m => { await supabase.from('lrm_consolidados').update({ costo_modo: m }).eq('id', cons.id); onCambio() }
   const textoCliente = c => [
     `Hola ${c.nombre.split(' ')[0]}, este es el resumen de tu carga en nuestro consolidado *${cons.nombre}* (${cons.origen} → ${cons.destino}):`, '',
     ...c.its.map(i => `• ${i.descripcion || 'Mercancía'}${i.bultos ? ` · ${i.bultos} bultos` : ''} · ${fmt(i.cbm, 2)} m³${i.peso_kg ? ` · ${fmt(i.peso_kg, 0)} kg` : ''}${i.estado === 'en_bodega' ? ' · ✓ en bodega' : ' · por llegar'}`),
-    '', `Total: ${fmt(c.m3, 2)} m³ · *${usd(c.total)}*${trm ? ` (aprox. ${cop(c.total * trm)})` : ''}`,
+    '', `Total: ${fmt(c.m3, 2)} m³ · *${cop(c.total)}*`,
     ...(cons.fecha_cierre ? [`Recibimos carga hasta el ${fechaCorta(cons.fecha_cierre)}.`] : []), '', `*${empresa.nombre}* · We bring it. Safe and on time.`,
   ].join('\n')
   const copiar = async (t, k) => { try { await navigator.clipboard.writeText(t); setCopiado(k); setTimeout(() => setCopiado(''), 2000) } catch {} }
@@ -181,24 +195,35 @@ function Detalle({ cons, items, tarifas, clientes, onVolver, onCambio }) {
         <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
           <select value={cons.estado} onChange={setEstado} style={{ ...iStyle, marginTop:0, width:'auto', color:e.c }}>{Object.entries(ESTADOS).map(([k, x]) => <option key={k} value={k}>{x.l}</option>)}</select>
           <button onClick={() => setEditar(true)} className="btn" style={{ width:'auto' }}>Editar</button>
-          <button id="cs-item-nuevo" onClick={() => setItem({ consolidado_id: cons.id, cliente_id:'', descripcion:'', proveedor:'', bultos:'', cbm:'', peso_kg:'', tarifa_m3_usd: lclVenta ? String(lclVenta) : '', estado:'por_llegar' })} className="btn-gold" style={{ width:'auto' }}>+ Carga de un cliente</button>
+          <button id="cs-item-nuevo" onClick={() => setItem({ consolidado_id: cons.id, cliente_id:'', descripcion:'', proveedor:'', bultos:'', cbm:'', peso_kg:'', tarifa_m3:'', moneda:'COP', estado:'por_llegar' })} className="btn-gold" style={{ width:'auto' }}>+ Carga de un cliente</button>
         </div>
       </div>
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(150px, 100%), 1fr))', gap:10 }}>
         {[['Volumen', `${fmt(m3, 2)} m³`, 'var(--text)'], ['Peso', `${fmt(kg, 0)} kg`, 'var(--text)'], ['Clientes', porCliente.length, 'var(--text)'],
-          ['Le cobras', usd(ingreso), 'var(--gold)'], ['Te cuesta', costo == null ? '—' : usd(costo), 'var(--red)'], ['Ganas', costo == null ? '—' : usd(ingreso - costo), ingreso - (costo || 0) >= 0 ? 'var(--green)' : 'var(--red)']].map(([l, v, c]) => (
+          ['Le cobras', cop(ingreso), 'var(--gold)'], ['Te cuesta', costo == null ? '—' : cop(costo), 'var(--red)'], ['Ganas', costo == null ? '—' : cop(ingreso - costo), ingreso - (costo || 0) >= 0 ? 'var(--green)' : 'var(--red)']].map(([l, v, c]) => (
           <div key={l} className="panel" style={{ padding:'12px 14px' }}>
             <div style={{ fontSize:10, letterSpacing:1.5, color:'var(--text3)', textTransform:'uppercase', fontWeight:700 }}>{l}</div>
             <div style={{ fontSize:19, fontWeight:800, color:c, marginTop:2 }}>{v}</div>
-            {l === 'Ganas' && costo != null && trm ? <div style={{ fontSize:11, color:'var(--text3)' }}>{cop((ingreso - costo) * trm)}</div> : null}
+            {l === 'Ganas' && costo != null && ingreso ? <div style={{ fontSize:11, color:'var(--text3)' }}>{fmt((ingreso - costo) / ingreso * 100, 0)}% de lo que cobras</div> : null}
+            {l === 'Te cuesta' ? <div style={{ fontSize:11, color:'var(--text3)' }}>{modo === 'fijo' ? (costoFijo?.unidad === 'cbm' ? `${fmt(m3, 2)} m³ × ${costoFijo.moneda === 'USD' ? 'US$' + fmt(costoFijo.valor, 2) : cop(costoFijo.valor)}` : 'pon el costo por m³ en Tarifas') : 'por contenedores'}</div> : null}
           </div>
         ))}
       </div>
 
       {/* Planeador de contenedores */}
       <div className="panel" style={{ border:'1px solid var(--gold-border)' }}>
-        <div style={{ fontSize:11, letterSpacing:2, fontWeight:700, color:'var(--gold)', marginBottom:10 }}>CÓMO SE LLENA</div>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, flexWrap:'wrap', marginBottom:10 }}>
+          <div style={{ fontSize:11, letterSpacing:2, fontWeight:700, color:'var(--gold)' }}>CÓMO SE LLENA</div>
+          <div style={{ display:'flex', gap:6, alignItems:'center', flexWrap:'wrap' }}>
+            <span style={{ fontSize:11, color:'var(--text3)' }}>Tu costo:</span>
+            {[['fijo','Tarifa fija por m³'],['contenedores','Por contenedores']].map(([id, l]) => (
+              <button key={id} id={`cs-modo-${id}`} onClick={() => setModo(id)} className={modo === id ? 'btn-gold' : 'btn'} style={{ fontSize:11, padding:'4px 10px', width:'auto' }}>{l}</button>
+            ))}
+            <input value={trmManual} onChange={e => setTrmManual(e.target.value)} placeholder={trm ? `TRM ${fmt(trm, 0)}` : 'TRM'} style={{ ...iStyle, marginTop:0, width:100, padding:'4px 8px', fontSize:11 }} />
+          </div>
+        </div>
+        {modo === 'fijo' && <div style={{ fontSize:12, color:'var(--text3)', marginBottom:10 }}>Te cobran una tarifa fija por m³ ({costoFijo?.unidad === 'cbm' ? (costoFijo.moneda === 'USD' ? 'US$' + fmt(costoFijo.valor, 2) : cop(costoFijo.valor)) : 'sin definir'}). Abajo ves cómo quedaría en contenedores, solo como referencia.</div>}
         {!m3 ? <Vacio>Agrega la carga de tus clientes y aquí te digo cuántos contenedores llenas.</Vacio> : (
           <>
             {!ruta.length && <div style={{ fontSize:12, color:'#E8A23A', marginBottom:8 }}>No tienes tarifas para {cons.origen} → {cons.destino} en Aliados y fletes: te muestro solo por espacio, sin costos.</div>}
@@ -215,7 +240,7 @@ function Detalle({ cons, items, tarifas, clientes, onVolver, onCambio }) {
                         </div>
                       </div>
                       <div style={{ display:'flex', gap:10, alignItems:'center' }}>
-                        {p.total != null && <div style={{ textAlign:'right' }}><div style={{ fontSize:15, fontWeight:800, color:'var(--red)' }}>{usd(p.total)}</div><div style={{ fontSize:11, color:'var(--green)' }}>ganas {usd(ingreso - p.total)}</div></div>}
+                        {p.total != null && <div style={{ textAlign:'right' }}><div style={{ fontSize:15, fontWeight:800, color:'var(--red)' }}>{usd(p.total)}{trmUso ? <span style={{ fontSize:11, fontWeight:400, color:'var(--text3)' }}> · {cop(p.total * trmUso)}</span> : null}</div>{trmUso ? <div style={{ fontSize:11, color:'var(--green)' }}>ganarías {cop(ingreso - p.total * trmUso)}</div> : null}</div>}
                         {!activo && <button onClick={() => usarPlan(p)} className="btn" style={{ fontSize:11, padding:'4px 9px', width:'auto' }}>Usar este</button>}
                       </div>
                     </div>
@@ -247,7 +272,7 @@ function Detalle({ cons, items, tarifas, clientes, onVolver, onCambio }) {
               <div style={{ display:'flex', justifyContent:'space-between', gap:10, flexWrap:'wrap', alignItems:'center' }}>
                 <div style={{ fontSize:14, fontWeight:800, color:'var(--text)' }}>{c.nombre} <span style={{ fontSize:12, fontWeight:400, color:'var(--text3)' }}>· {fmt(c.m3, 2)} m³ · {fmt(c.kg, 0)} kg{c.bultos ? ` · ${c.bultos} bultos` : ''} · {fmt(m3 ? c.m3 / m3 * 100 : 0, 0)}% del envío</span></div>
                 <div style={{ display:'flex', gap:6, alignItems:'center' }}>
-                  <b style={{ color:'var(--gold)' }}>{usd(c.total)}</b>
+                  <b style={{ color:'var(--gold)' }}>{cop(c.total)}</b>
                   {wa && <a href={wa} target="_blank" rel="noreferrer" className="btn" style={{ fontSize:11, padding:'4px 9px', textDecoration:'none', color:'#25D366' }}>WhatsApp</a>}
                   <button onClick={() => copiar(txt, c.id)} className="btn" style={{ fontSize:11, padding:'4px 9px', width:'auto' }}>{copiado === c.id ? '✓' : 'Copiar'}</button>
                 </div>
@@ -255,7 +280,7 @@ function Detalle({ cons, items, tarifas, clientes, onVolver, onCambio }) {
               {c.its.map(i => (
                 <div key={i.id} onClick={() => setItem(i)} className="cs-item" style={{ display:'flex', justifyContent:'space-between', gap:8, fontSize:12, color:'var(--text2)', padding:'5px 8px', marginTop:4, borderRadius:8, background:'var(--bg4)', cursor:'pointer' }}>
                   <span>{i.descripcion || 'Mercancía'}{i.proveedor ? ` · ${i.proveedor}` : ''}{i.bultos ? ` · ${i.bultos} bultos` : ''} · {fmt(i.cbm, 2)} m³{i.peso_kg ? ` · ${fmt(i.peso_kg, 0)} kg` : ''}</span>
-                  <span style={{ color: i.estado === 'en_bodega' ? 'var(--green)' : '#E8A23A', whiteSpace:'nowrap' }}>{i.estado === 'en_bodega' ? '✓ En bodega' : 'Por llegar'} · {usd(n2(i.cbm) * n2(i.tarifa_m3_usd))}</span>
+                  <span style={{ color: i.estado === 'en_bodega' ? 'var(--green)' : '#E8A23A', whiteSpace:'nowrap' }}>{i.estado === 'en_bodega' ? '✓ En bodega' : 'Por llegar'} · {cop(valorItem(i))}</span>
                 </div>
               ))}
             </div>
@@ -263,24 +288,33 @@ function Detalle({ cons, items, tarifas, clientes, onVolver, onCambio }) {
         })}
       </div>
 
-      {item && <ModalItem item={item} clientes={clientes} onCerrar={() => setItem(null)} onGuardado={() => { setItem(null); onCambio() }} />}
+      {item && <ModalItem item={item} clientes={clientes} items={items} escaleras={escaleras} trm={trmUso} onCerrar={() => setItem(null)} onGuardado={() => { setItem(null); onCambio() }} />}
       {editar && <ModalConsolidado cons={cons} tarifas={tarifas} onCerrar={() => setEditar(false)} onGuardado={() => { setEditar(false); onCambio() }} />}
     </div>
   )
 }
 
-function ModalItem({ item, clientes, onCerrar, onGuardado }) {
-  const [f, setF] = useState({ ...item, bultos: String(item.bultos ?? ''), cbm: String(item.cbm ?? ''), peso_kg: String(item.peso_kg ?? ''), tarifa_m3_usd: String(item.tarifa_m3_usd ?? '') })
+function ModalItem({ item, clientes, items, escaleras, trm, onCerrar, onGuardado }) {
+  const t0 = item.id ? tarifaItem(item) : { v: '', m: 'COP' }
+  const [f, setF] = useState({ ...item, bultos: String(item.bultos ?? ''), cbm: String(item.cbm ?? ''), peso_kg: String(item.peso_kg ?? ''), tarifa_m3: String(t0.v ?? ''), moneda: t0.m })
+  const [auto, setAuto] = useState(!item.id)
   const [error, setError] = useState('')
   const [confirmar, setConfirmar] = useState(false)
   const set = k => e => setF(p => ({ ...p, [k]: e.target.value }))
+  // Escalera del consolidado: la del cliente o la general, según los m³ que lleva en este envío
+  const cli = clientes.find(c => c.id === f.cliente_id)
+  const { esc, fuente } = escaleraPara(cli, escaleras, CONSOLIDADO)
+  const m3Cliente = items.filter(i => i.cliente_id === f.cliente_id && i.id !== f.id).reduce((s, i) => s + n2(i.cbm), 0) + n2(f.cbm)
+  const escalon = escalonDe(esc, m3Cliente)
+  useEffect(() => { if (auto && esc.unidad === 'cbm') setF(p => ({ ...p, tarifa_m3: String(escalon.precio), moneda: esc.moneda })) }, [auto, f.cliente_id, f.cbm, escalon?.precio, esc.moneda])
+  const total = n2(f.cbm) * n2(f.tarifa_m3)
   const guardar = async () => {
     if (!f.cliente_id) return setError('Elige el cliente.')
     if (!n2(f.cbm)) return setError('Pon los m³.')
     const { id, created_at, ...d } = f
-    const datos = { ...d, bultos: Math.round(n2(d.bultos)), cbm: n2(d.cbm), peso_kg: n2(d.peso_kg), tarifa_m3_usd: n2(d.tarifa_m3_usd) }
+    const datos = { ...d, bultos: Math.round(n2(d.bultos)), cbm: n2(d.cbm), peso_kg: n2(d.peso_kg), tarifa_m3: n2(d.tarifa_m3), moneda: d.moneda, tarifa_m3_usd: d.moneda === 'USD' ? n2(d.tarifa_m3) : 0 }
     const r = id ? await supabase.from('lrm_consolidado_items').update(datos).eq('id', id) : await supabase.from('lrm_consolidado_items').insert(datos)
-    if (r.error) return setError('No se pudo guardar: ' + r.error.message)
+    if (r.error) return setError(r.error.message.includes('tarifa_m3') || r.error.message.includes('moneda') ? 'Falta correr en Supabase el SQL 12 nuevo (columnas tarifa_m3 y moneda).' : 'No se pudo guardar: ' + r.error.message)
     onGuardado()
   }
   const borrar = async () => { if (!confirmar) return setConfirmar(true); await supabase.from('lrm_consolidado_items').delete().eq('id', f.id); onGuardado() }
@@ -296,10 +330,18 @@ function ModalItem({ item, clientes, onCerrar, onGuardado }) {
           <div><Etiqueta>Volumen (m³)</Etiqueta><input id="ci-cbm" inputMode="decimal" value={f.cbm} onChange={set('cbm')} style={iStyle} /></div>
           <div><Etiqueta>Peso (kg)</Etiqueta><input id="ci-kg" inputMode="decimal" value={f.peso_kg} onChange={set('peso_kg')} style={iStyle} /></div>
           <div><Etiqueta>Bultos</Etiqueta><input inputMode="numeric" value={f.bultos} onChange={set('bultos')} style={iStyle} /></div>
-          <div><Etiqueta>Le cobras (US$ por m³)</Etiqueta><input id="ci-tarifa" inputMode="decimal" value={f.tarifa_m3_usd} onChange={set('tarifa_m3_usd')} style={iStyle} /></div>
+          <div><Etiqueta>Le cobras por m³ ({f.moneda === 'USD' ? 'US$' : 'pesos'})</Etiqueta>
+            <div style={{ display:'flex', gap:6 }}>
+              <input id="ci-tarifa" inputMode="decimal" value={f.tarifa_m3} onChange={e => { setAuto(false); setF(p => ({ ...p, tarifa_m3: e.target.value })) }} style={iStyle} />
+              <select value={f.moneda} onChange={e => { setAuto(false); setF(p => ({ ...p, moneda: e.target.value })) }} style={{ ...iStyle, width:80 }}><option>COP</option><option>USD</option></select>
+            </div></div>
+        </div>
+        <div style={{ fontSize:11, color:'var(--text3)', marginBottom:10, display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
+          {auto ? <span>Tarifa {fuente === 'cliente' ? <b style={{ color:'var(--gold)' }}>de {cli?.nombre}</b> : 'general'} del consolidado · escalón {tramoTexto(esc, escalon)} m³ (lleva {fmt(m3Cliente, 2)} m³)</span> : <span>Tarifa puesta a mano</span>}
+          {!auto && <button type="button" onClick={() => setAuto(true)} className="btn" style={{ fontSize:11, padding:'3px 9px', width:'auto' }}>↺ Usar la escalera</button>}
         </div>
         <div style={{ marginBottom:14 }}><Etiqueta>Notas</Etiqueta><input value={f.notas || ''} onChange={set('notas')} style={iStyle} /></div>
-        <div style={{ fontSize:14, color:'var(--text2)', marginBottom:12 }}>Total al cliente: <b style={{ color:'var(--gold)' }}>{usd(n2(f.cbm) * n2(f.tarifa_m3_usd))}</b></div>
+        <div style={{ fontSize:14, color:'var(--text2)', marginBottom:12 }}>Total al cliente: <b style={{ color:'var(--gold)' }}>{f.moneda === 'USD' ? `${usd(total)}${trm ? ` · ${cop(total * trm)}` : ''}` : cop(total)}</b></div>
         {error && <div style={{ fontSize:12, color:'var(--red)', marginBottom:10 }}>{error}</div>}
         <div style={{ display:'flex', gap:8 }}>
           <button id="ci-guardar" onClick={guardar} className="btn-green" style={{ flex:1 }}>Guardar</button>

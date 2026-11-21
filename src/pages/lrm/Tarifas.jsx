@@ -8,7 +8,8 @@ import { supabase } from '../../lib/supabase'
 import { useDivisas } from '../../lib/divisas'
 import { NICHOS_LRM, nichosDe, linkWhatsApp } from './LRMClientes'
 import { useDatosLRM, logoDocumentoHTML } from './datosLRM'
-import { useTarifas, escaleraPara, costoPara, ordenar, copiar, sinMarca, LB_A_KG, UNIDADES, UNIDAD_CORTA } from './tarifasLRM'
+import { useTarifas, escaleraPara, costoPara, ordenar, copiar, sinMarca, LB_A_KG, UNIDADES, UNIDAD_CORTA, SERVICIOS_TARIFA } from './tarifasLRM'
+const CATEGORIAS = [...NICHOS_LRM.filter(n => n !== 'Otro'), ...SERVICIOS_TARIFA]
 
 const cop = n => '$' + Math.round(Math.abs(n || 0)).toLocaleString('es-CO')
 const fmt = (v, d = 1) => Number(v || 0).toLocaleString('es-CO', { maximumFractionDigits: d })
@@ -79,7 +80,7 @@ export function EditorEscalera({ esc, onChange, costo, trm }) {
   return (
     <div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(120px, 100%), 1fr))', gap:8, marginBottom:10 }}>
-        <div><Etiqueta>Cobras por</Etiqueta><select value={esc.unidad} onChange={e => upd({ unidad: e.target.value })} style={iStyle}><option value="kg">kg</option><option value="lb">lb</option><option value="unidad">unidad</option></select></div>
+        <div><Etiqueta>Cobras por</Etiqueta><select value={esc.unidad} onChange={e => upd({ unidad: e.target.value })} style={iStyle}><option value="kg">kg</option><option value="lb">lb</option><option value="unidad">unidad</option><option value="cbm">m³ (CBM)</option></select></div>
         <div><Etiqueta>Moneda</Etiqueta><select value={esc.moneda} onChange={e => upd({ moneda: e.target.value })} style={iStyle}><option>COP</option><option>USD</option></select></div>
         <div><Etiqueta>Mínimo por envío</Etiqueta><input inputMode="decimal" value={esc.minimo || ''} onChange={e => upd({ minimo: n2(e.target.value) })} placeholder="0" style={iStyle} /></div>
         <div><Etiqueta>AIU interno</Etiqueta><select value={esc.aiu ? 'si' : 'no'} onChange={e => upd({ aiu: e.target.value === 'si' })} style={iStyle}><option value="no">No</option><option value="si">Sí (2 lb/caja)</option></select></div>
@@ -100,7 +101,7 @@ export function EditorEscalera({ esc, onChange, costo, trm }) {
           </div>
         )
       })}
-      <button onClick={() => { const ult = lista[lista.length - 1]; upd({ escalones: [...esc.escalones, { desde: (ult?.desde || 0) + (esc.unidad === 'unidad' ? 10 : 100), precio: ult?.precio || 0 }] }) }} className="btn" style={{ fontSize:11, marginTop:8, width:'auto' }}>+ Escalón</button>
+      <button onClick={() => { const ult = lista[lista.length - 1]; upd({ escalones: [...esc.escalones, { desde: (ult?.desde || 0) + (esc.unidad === 'unidad' ? 10 : esc.unidad === 'cbm' ? 5 : 100), precio: ult?.precio || 0 }] }) }} className="btn" style={{ fontSize:11, marginTop:8, width:'auto' }}>+ Escalón</button>
       <div style={{ fontSize:11, color:'var(--text4)', marginTop:6 }}>
         {costo?.valor ? <>Tu costo: {costo.moneda === 'USD' ? `US$${fmt(costo.valor, 2)}` : cop(costo.valor)} por {UNIDAD_CORTA[costo.unidad]}{costo.moneda === 'USD' && trm ? ` (TRM ${fmt(trm, 0)})` : ''}{costoU == null ? ' · se cobra en otra unidad, el margen sale en el Cotizador' : ''}</> : 'Sin costo en Mis costos para esta categoría.'}
       </div>
@@ -165,7 +166,7 @@ function PorCliente({ clientes, escaleras, costos, margen, trm, onGuardado }) {
               <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
                 <select value={extra} onChange={e => { const n = e.target.value; if (!n) return; setTarifas(p => ({ ...p, [n]: sinMarca(copiar(escaleraPara(null, escaleras, n).esc)) })); setExtra('') }} style={{ ...iStyle, width:'auto', marginTop:0 }}>
                   <option value="">+ Otra categoría…</option>
-                  {NICHOS_LRM.filter(n => n !== 'Otro' && !categorias.includes(n)).map(n => <option key={n}>{n}</option>)}
+                  {CATEGORIAS.filter(n => !categorias.includes(n)).map(n => <option key={n}>{n}</option>)}
                 </select>
                 <button id="tar-guardar" onClick={guardar} disabled={!cambiado} className="btn-green" style={{ width:'auto', flex:'none' }}>Guardar tarifas</button>
                 <button id="tar-propuesta" onClick={() => setPropuesta(true)} disabled={!categorias.length} title={cambiado ? 'Guarda primero los cambios' : ''} className="btn-gold" style={{ width:'auto', flex:'none' }}>📄 Propuesta para el cliente</button>
@@ -204,7 +205,7 @@ function Generales({ escaleras, costos, margen, onMargen, trm, onGuardar }) {
   const [estado, setEstado] = useState('')
   useEffect(() => { setE(copiar(escaleras)) }, [escaleras])
   const x = e[cat] || e.General
-  const disponibles = NICHOS_LRM.filter(n => !e[n] && n !== 'Otro')
+  const disponibles = CATEGORIAS.filter(n => !e[n])
   const guardar = async () => { const { error } = await onGuardar(e); setEstado(error ? 'No se pudo guardar: ' + error.message : '✓ Precios generales guardados') }
   return (
     <div className="panel">
@@ -259,9 +260,9 @@ function Costos({ costos, bodegas, trm, onGuardar }) {
                 <td style={{ padding:'3px 6px' }}><select value={f.bodega_id || ''} onChange={e => upd(i, 'bodega_id', e.target.value || null)} style={{ ...iStyle, marginTop:0 }}>
                   <option value="">Todas</option>{bodegas.map(b => <option key={b.id} value={b.id}>{b.nombre}</option>)}</select></td>
                 <td style={{ padding:'3px 6px' }}><select value={f.categoria} onChange={e => upd(i, 'categoria', e.target.value)} style={{ ...iStyle, marginTop:0 }}>
-                  {['General', ...NICHOS_LRM.filter(n => n !== 'Otro')].map(n => <option key={n}>{n}</option>)}</select></td>
+                  {['General', ...CATEGORIAS].map(n => <option key={n}>{n}</option>)}</select></td>
                 <td style={{ padding:'3px 6px' }}><select value={f.unidad} onChange={e => upd(i, 'unidad', e.target.value)} style={{ ...iStyle, marginTop:0 }}>
-                  <option value="kg">kg (peso real)</option><option value="lb">lb (peso real)</option><option value="unidad">unidad</option></select></td>
+                  <option value="kg">kg (peso real)</option><option value="lb">lb (peso real)</option><option value="unidad">unidad</option><option value="cbm">m³ (CBM)</option></select></td>
                 <td style={{ padding:'3px 6px' }}><select value={f.moneda} onChange={e => upd(i, 'moneda', e.target.value)} style={{ ...iStyle, marginTop:0 }}><option>USD</option><option>COP</option></select></td>
                 <td style={{ padding:'3px 6px' }}><input className="costo-valor" inputMode="decimal" value={f.valor} onChange={e => upd(i, 'valor', e.target.value)} style={{ ...iStyle, marginTop:0 }} /></td>
                 <td style={{ padding:'3px 6px', color:'var(--text2)', whiteSpace:'nowrap' }}>{f.moneda === 'USD' ? (trm ? cop(n2(f.valor) * trm) : '—') : cop(n2(f.valor))} / {UNIDAD_CORTA[f.unidad]}</td>
@@ -286,7 +287,7 @@ function Costos({ costos, bodegas, trm, onGuardar }) {
 // ── Propuesta de tarifas para el cliente (sin costos ni márgenes) ─────────
 const escH = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]))
 const hoyLargo = () => new Date().toLocaleDateString('es-CO', { day:'numeric', month:'long', year:'numeric' })
-const UNI_TXT = { kg:['kilo','kilos'], lb:['libra','libras'], unidad:['unidad','unidades'] }
+const UNI_TXT = { kg:['kilo','kilos'], lb:['libra','libras'], unidad:['unidad','unidades'], cbm:['m³','m³'] }
 const precioTxt = (esc, p) => esc.moneda === 'USD' ? `US$${fmt(p, 2)}` : cop(p)
 // "1 a 9", "10 a 49", "50 o más" (en unidades) · "0 a 100", "100 a 300", "300 o más" (en peso)
 function filasEscalera(esc) {

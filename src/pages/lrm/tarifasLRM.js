@@ -10,8 +10,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 
 export const LB_A_KG = 0.45359237
-export const UNIDADES = { kg:'kg', lb:'lb', unidad:'unidades' }
-export const UNIDAD_CORTA = { kg:'kg', lb:'lb', unidad:'u' }
+export const UNIDADES = { kg:'kg', lb:'lb', unidad:'unidades', cbm:'m³' }
+export const UNIDAD_CORTA = { kg:'kg', lb:'lb', unidad:'u', cbm:'m³' }
+// Servicios que también tienen tarifa (además de las categorías de mercancía)
+export const CONSOLIDADO = 'Consolidado China'
+export const SERVICIOS_TARIFA = [CONSOLIDADO]
 
 // Escaleras de arranque (precio al cliente). unidad: kg | lb | unidad · moneda: COP | USD
 export const ESCALERAS_LRM = {
@@ -19,6 +22,7 @@ export const ESCALERAS_LRM = {
   Perfumes:   { unidad:'kg',     moneda:'COP', minimo:0,  escalones:[ { desde:0, precio:24000 }, { desde:100, precio:22000 }, { desde:300, precio:20000 }, { desde:700, precio:19000 } ], aiu:true },
   Celulares:  { unidad:'unidad', moneda:'COP', minimo:50, escalones:[ { desde:50, precio:100000 } ] },
   Cosméticos: { unidad:'lb',     moneda:'USD', minimo:0,  escalones:[ { desde:0, precio:3.1 } ] },
+  'Consolidado China': { unidad:'cbm', moneda:'COP', minimo:0, escalones:[ { desde:0, precio:2300000 }, { desde:5, precio:2200000 }, { desde:10, precio:2100000 } ] },
 }
 
 // Costos de arranque (lo que te cobran). bodega_id null = cualquier bodega
@@ -27,6 +31,7 @@ export const COSTOS_LRM = [
   { categoria:'General',    bodega_id:null, unidad:'kg',     moneda:'USD', valor:5 },
   { categoria:'Celulares',  bodega_id:null, unidad:'unidad', moneda:'COP', valor:65000 },
   { categoria:'Cosméticos', bodega_id:null, unidad:'lb',     moneda:'USD', valor:2.3 },
+  { categoria:'Consolidado China', bodega_id:null, unidad:'cbm', moneda:'COP', valor:1500000 },
 ]
 
 export const copiar = x => JSON.parse(JSON.stringify(x))
@@ -108,7 +113,7 @@ export function useTarifas() {
       try {
         const v = JSON.parse(r.valor)
         if (r.clave === 'escaleras') { crudas = v; setEscaleras(limpiarEscaleras({ ...ESCALERAS_LRM, ...v })) }
-        if (r.clave === 'costos' && Array.isArray(v)) { hayCostos = true; setCostos(v) }
+        if (r.clave === 'costos' && Array.isArray(v)) { hayCostos = true; setCostos(v.some(c => c.categoria === CONSOLIDADO) ? v : [...v, ...COSTOS_LRM.filter(c => c.categoria === CONSOLIDADO)]) }
         if (r.clave === 'margen_sugerido' && v !== null && !isNaN(Number(v))) setMargen(Number(v))
       } catch { /* se quedan las de arranque */ }
     })
