@@ -45,7 +45,15 @@ export const urlMarca = (archivo) => (typeof window !== 'undefined' ? window.loc
 export const logoDocumentoHTML = (alto = 58) => `<img src="${urlMarca('logo-documento.png')}" alt="LRM Trade Consulting" style="height:${alto}px;display:block;margin-bottom:4px">`
 
 // Link del portal de rastreo de un cliente (necesita el SQL 15: columna token_rastreo)
-export const linkRastreo = (cliente) => cliente?.token_rastreo ? `${typeof window !== 'undefined' ? window.location.origin : ''}/#/rastreo/${cliente.token_rastreo}` : null
+// Dirección fija para los links que se mandan a clientes. Si abriste la app desde un link de una versión vieja
+// de Vercel (lrm-core-xxxx-....vercel.app), los links salen igual con la dirección fija, que siempre está al día.
+export const URL_FIJA = 'https://lrm-core.vercel.app'
+export const urlPublica = () => {
+  if (typeof window === 'undefined') return URL_FIJA
+  const h = window.location.hostname
+  return h.endsWith('.vercel.app') && h !== 'lrm-core.vercel.app' ? URL_FIJA : window.location.origin
+}
+export const linkRastreo = (cliente) => cliente?.token_rastreo ? `${urlPublica()}/#/rastreo/${cliente.token_rastreo}` : null
 
 // Bodega que se crea sola si no hay ninguna
 export const BODEGA_POR_DEFECTO = {

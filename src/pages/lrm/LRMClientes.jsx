@@ -7,7 +7,7 @@ import { useState, useEffect, useMemo } from 'react'
 import { supabase } from '../../lib/supabase'
 import { PITCHES_LRM, ETAPAS_PITCH, PUBLICOS_PITCH, unirPitches } from './pitchesLRM'
 import { cobroCarga } from './tarifasLRM'
-import { linkRastreo } from './datosLRM'
+import { linkRastreo, urlPublica } from './datosLRM'
 import { FUENTES } from './marketingLRM'
 
 export const NICHOS_LRM = ['Perfumes','Cosméticos','Celulares','Computadores','Tablets','Electrónica','Electrodomésticos','Relojes','Accesorios','Ropa y calzado','Partes y repuestos','Mercancía doméstica','Otro']
@@ -623,7 +623,7 @@ function ModalPortal({ cliente, onCerrar }) {
     setAcceso(data || null)
   }
   useEffect(() => { cargar() }, [cliente.id])
-  const link = `${window.location.origin}/#/clientes`
+  const link = `${urlPublica()}/#/clientes`
   const mensaje = (u, c) => [`Hola ${(cliente.nombre || '').split(' ')[0]}, ya tienes tu acceso al portal de clientes de LRM Trade Consulting.`, '', `Entra aquí: ${link}`, `Usuario: ${u}`, ...(c ? [`Clave: ${c}`] : []), '', 'Ahí ves tus envíos, cotizaciones, estado de cuenta y documentos.'].join('\n')
   const crear = async () => {
     setTrabajando(true); setError('')
