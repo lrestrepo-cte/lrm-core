@@ -13,6 +13,27 @@ const ETAPAS = [
   { id:'entregada', label:'Entregada',          corto:'Entregada' },
 ]
 const DIAS_TRANSITO = { maritimo: 8, aereo: 3 }
+// Semáforo de etapas: bodega gris · en camino azul · aduana verde · lista amarillo · entregada negro
+export const SEMAFORO = {
+  bodega:    { c:'#77716A', claro:'#EEECE7', t:'#4A463F' },
+  transito:  { c:'#2F6FB5', claro:'#E3EDF9', t:'#1F4F86' },
+  aduana:    { c:'#2E8B57', claro:'#E4F3EA', t:'#1F5F3B' },
+  destino:   { c:'#E3AC00', claro:'#FFF3C7', t:'#6E5300' },
+  entregada: { c:'#16140F', claro:'#E9E6DE', t:'#16140F' },
+}
+export const Etiqueta = ({ fase, children }) => {
+  const f = SEMAFORO[fase] || SEMAFORO.bodega
+  return <span style={{ flexShrink:0, display:'inline-flex', alignItems:'center', gap:6, fontSize:12, fontWeight:700, padding:'6px 10px', borderRadius:999, background:f.claro, color:f.t }}><span style={{ width:8, height:8, borderRadius:4, background:f.c }} />{children}</span>
+}
+// Fecha y hora exacta en que se entregó (la del último evento "entregada"; si no, la fecha de entrega)
+export const entregadaEn = c => [...(c.eventos || [])].reverse().find(ev => ev.etapa === 'entregada')?.fecha || c.fecha_entrega || null
+// Entregada hace menos de 24 horas (si solo hay fecha, cuenta el mismo día)
+export const recienEntregada = ts => {
+  if (!ts) return false
+  if (String(ts).length > 10) return Date.now() - new Date(ts).getTime() < 86400000
+  const h = new Date(); const hoy = `${h.getFullYear()}-${String(h.getMonth() + 1).padStart(2, '0')}-${String(h.getDate()).padStart(2, '0')}`
+  return ts >= hoy
+}
 const idx = e => Math.max(0, ETAPAS.findIndex(x => x.id === e))
 export const C = { fondo:'#F6F3EC', papel:'#FFFFFF', tinta:'#16140F', suave:'#6B655A', linea:'#E7E1D3', oro:'#B8922F', oroClaro:'#F3EAD2', verde:'#2E8B57' }
 
@@ -40,13 +61,14 @@ export default function Rastreo({ token }) {
   const servicios = d?.servicios || []
   const srvActivos = servicios.filter(x => x.activo)
   const consActivos = consolidados.filter(x => x.estado !== 'entregado')
-  const activas = (d?.cargas || []).filter(c => c.etapa !== 'entregada')
-  const entregadas = (d?.cargas || []).filter(c => c.etapa === 'entregada')
+  // Las entregadas se quedan arriba 24 horas; después pasan a la lista de entregadas
+  const activas = (d?.cargas || []).filter(c => c.etapa !== 'entregada' || recienEntregada(entregadaEn(c)))
+  const entregadas = (d?.cargas || []).filter(c => c.etapa === 'entregada' && !recienEntregada(entregadaEn(c)))
   const wa = d?.empresa?.whatsapp ? `https://wa.me/${(d.empresa.whatsapp.replace(/\D/g, '').length === 10 ? '57' : '') + d.empresa.whatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(`Hola, soy ${d.cliente}. Quiero preguntar por mi carga.`)}` : null
 
   return (
-    <div style={{ minHeight:'100vh', background:C.fondo, color:C.tinta, fontFamily:"'Plus Jakarta Sans', system-ui, sans-serif" }}>
-      <div style={{ maxWidth:640, margin:'0 auto', padding:'28px 16px 48px' }}>
+    <div style={{ height:'100dvh', overflowY:'auto', WebkitOverflowScrolling:'touch', background:C.fondo, color:C.tinta, fontFamily:"'Plus Jakarta Sans', system-ui, sans-serif" }}>
+      <div style={{ maxWidth:640, margin:'0 auto', padding:'calc(28px + env(safe-area-inset-top, 0px)) 16px calc(48px + env(safe-area-inset-bottom, 0px))' }}>
         <header style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, marginBottom:28 }}>
           <img src="/marca/logo-documento.png" alt="LRM Trade Consulting" style={{ height:46, maxWidth:'60%', objectFit:'contain' }} />
           <span style={{ fontSize:11, letterSpacing:2, fontWeight:700, color:C.oro }}>RASTREO</span>
@@ -104,8 +126,8 @@ export default function Rastreo({ token }) {
   )
 }
 
-export function Caja({ children, pad = '18px' }) {
-  return <div style={{ background:C.papel, border:`1px solid ${C.linea}`, borderRadius:16, padding:pad, marginBottom:12, boxShadow:'0 1px 2px rgba(22,20,15,0.04)' }}>{children}</div>
+export function Caja({ children, pad = '18px', acento }) {
+  return <div style={{ background:C.papel, border:`1px solid ${C.linea}`, ...(acento ? { borderLeft:`5px solid ${acento}` } : {}), borderRadius:16, padding:pad, marginBottom:12, boxShadow:'0 1px 2px rgba(22,20,15,0.04)' }}>{children}</div>
 }
 
 export function Carga({ c }) {
@@ -115,9 +137,9 @@ export function Carga({ c }) {
   ;(c.eventos || []).forEach(ev => { fechas[ev.etapa] = ev.fecha })
   if (!fechas.bodega && c.fecha_recibo) fechas.bodega = c.fecha_recibo
   const llegada = c.etapa === 'transito' && c.fecha_salida ? masDias(c.fecha_salida, DIAS_TRANSITO[c.modalidad] || 8) : null
-  const actual = ETAPAS[i]
+  const actual = ETAPAS[i], sem = SEMAFORO[actual.id], entrego = c.etapa === 'entregada' ? entregadaEn(c) : null
   return (
-    <Caja>
+    <Caja acento={sem.c}>
       <div className="rt-carga" style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:14 }}>
         <div style={{ minWidth:0 }}>
           <div style={{ fontSize:12, color:C.suave }}>Recibo WR {c.guia}</div>
@@ -126,13 +148,13 @@ export function Carga({ c }) {
             {c.piezas} {c.piezas === 1 ? 'pieza' : 'piezas'}{Number(c.kg) ? ` · ${kg(c.kg)} kg` : ''} · {c.modalidad === 'aereo' ? 'Aéreo' : 'Marítimo'}
           </div>
         </div>
-        <span style={{ flexShrink:0, fontSize:12, fontWeight:700, padding:'6px 10px', borderRadius:999, background:C.oroClaro, color:'#7A5E14' }}>{actual.label}</span>
+        <Etiqueta fase={actual.id}>{actual.label}</Etiqueta>
       </div>
 
-      {/* Línea de tiempo */}
+      {/* Línea de tiempo en semáforo */}
       <div style={{ display:'grid', gridTemplateColumns:`repeat(${ETAPAS.length}, 1fr)`, gap:4 }}>
         {ETAPAS.map((e, k) => (
-          <div key={e.id} style={{ height:6, borderRadius:3, background: k <= i ? C.oro : C.linea }} />
+          <div key={e.id} style={{ height:7, borderRadius:4, background: k <= i ? SEMAFORO[e.id].c : C.linea }} />
         ))}
       </div>
       <div style={{ display:'grid', gridTemplateColumns:`repeat(${ETAPAS.length}, 1fr)`, gap:4, marginTop:6 }}>
@@ -144,13 +166,21 @@ export function Carga({ c }) {
         ))}
       </div>
 
+      {(c.fecha_recibo || fechas.bodega) && (
+        <div style={{ marginTop:14, fontSize:13, color:C.suave }}>📦 Recibida en bodega el <b style={{ color:C.tinta }}>{fecha(fechas.bodega || c.fecha_recibo, String(fechas.bodega || '').length > 10)}</b></div>
+      )}
+      {entrego && (
+        <div style={{ marginTop:10, fontSize:13, background:SEMAFORO.entregada.claro, borderRadius:10, padding:'10px 12px' }}>
+          ✓ Entregada el <b>{fecha(entrego, String(entrego).length > 10)}</b>. Queda guardada en tu historial de entregas.
+        </div>
+      )}
       {llegada && (
         <div style={{ marginTop:14, fontSize:13, background:C.fondo, borderRadius:10, padding:'10px 12px' }}>
           Llegada estimada a Barranquilla: <b>{fecha(llegada)}</b>
         </div>
       )}
       {c.etapa === 'destino' && (
-        <div style={{ marginTop:14, fontSize:13, background:'#EAF5EE', color:'#1F5F3B', borderRadius:10, padding:'10px 12px' }}>
+        <div style={{ marginTop:14, fontSize:13, background:SEMAFORO.destino.claro, color:SEMAFORO.destino.t, borderRadius:10, padding:'10px 12px' }}>
           Tu mercancía ya está en Barranquilla. Te contactamos para coordinar la entrega.
         </div>
       )}
@@ -170,8 +200,12 @@ export function Consolidado({ x }) {
   const items = x.items || []
   const tot = items.reduce((t, it) => ({ b: t.b + Number(it.bultos || 0), kg: t.kg + Number(it.kg || 0), m3: t.m3 + Number(it.cbm || 0) }), { b:0, kg:0, m3:0 })
   const etiqueta = x.estado === 'abierto' ? 'Recibiendo carga' : x.estado === 'cerrado' ? 'Lista para zarpar' : x.estado === 'despachado' ? 'En camino' : 'Entregada'
+  const ultimo = (x.hitos || []).length ? x.hitos[x.hitos.length - 1].hito : null
+  const fase = x.estado === 'entregado' ? 'entregada' : ultimo === 'disponible' ? 'destino' : ultimo === 'nacionalizacion' ? 'aduana' : x.estado === 'despachado' ? 'transito' : 'bodega'
+  const etiquetaFase = fase === 'destino' ? 'Lista para entrega' : fase === 'aduana' ? 'En aduana' : etiqueta
+  const colorEtapa = k => k === 2 && (fase === 'aduana' || fase === 'destino') ? SEMAFORO[fase].c : SEMAFORO[['bodega', 'bodega', 'transito', 'entregada'][k]].c
   return (
-    <Caja>
+    <Caja acento={SEMAFORO[fase].c}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:14 }}>
         <div style={{ minWidth:0 }}>
           <div style={{ fontSize:12, color:C.suave }}>Carga consolidada · {x.origen} → {x.destino}{x.mercancia === 'especial' ? ' · mercancía especial' : ''}</div>
@@ -180,10 +214,10 @@ export function Consolidado({ x }) {
             {tot.b ? `${kg(tot.b)} bultos · ` : ''}{tot.kg ? `${kg(tot.kg)} kg · ` : ''}{Number(tot.m3).toLocaleString('es-CO', { maximumFractionDigits: 2 })} m³ · Marítimo
           </div>
         </div>
-        <span style={{ flexShrink:0, fontSize:12, fontWeight:700, padding:'6px 10px', borderRadius:999, background:C.oroClaro, color:'#7A5E14' }}>{etiqueta}</span>
+        <Etiqueta fase={fase}>{etiquetaFase}</Etiqueta>
       </div>
       <div style={{ display:'grid', gridTemplateColumns:`repeat(${ETAPAS_CONS.length}, 1fr)`, gap:4 }}>
-        {ETAPAS_CONS.map((e, k) => <div key={e.id} style={{ height:6, borderRadius:3, background: k <= i ? C.oro : C.linea }} />)}
+        {ETAPAS_CONS.map((e, k) => <div key={e.id} style={{ height:7, borderRadius:4, background: k <= i ? colorEtapa(k) : C.linea }} />)}
       </div>
       <div style={{ display:'grid', gridTemplateColumns:`repeat(${ETAPAS_CONS.length}, 1fr)`, gap:4, marginTop:6 }}>
         {ETAPAS_CONS.map((e, k) => <div key={e.id} style={{ fontSize:10.5, lineHeight:1.3, color: k <= i ? C.tinta : '#A9A294', fontWeight: k === i ? 800 : 500 }}>{e.corto}</div>)}
@@ -198,7 +232,7 @@ export function Consolidado({ x }) {
         <div style={{ marginTop:14, borderLeft:`2px solid ${C.linea}`, paddingLeft:12, display:'flex', flexDirection:'column', gap:8 }}>
           {[...x.hitos].reverse().map((h, k) => (
             <div key={k} className="rt-hito" style={{ position:'relative' }}>
-              <span style={{ position:'absolute', left:-18, top:4, width:10, height:10, borderRadius:5, background: k === 0 ? C.oro : C.linea }} />
+              <span style={{ position:'absolute', left:-18, top:4, width:10, height:10, borderRadius:5, background: k === 0 ? SEMAFORO[fase].c : C.linea }} />
               <div style={{ fontSize:13, fontWeight: k === 0 ? 800 : 600, color: k === 0 ? C.tinta : C.suave }}>{h.titulo}</div>
               <div style={{ fontSize:11.5, color:C.suave }}>{fecha(h.fecha)}{h.lugar ? ` · ${h.lugar}` : ''}{h.nota ? ` · ${h.nota}` : ''}</div>
             </div>
@@ -228,18 +262,19 @@ const ETAPAS_SRV = [
 ]
 export function Servicio({ x }) {
   const i = Math.max(0, ETAPAS_SRV.findIndex(e => e.id === x.estado))
+  const FASE_SRV = ['bodega', 'bodega', 'transito', 'entregada']
   return (
-    <Caja>
+    <Caja acento={SEMAFORO[FASE_SRV[i]].c}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:14 }}>
         <div style={{ minWidth:0 }}>
           <div style={{ fontSize:12, color:C.suave }}>Servicio SRV-{String(x.numero || '').padStart(4, '0')}</div>
           <div style={{ fontSize:17, fontWeight:800, marginTop:2 }}>{x.titulo || [x.origen, x.destino].filter(Boolean).join(' → ') || 'Servicio'}</div>
           {(x.origen || x.destino) && <div style={{ fontSize:13, color:C.suave, marginTop:2 }}>{[x.origen, x.destino].filter(Boolean).join(' → ')}</div>}
         </div>
-        <span style={{ flexShrink:0, fontSize:12, fontWeight:700, padding:'6px 10px', borderRadius:999, background:C.oroClaro, color:'#7A5E14' }}>{ETAPAS_SRV[i].corto}</span>
+        <Etiqueta fase={FASE_SRV[i]}>{ETAPAS_SRV[i].corto}</Etiqueta>
       </div>
       <div style={{ display:'grid', gridTemplateColumns:`repeat(${ETAPAS_SRV.length}, 1fr)`, gap:4 }}>
-        {ETAPAS_SRV.map((e, k) => <div key={e.id} style={{ height:6, borderRadius:3, background: k <= i ? C.oro : C.linea }} />)}
+        {ETAPAS_SRV.map((e, k) => <div key={e.id} style={{ height:7, borderRadius:4, background: k <= i ? SEMAFORO[FASE_SRV[k]].c : C.linea }} />)}
       </div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:14 }}>
         <div style={{ fontSize:13, background:C.fondo, borderRadius:10, padding:'10px 12px' }}><div style={{ fontSize:11, color:C.suave }}>Fecha</div><b>{x.fecha ? fecha(x.fecha) : 'Por confirmar'}{x.hora ? ` · ${x.hora}` : ''}</b></div>
