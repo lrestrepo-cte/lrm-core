@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import { IconoNegocio, LogoLRM } from './IconosMarca'
 
 const NEGOCIOS = [
@@ -271,6 +272,7 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onIrC
             </div>
           </div>
         </div>
+        {isNeg && vista === 'inversiones' && <BotonInstalar />}
         <div onClick={onCerrarSesion}
           style={{ width:'100%', padding:'7px 10px', borderRadius:8, background:'rgba(224,82,82,0.08)', border:'0.5px solid rgba(224,82,82,0.2)', color:'#e05252', fontSize:11, cursor:'pointer', textAlign:'center', fontWeight:600, transition:'all .15s' }}
           onMouseOver={e => e.currentTarget.style.background='rgba(224,82,82,0.15)'}
@@ -279,6 +281,25 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onIrC
           Cerrar sesión
         </div>
       </div>
+    </div>
+  )
+}
+// Instalar LRM Trade como app en el celular o el computador
+function BotonInstalar() {
+  const instalada = typeof window !== 'undefined' && (window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true)
+  const ios = typeof navigator !== 'undefined' && /iphone|ipad|ipod/i.test(navigator.userAgent)
+  const [puede, setPuede] = useState(!!(typeof window !== 'undefined' && window.__lrmInstalar))
+  const [ayuda, setAyuda] = useState(false)
+  useEffect(() => { const f = () => setPuede(true); window.addEventListener('lrm-instalable', f); return () => window.removeEventListener('lrm-instalable', f) }, [])
+  if (instalada || (!puede && !ios)) return null
+  const instalar = async () => {
+    if (window.__lrmInstalar) { window.__lrmInstalar.prompt(); await window.__lrmInstalar.userChoice.catch(() => {}); window.__lrmInstalar = null; setPuede(false) }
+    else setAyuda(a => !a)
+  }
+  return (
+    <div style={{ width:'100%' }}>
+      <div id="sb-instalar" onClick={instalar} style={{ width:'100%', padding:'7px 10px', borderRadius:8, background:'rgba(201,168,76,0.1)', border:'0.5px solid var(--gold-border)', color:'var(--gold)', fontSize:11, cursor:'pointer', textAlign:'center', fontWeight:600 }}>📲 Instalar app LRM Trade</div>
+      {ayuda && <div style={{ fontSize:10.5, color:'rgba(255,255,255,0.55)', marginTop:6, lineHeight:1.5 }}>En el iPhone: toca <b>Compartir</b> (el cuadro con la flecha) → <b>Agregar a inicio</b> → <b>Agregar</b>.</div>}
     </div>
   )
 }

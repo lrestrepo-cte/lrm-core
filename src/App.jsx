@@ -132,8 +132,10 @@ export default function App() {
     setNegNav('dashboard'); setNavActivo('dashboard'); setSidebarOpen(false)
     ponerHash(n?.slug || '')
   }
-  const irCore    = () => { setVista('core'); setNavActivo('dashboard'); setSidebarOpen(false); ponerHash('') }
-  const volverLRM = () => { setVista('negocios'); setNavActivo('dashboard'); setSidebarOpen(false); ponerHash('') }
+  // App instalada (pantalla completa en el celular): solo LRM Trade, sin LRM Core ni los otros negocios
+  const esApp = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true
+  const irCore    = () => { if (esApp) return entrarNegocio('inversiones'); setVista('core'); setNavActivo('dashboard'); setSidebarOpen(false); ponerHash('') }
+  const volverLRM = () => { if (esApp) return entrarNegocio('inversiones'); setVista('negocios'); setNavActivo('dashboard'); setSidebarOpen(false); ponerHash('') }
   const elegirEspacio = (id) => {
     if (id === 'business') return volverLRM()
     setVista(id); setSidebarOpen(false); ponerHash('')
@@ -141,7 +143,8 @@ export default function App() {
 
   const handleLogin = (u, destino = {}) => {
     setUsuario(u)
-    if (destino.negocio) entrarNegocio(destino.negocio)
+    if (esApp) entrarNegocio('inversiones')
+    else if (destino.negocio) entrarNegocio(destino.negocio)
     else if (destino.espacio === 'myspace' || destino.espacio === 'capitan') setVista(destino.espacio)
     else setVista('core')
   }
@@ -229,7 +232,7 @@ export default function App() {
       }}>
         <Sidebar
           vista={vista} navActivo={navActivo}
-          onNavLRM={handleNav} onVolverLRM={volverLRM} onIrCore={irCore}
+          onNavLRM={handleNav} onVolverLRM={volverLRM} onIrCore={esApp ? null : irCore}
           onEntrarNegocio={entrarNegocio}
           usuario={usuario} onCerrarSesion={cerrarSesion}
         />

@@ -153,7 +153,7 @@ export default function Login({ onLogin }) {
     if (negActual?.id === 'inversiones') return (
       <div className="neg-marca">
         <img src="/marca/logo-vertical.png" alt="LRM Trade Consulting" style={{ width:'100%', maxWidth:280, margin:'0 auto 8px', display:'block' }} />
-        <div className="neg-marca-parte">Business · LRM Core</div>
+        {!(window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone) && <div className="neg-marca-parte">Business · LRM Core</div>}
       </div>
     )
     if (negActual) return (
