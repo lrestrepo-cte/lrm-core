@@ -80,7 +80,7 @@ export function EditorEscalera({ esc, onChange, costo, trm }) {
   return (
     <div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(120px, 100%), 1fr))', gap:8, marginBottom:10 }}>
-        <div><Etiqueta>Cobras por</Etiqueta><select value={esc.unidad} onChange={e => upd({ unidad: e.target.value })} style={iStyle}><option value="kg">kg</option><option value="lb">lb</option><option value="unidad">unidad</option><option value="cbm">m³ (CBM)</option></select></div>
+        <div><Etiqueta>Cobras por</Etiqueta><select value={esc.unidad} onChange={e => upd({ unidad: e.target.value })} style={iStyle}><option value="kg">kg</option><option value="lb">lb</option><option value="unidad">unidad</option><option value="cbm">m³ (CBM)</option><option value="in3">cubicaje (pulg³)</option></select></div>
         <div><Etiqueta>Moneda</Etiqueta><select value={esc.moneda} onChange={e => upd({ moneda: e.target.value })} style={iStyle}><option>COP</option><option>USD</option></select></div>
         <div><Etiqueta>Mínimo por envío</Etiqueta><input inputMode="decimal" value={esc.minimo || ''} onChange={e => upd({ minimo: n2(e.target.value) })} placeholder="0" style={iStyle} /></div>
         <div><Etiqueta>AIU interno</Etiqueta><select value={esc.aiu ? 'si' : 'no'} onChange={e => upd({ aiu: e.target.value === 'si' })} style={iStyle}><option value="no">No</option><option value="si">Sí (2 lb/caja)</option></select></div>
@@ -167,7 +167,7 @@ function PorCliente({ clientes, escaleras, costos, margen, trm, onGuardado }) {
               <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
                 <select value={extra} onChange={e => { const n = e.target.value; if (!n) return; setTarifas(p => ({ ...p, [n]: sinMarca(copiar(escaleraPara(null, escaleras, n).esc)) })); setExtra('') }} style={{ ...iStyle, width:'auto', marginTop:0 }}>
                   <option value="">+ Otra categoría…</option>
-                  {CATEGORIAS.filter(n => !categorias.includes(n)).map(n => <option key={n}>{n}</option>)}
+                  {['General', ...CATEGORIAS].filter(n => !categorias.includes(n)).map(n => <option key={n} value={n}>{n === 'General' ? 'General (todo lo demás que trae)' : n}</option>)}
                 </select>
                 <button id="tar-guardar" onClick={guardar} disabled={!cambiado} className="btn-green" style={{ width:'auto', flex:'none' }}>Guardar tarifas</button>
                 <button id="tar-propuesta" onClick={() => setPropuesta(true)} disabled={!categorias.length} title={cambiado ? 'Guarda primero los cambios' : ''} className="btn-gold" style={{ width:'auto', flex:'none' }}>📄 Propuesta para el cliente</button>
@@ -288,8 +288,8 @@ function Costos({ costos, bodegas, trm, onGuardar }) {
 // ── Propuesta de tarifas para el cliente (sin costos ni márgenes) ─────────
 const escH = t => String(t ?? '').replace(/[&<>"]/g, c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;' }[c]))
 const hoyLargo = () => new Date().toLocaleDateString('es-CO', { day:'numeric', month:'long', year:'numeric' })
-const UNI_TXT = { kg:['kilo','kilos'], lb:['libra','libras'], unidad:['unidad','unidades'], cbm:['m³','m³'] }
-const precioTxt = (esc, p) => esc.moneda === 'USD' ? `US$${fmt(p, 2)}` : cop(p)
+const UNI_TXT = { kg:['kilo','kilos'], lb:['libra','libras'], unidad:['unidad','unidades'], cbm:['m³','m³'], in3:['pulgada cúbica','pulgadas cúbicas'] }
+const precioTxt = (esc, p) => esc.moneda === 'USD' ? `US$${fmt(p, 2)}` : esc.unidad === 'in3' ? `$${fmt(p, 2)}` : cop(p)
 // "1 a 9", "10 a 49", "50 o más" (en unidades) · "0 a 100", "100 a 300", "300 o más" (en peso)
 function filasEscalera(esc) {
   const arr = ordenar(esc), enteros = esc.unidad === 'unidad'

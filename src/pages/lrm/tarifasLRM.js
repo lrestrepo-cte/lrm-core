@@ -10,8 +10,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 
 export const LB_A_KG = 0.45359237
-export const UNIDADES = { kg:'kg', lb:'lb', unidad:'unidades', cbm:'m³' }
-export const UNIDAD_CORTA = { kg:'kg', lb:'lb', unidad:'u', cbm:'m³' }
+export const UNIDADES = { kg:'kg', lb:'lb', unidad:'unidades', cbm:'m³', in3:'pulg³' }
+export const UNIDAD_CORTA = { kg:'kg', lb:'lb', unidad:'u', cbm:'m³', in3:'pulg³' }
+// Cubicaje en pulgadas³: largo × ancho × alto de cada caja (en pulgadas) × cantidad de cajas
+export const PULG3_POR_PIE3 = 1728
+export const pulg3Carga = c => Number(c?.unidades) || Math.round(Number(c?.pies3 || 0) * PULG3_POR_PIE3)
 // Servicios que también tienen tarifa (además de las categorías de mercancía)
 export const CONSOLIDADO = 'Consolidado China'
 export const SERVICIOS_TARIFA = [CONSOLIDADO]
@@ -42,10 +45,13 @@ export const siguienteDe = (esc, cantidad) => ordenar(esc).find(e => e.desde > c
 export const tramoTexto = (esc, e) => { const arr = ordenar(esc); const i = arr.indexOf(e); return arr[i + 1] ? `${fmtN(e.desde)} – ${fmtN(arr[i + 1].desde)}` : `${fmtN(e.desde)}+` }
 const fmtN = v => Number(v || 0).toLocaleString('es-CO', { maximumFractionDigits: 1 })
 
-// Escalera que aplica: la del cliente si la tiene; si no, la general de la categoría; si no, la General
+// Escalera que aplica: la del cliente para esa categoría; si no, la "General" del cliente (todo lo demás que trae);
+// si no, la general de la categoría; si no, la General
 export function escaleraPara(cliente, escaleras, categoria) {
   const propia = cliente?.tarifas?.[categoria]
   if (propia?.escalones?.length) return { esc: propia, fuente: 'cliente' }
+  const resto = cliente?.tarifas?.General
+  if (resto?.escalones?.length && categoria !== CONSOLIDADO) return { esc: resto, fuente: 'cliente' }
   if (escaleras?.[categoria]) return { esc: escaleras[categoria], fuente: 'general' }
   return { esc: escaleras?.General || ESCALERAS_LRM.General, fuente: 'general-base' }
 }
@@ -67,12 +73,14 @@ export function costoPara(costos, bodega, categoria) {
 export const cobroCarga = c => {
   const t = Number(c?.tarifa_cliente || 0)
   if (c?.cobro_por === 'unidad') return Number(c.unidades || 0) * t
+  if (c?.cobro_por === 'in3') return pulg3Carga(c) * t
   if (c?.cobro_por === 'lb') return Number(c.peso_cobrable_kg || 0) / LB_A_KG * t
   return Number(c?.peso_cobrable_kg || 0) * t
 }
 export const cantidadCobro = c => c?.cobro_por === 'unidad' ? Number(c.unidades || 0)
+  : c?.cobro_por === 'in3' ? pulg3Carga(c)
   : c?.cobro_por === 'lb' ? Number(c.peso_cobrable_kg || 0) / LB_A_KG : Number(c?.peso_cobrable_kg || 0)
-export const unidadCobro = c => c?.cobro_por === 'unidad' ? 'unidad' : c?.cobro_por === 'lb' ? 'lb' : 'kg'
+export const unidadCobro = c => c?.cobro_por === 'unidad' ? 'unidad' : c?.cobro_por === 'in3' ? 'in3' : c?.cobro_por === 'lb' ? 'lb' : 'kg'
 // Lo que te cuesta una carga guardada
 export const costoCarga = c => c?.costo_total != null && c.costo_total !== ''
   ? Number(c.costo_total)

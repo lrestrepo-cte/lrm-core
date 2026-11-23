@@ -54,9 +54,12 @@ export default function Cotizador() {
   const costoMaestro = costoPara(costos, bodega, f.categoria)
   const trm = n2(f.trm) || trmHoy
   const aCOP = (v, moneda) => moneda === 'USD' ? v * trm : v
-  const cantIngresada = n2(f.cantidad)
+  // Cubicaje: acepta "40x16x15, 26x22x13" (pulgadas, una caja por medida; "2@40x16x15" = 2 cajas) o el total en pulg³
+  const medidas = [...String(f.cantidad).matchAll(/(?:(\d+)\s*@\s*)?(\d+(?:[.,]\d+)?)\s*[x×*]\s*(\d+(?:[.,]\d+)?)\s*[x×*]\s*(\d+(?:[.,]\d+)?)/gi)]
+  const pulg3Medidas = medidas.reduce((t, m) => t + (Number(m[1]) || 1) * n2(m[2]) * n2(m[3]) * n2(m[4]), 0)
+  const cantIngresada = esc.unidad === 'in3' && medidas.length ? Math.round(pulg3Medidas) : n2(f.cantidad)
   // Cantidad real en la unidad de la escalera
-  const real = esc.unidad === 'unidad' ? cantIngresada
+  const real = esc.unidad === 'unidad' || esc.unidad === 'in3' ? cantIngresada
     : esc.unidad === 'kg' ? (f.unidadPeso === 'lb' ? cantIngresada * LB_A_KG : cantIngresada)
     : (f.unidadPeso === 'kg' ? cantIngresada / LB_A_KG : cantIngresada)
   // AIU interno (solo escaleras con aiu): 2 lb por caja, sumado a lo que ve el cliente
@@ -83,7 +86,7 @@ export default function Cotizador() {
     `Servicio de importación ${f.origen} → Barranquilla (${f.modalidad.toLowerCase()})`,
     `Mercancía: ${f.categoria}`,
     `Cantidad estimada: ${fmt(cliente)} ${UNIDAD[esc.unidad]}`,
-    `Tarifa: ${cop(precio)} por ${esc.unidad === 'unidad' ? 'unidad' : esc.unidad}`,
+    `Tarifa: ${cop(precio)} por ${esc.unidad === 'unidad' ? 'unidad' : esc.unidad === 'in3' ? 'pulgada cúbica' : esc.unidad}`,
     `*Total estimado: ${cop(total)}*`,
     ``,
     esc.escalones.length > 1 ? `Tarifa por volumen (${UNIDAD[esc.unidad]}):` : null,
@@ -130,11 +133,12 @@ export default function Cotizador() {
             <div><Etiqueta>Modalidad</Etiqueta><select value={f.modalidad} onChange={set('modalidad')} style={iStyle}>{['Marítimo','Aéreo'].map(o => <option key={o}>{o}</option>)}</select></div>
           </div>
           <div className="grid-2" style={{ gap:10, marginBottom:10 }}>
-            <div><Etiqueta>{esc.unidad === 'unidad' ? 'Unidades' : 'Peso'}</Etiqueta>
+            <div><Etiqueta>{esc.unidad === 'unidad' ? 'Unidades' : esc.unidad === 'in3' ? 'Medidas de las cajas (pulg)' : 'Peso'}</Etiqueta>
               <div style={{ display:'flex', gap:6 }}>
-                <input id="cot-cantidad" inputMode="decimal" value={f.cantidad} onChange={set('cantidad')} placeholder={esc.unidad === 'unidad' ? '50' : '150'} style={iStyle} autoFocus />
-                {esc.unidad !== 'unidad' && <select value={f.unidadPeso} onChange={set('unidadPeso')} style={{ ...iStyle, width:76 }}><option>kg</option><option>lb</option></select>}
+                <input id="cot-cantidad" inputMode={esc.unidad === 'in3' ? 'text' : 'decimal'} value={f.cantidad} onChange={set('cantidad')} placeholder={esc.unidad === 'unidad' ? '50' : esc.unidad === 'in3' ? '40x16x15, 26x22x13' : '150'} style={iStyle} autoFocus />
+                {esc.unidad !== 'unidad' && esc.unidad !== 'in3' && <select value={f.unidadPeso} onChange={set('unidadPeso')} style={{ ...iStyle, width:76 }}><option>kg</option><option>lb</option></select>}
               </div></div>
+            {esc.unidad === 'in3' && <div style={{ fontSize:11, color:'var(--text3)', alignSelf:'end', paddingBottom:6 }}>{medidas.length ? `${medidas.length} medida${medidas.length === 1 ? '' : 's'} · ${fmt(cantIngresada, 0)} pulg³` : 'Largo x ancho x alto, separadas por coma. "2@40x16x15" = 2 cajas iguales.'}</div>}
             {esc.aiu && <div><Etiqueta>Cajas (para el AIU interno)</Etiqueta><input id="cot-cajas" inputMode="numeric" value={f.cajas} onChange={set('cajas')} placeholder="6" style={iStyle} /></div>}
             <div><Etiqueta>TRM {trmHoy ? '(hoy)' : ''}</Etiqueta><input inputMode="decimal" value={f.trm} onChange={set('trm')} placeholder={trmHoy ? fmt(trmHoy, 2) : '3326'} style={iStyle} /></div>
             <div><Etiqueta>Precio especial (opcional)</Etiqueta><input inputMode="numeric" value={f.precioManual} onChange={set('precioManual')} placeholder={`Escalera: ${cop(aCOP(escalon.precio, esc.moneda))}`} style={iStyle} /></div>
@@ -154,14 +158,14 @@ export default function Cotizador() {
                 <div key={i} style={{ display:'flex', justifyContent:'space-between', padding:'7px 10px', borderRadius:8, fontSize:12,
                   background: activo ? 'var(--gold)' : 'var(--bg4)', color: activo ? '#111' : 'var(--text2)', fontWeight: activo ? 800 : 400 }}>
                   <span>{arr[i + 1] ? `${fmt(e.desde, 0)} – ${fmt(arr[i + 1].desde, 0)}` : `${fmt(e.desde, 0)}+`} {UNIDAD[esc.unidad]}</span>
-                  <span>{cop(aCOP(e.precio, esc.moneda))}{esc.moneda === 'USD' ? ` (US$${fmt(e.precio, 2)})` : ''} / {esc.unidad === 'unidad' ? 'u' : esc.unidad}</span>
+                  <span>{cop(aCOP(e.precio, esc.moneda))}{esc.moneda === 'USD' ? ` (US$${fmt(e.precio, 2)})` : ''} / {esc.unidad === 'unidad' ? 'u' : UNIDAD[esc.unidad]}</span>
                 </div>
               )
             })}
           </div>
 
           <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
-            {[['Al cliente', `${fmt(cliente)} ${UNIDAD[esc.unidad]}`, 'var(--text)'], ['Precio', `${cop(precio)} / ${esc.unidad === 'unidad' ? 'u' : esc.unidad}`, 'var(--text)'],
+            {[['Al cliente', `${fmt(cliente)} ${UNIDAD[esc.unidad]}`, 'var(--text)'], ['Precio', `${cop(precio)} / ${esc.unidad === 'unidad' ? 'u' : UNIDAD[esc.unidad]}`, 'var(--text)'],
               ['Total cliente', cop(total), 'var(--gold)'], ['Tu costo', cop(costo), 'var(--red)'],
               ['Margen', cop(margen), margen >= 0 ? 'var(--green)' : 'var(--red)'], ['Margen %', total ? `${fmt(margen / total * 100)}%` : '—', 'var(--green)']].map(([l, v, c]) => (
               <div key={l} style={{ padding:'8px 10px', borderRadius:8, background:'var(--bg4)' }}>

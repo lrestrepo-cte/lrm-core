@@ -11,7 +11,7 @@ import { useDivisas } from '../../lib/divisas'
 import Documentos from '../../components/Documentos'
 import { BODEGA_POR_DEFECTO, useDatosLRM, AVISOS_LRM, DIAS_TRANSITO, logoDocumentoHTML, linkRastreo } from './datosLRM'
 import { linkWhatsApp } from './LRMClientes'
-import { useTarifas, escaleraPara, costoPara, escalonDe, tramoTexto, cobroCarga, cantidadCobro, unidadCobro, costoCarga, UNIDAD_CORTA } from './tarifasLRM'
+import { useTarifas, escaleraPara, costoPara, escalonDe, tramoTexto, cobroCarga, cantidadCobro, unidadCobro, costoCarga, UNIDAD_CORTA, PULG3_POR_PIE3, pulg3Carga } from './tarifasLRM'
 
 const cop = n => '$' + Math.round(Math.abs(n || 0)).toLocaleString('es-CO')
 const n2 = v => Number(String(v ?? '').replace(',', '.')) || 0
@@ -283,7 +283,8 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
   const lbConAiu = tot.lb + aiuLb
   const kgCliente = f.peso_cobrable_kg !== '' ? n2(f.peso_cobrable_kg) : Math.round(lbConAiu * LB_A_KG * 10) / 10
   // Cuánto se cobra: por kg (con AIU), por lb o por unidad, según la escalera del cliente
-  const cantCliente = f.cobro_por === 'unidad' ? n2(f.unidades) : f.cobro_por === 'lb' ? kgCliente / LB_A_KG : kgCliente
+  const pulg3 = Math.round(tot.pies3 * PULG3_POR_PIE3)   // cubicaje: largo × ancho × alto en pulgadas
+  const cantCliente = f.cobro_por === 'unidad' ? n2(f.unidades) : f.cobro_por === 'in3' ? pulg3 : f.cobro_por === 'lb' ? kgCliente / LB_A_KG : kgCliente
   const cobro = cantCliente * n2(f.tarifa_cliente)
   // Lo que te cobra la bodega: peso real (kg o lb) o unidades, en US$ o pesos
   const baseCosto = f.costo_unidad === 'unidad' ? n2(f.unidades) : f.costo_unidad === 'lb' ? tot.lb : tot.kg
@@ -294,7 +295,7 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
   // Precio del cliente según su escalera (la propia o la general) y el escalón que alcanza
   const cliSel = clientes.find(c => c.id === f.cliente_id)
   const { esc, fuente } = escaleraPara(cliSel, escaleras, f.categoria)
-  const cantEsc = esc.unidad === 'unidad' ? n2(f.unidades) : esc.unidad === 'lb' ? kgCliente / LB_A_KG : kgCliente
+  const cantEsc = esc.unidad === 'unidad' ? n2(f.unidades) : esc.unidad === 'in3' ? pulg3 : esc.unidad === 'lb' ? kgCliente / LB_A_KG : kgCliente
   const escalon = escalonDe(esc, cantEsc)
   const precioEsc = esc.moneda === 'USD' ? escalon.precio * n2(f.trm) : escalon.precio
   useEffect(() => {
@@ -379,7 +380,7 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
       tarifa_cliente: n2(f.tarifa_cliente), trm: n2(f.trm),
       tarifa_costo_usd: f.costo_moneda === 'USD' && f.costo_unidad === 'kg' ? n2(f.costo_valor) : null,
       tarifa_costo: Math.round(costo / Math.max(kgCliente, 0.0001)),
-      cobro_por: f.cobro_por, unidades: n2(f.unidades) || null, costo_total: Math.round(costo),
+      cobro_por: f.cobro_por, unidades: f.cobro_por === 'in3' ? pulg3 : (n2(f.unidades) || null), costo_total: Math.round(costo),
       etapa:'bodega', facturada: pasarACaja && (cobro > 0 || costo > 0), notas: f.notas || null,
     }).select().single()
     if (e) { setGuardando(false); return setError('No se pudo guardar: ' + e.message) }
@@ -508,7 +509,7 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
 
         {/* Totales como en el recibo */}
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(100px, 100%), 1fr))', gap:8, margin:'14px 0' }}>
-          {[['Piezas', fmt(tot.piezas, 0)], ['Libras', fmt(tot.lb, 1)], ['Kilos', fmt(tot.kg, 1)], ['Pies³', fmt(tot.pies3, 3)], ['m³', fmt(tot.m3, 3)], ...(conAiu ? [['Lb + AIU', fmt(lbConAiu, 1)], ['Kg + AIU', fmt(lbConAiu * LB_A_KG, 1)]] : [])].map(([l, v]) => (
+          {[['Piezas', fmt(tot.piezas, 0)], ['Libras', fmt(tot.lb, 1)], ['Kilos', fmt(tot.kg, 1)], ['Pies³', fmt(tot.pies3, 3)], ['m³', fmt(tot.m3, 3)], ...(f.cobro_por === 'in3' ? [['Cubicaje pulg³', fmt(pulg3, 0)]] : []), ...(conAiu ? [['Lb + AIU', fmt(lbConAiu, 1)], ['Kg + AIU', fmt(lbConAiu * LB_A_KG, 1)]] : [])].map(([l, v]) => (
             <div key={l} style={{ padding:'8px 10px', borderRadius:8, background:'var(--bg4)' }}>
               <div style={{ fontSize:10, color:'var(--text3)', textTransform:'uppercase', letterSpacing:1 }}>{l}</div>
               <div style={{ fontSize:15, fontWeight:800, color:'var(--text)' }}>{v}</div>
@@ -522,7 +523,8 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
           {(f.cobro_por === 'unidad' || f.costo_unidad === 'unidad') && <div><Etiqueta>Unidades en la carga</Etiqueta><input id="wr-unidades" inputMode="numeric" value={f.unidades} onChange={set('unidades')} placeholder="60" style={{ ...iStyle, borderColor: n2(f.unidades) ? 'var(--border)' : 'rgba(232,162,58,0.6)' }} /></div>}
           <div><Etiqueta>Costo bodega ({f.costo_moneda === 'USD' ? 'US$' : '$'}/{UNIDAD_CORTA[f.costo_unidad]})</Etiqueta><input id="wr-costo-usd" inputMode="decimal" value={f.costo_valor} onChange={e => { setCostoAuto(false); setF(p => ({ ...p, costo_valor: e.target.value })) }} placeholder="5" style={iStyle} /></div>
           <div><Etiqueta>TRM</Etiqueta><input id="wr-trm" inputMode="decimal" value={f.trm} onChange={set('trm')} placeholder="3326.96" style={iStyle} /></div>
-          {f.cobro_por !== 'unidad' && <div><Etiqueta>Kg al cliente</Etiqueta><input id="wr-cobrable" inputMode="decimal" value={f.peso_cobrable_kg} onChange={set('peso_cobrable_kg')} placeholder={fmt(lbConAiu * LB_A_KG)} style={iStyle} /></div>}
+          <div><Etiqueta>Cobras por</Etiqueta><select id="wr-cobro-por" value={f.cobro_por} onChange={e => { setTarifaAuto(false); setF(p => ({ ...p, cobro_por: e.target.value })) }} style={iStyle}><option value="kg">kg</option><option value="lb">lb</option><option value="unidad">unidad</option><option value="in3">cubicaje (pulg³)</option></select></div>
+          {f.cobro_por !== 'unidad' && f.cobro_por !== 'in3' && <div><Etiqueta>Kg al cliente</Etiqueta><input id="wr-cobrable" inputMode="decimal" value={f.peso_cobrable_kg} onChange={set('peso_cobrable_kg')} placeholder={fmt(lbConAiu * LB_A_KG)} style={iStyle} /></div>}
           <div><Etiqueta>Le cobras (COP/{UNIDAD_CORTA[f.cobro_por]})</Etiqueta><input id="wr-tarifa-cliente" inputMode="numeric" value={f.tarifa_cliente} onChange={e => { setTarifaAuto(false); setF(p => ({ ...p, tarifa_cliente: e.target.value })) }} placeholder="20000" style={iStyle} /></div>
         </div>
         <div style={{ fontSize:11, color:'var(--text3)', marginBottom:10, display:'flex', gap:10, flexWrap:'wrap', alignItems:'center' }}>
@@ -598,7 +600,7 @@ function ModalDetalle({ carga, cliente, clienteFicha, bodega, onAvanzar, onAvisa
             </tr>
           ))}</tbody>
         </table>
-        <div style={{ fontSize:12, color:'var(--text2)', marginBottom:16 }}>Total: {carga.piezas} pzs · {fmt(carga.libras, 0)} lb · {fmt(carga.peso_kg)} kg · {fmt(carga.pies3, 3)} ft³ · {fmt(carga.cbm, 3)} m³ · al cliente {carga.cobro_por === 'unidad' ? `${fmt(carga.unidades, 0)} unidades` : `${fmt(carga.peso_cobrable_kg)} kg`}{carga.aiu_lb ? ` (AIU interno ${fmt(carga.aiu_lb)} lb)` : ''}{carga.tarifa_costo_usd ? ` · costo US$${fmt(carga.tarifa_costo_usd, 2)}/kg, TRM ${fmt(carga.trm, 2)}` : ''}</div>
+        <div style={{ fontSize:12, color:'var(--text2)', marginBottom:16 }}>Total: {carga.piezas} pzs · {fmt(carga.libras, 0)} lb · {fmt(carga.peso_kg)} kg · {fmt(carga.pies3, 3)} ft³ · {fmt(carga.cbm, 3)} m³ · al cliente {carga.cobro_por === 'unidad' ? `${fmt(carga.unidades, 0)} unidades` : carga.cobro_por === 'in3' ? `${fmt(pulg3Carga(carga), 0)} pulg³` : `${fmt(carga.peso_cobrable_kg)} kg`}{carga.aiu_lb ? ` (AIU interno ${fmt(carga.aiu_lb)} lb)` : ''}{carga.tarifa_costo_usd ? ` · costo US$${fmt(carga.tarifa_costo_usd, 2)}/kg, TRM ${fmt(carga.trm, 2)}` : ''}</div>
 
         <div style={{ fontSize:12, fontWeight:700, color:'var(--text)', marginBottom:8 }}>Trazabilidad</div>
         <div style={{ borderLeft:'2px solid var(--border2)', marginLeft:6, paddingLeft:14, marginBottom:14 }}>
@@ -646,6 +648,8 @@ function RelacionCarga({ cargas, clientes, bodegas, inicial, onCerrar }) {
   const [para, setPara] = useState('')
   const [obs, setObs] = useState('')
   const [agrupar, setAgrupar] = useState(true)
+  const [conValores, setConValores] = useState(false)     // formato de cobro: medidas, cubicaje, tarifa y valor por recibo
+  const [piezasDe, setPiezasDe] = useState({})
   const [copiado, setCopiado] = useState(false)
   const nombreCli = id => clientes.find(c => c.id === id)?.nombre || ''
   const bod = id => bodegas.find(b => b.id === id)
@@ -659,6 +663,21 @@ function RelacionCarga({ cargas, clientes, bodegas, inicial, onCerrar }) {
   const numero = `REL-${hoyISO().replace(/-/g, '')}-${String(ahora.getHours()).padStart(2, '0')}${String(ahora.getMinutes()).padStart(2, '0')}`
   const fechaTxt = ahora.toLocaleDateString('es-CO', { day:'numeric', month:'long', year:'numeric' })
   const varios = clientesSel.length > 1
+  const idsSel = elegidas.map(c => c.id).join(',')
+  useEffect(() => {
+    if (!conValores || !idsSel) return
+    supabase.from('lrm_carga_piezas').select('*').in('carga_id', idsSel.split(',')).then(r => {
+      const m = {}; (r.data || []).forEach(x => { (m[x.carga_id] ||= []).push(x) }); setPiezasDe(m)
+    })
+  }, [conValores, idsSel])
+  const cliUno = clientesSel.length === 1 ? clientes.find(c => c.id === clientesSel[0]) : null
+  const totVal = elegidas.reduce((t, c) => ({ b: t.b + n2(c.piezas), c3: t.c3 + pulg3Carga(c), v: t.v + Math.round(cobroCarga(c)) }), { b:0, c3:0, v:0 })
+  const tarifaTxt = c => c.cobro_por === 'in3' ? fmt(c.tarifa_cliente, 2) : `${cop(c.tarifa_cliente)}/${UNIDAD_CORTA[unidadCobro(c)]}`
+  const medidasDe = c => (piezasDe[c.id] || []).map(p => `${n2(p.cantidad) > 1 ? n2(p.cantidad) + ' × ' : ''}${fmt(p.largo, 0)} × ${fmt(p.ancho, 0)} × ${fmt(p.alto, 0)}`).join('<br>') || '—'
+  const tablaValores = `<div class="cab">${esc((destinatario || '').toUpperCase())}${cliUno?.telefono ? ` · Tel: ${esc(cliUno.telefono)}` : ''}</div>
+    <table class="val"><tr><th>Empresa</th><th>Artículo</th><th>Referencia</th><th>Medidas (pulg)</th><th class="n">Nº bultos</th><th class="n">Cubicaje</th><th class="n">Tarifa</th><th class="n">Valor</th></tr>
+    ${elegidas.map(c => `<tr><td>${esc(c.remitente || '—')}</td><td>${esc(mercanciaCliente(c))}</td><td>${esc(c.guia)}</td><td>${medidasDe(c)}</td><td class="n">${fmt(c.piezas, 0)}</td><td class="n">${fmt(pulg3Carga(c), 0)}</td><td class="n">${tarifaTxt(c)}</td><td class="n">${cop(cobroCarga(c))}</td></tr>`).join('')}
+    <tr class="tot"><td></td><td></td><td></td><td>Total</td><td class="n">${fmt(totVal.b, 0)}</td><td class="n">${fmt(totVal.c3, 0)}</td><td></td><td class="n">${cop(totVal.v)}</td></tr></table>`
 
   // Filas: se agrupan por fecha de recibo cuando llegan varios el mismo día
   const fechas = [...new Set(elegidas.map(c => c.fecha_recibo || ''))]
@@ -680,6 +699,8 @@ function RelacionCarga({ cargas, clientes, bodegas, inicial, onCerrar }) {
     tr{page-break-inside:avoid}.n{text-align:right;white-space:nowrap}.tot td{font-weight:800;border-top:2px solid #1b1b1b;background:#fafafa}
     tr.grupo td{background:#faf7ee;color:#8a6d1f;font-weight:700;font-size:10px;letter-spacing:.3px;padding:6px 5px}
     .pie{margin-top:14px;font-size:9.5px;color:#888;text-align:center}
+    .cab{text-align:center;font-weight:800;font-size:12px;border:1px solid #1b1b1b;border-bottom:none;padding:5px}
+    table.val th,table.val td{border:1px solid #1b1b1b;text-align:center}table.val th{text-transform:uppercase}table.val td.n,table.val th.n{text-align:right}
     .obs{margin-top:10px;font-size:10.5px;background:#faf7ee;border-radius:6px;padding:7px 10px}
     @media print{body{padding:0}}@media screen and (max-width:620px){body{padding:12px!important;font-size:11px}.top{flex-direction:column;gap:8px}.num,.t{text-align:left!important}.ruta,.kpis,.k,.datos,.cats,.cols{grid-template-columns:1fr 1fr!important}table{font-size:10px}td,th{padding:5px 4px!important}img{max-width:100%}}</style></head><body><div class="doc">
     <div class="top"><div>${logoDocumentoHTML()}
@@ -689,17 +710,21 @@ function RelacionCarga({ cargas, clientes, bodegas, inicial, onCerrar }) {
     ${destinatario ? `<div class="d"><span>Para</span><b>${esc(destinatario)}</b></div>` : ''}
     <div class="d"><span>Recibos</span><b>${elegidas.length} warehouse receipt${elegidas.length === 1 ? '' : 's'} · ${fmt(tot.pz, 0)} piezas</b></div>
     <h3>Relación de mercancía</h3>
-    <table><tr><th>#</th><th>WR</th><th>Fecha de recibo</th>${varios ? '<th>Cliente</th>' : ''}<th>Origen</th><th>Proveedor</th><th>Mercancía</th><th class="n">Piezas</th><th class="n">Peso lb</th><th class="n">Peso kg</th><th class="n">ft³</th></tr>
+    ${conValores ? tablaValores : `<table><tr><th>#</th><th>WR</th><th>Fecha de recibo</th>${varios ? '<th>Cliente</th>' : ''}<th>Origen</th><th>Proveedor</th><th>Mercancía</th><th class="n">Piezas</th><th class="n">Peso lb</th><th class="n">Peso kg</th><th class="n">ft³</th></tr>
     ${filasHtml}
-    <tr class="tot"><td></td><td>Total</td><td></td>${varios ? '<td></td>' : ''}<td></td><td></td><td></td><td class="n">${fmt(tot.pz, 0)}</td><td class="n">${fmt(tot.lb, 1)}</td><td class="n">${fmt(tot.kg, 1)}</td><td class="n">${fmt(tot.ft, 2)}</td></tr></table>
+    <tr class="tot"><td></td><td>Total</td><td></td>${varios ? '<td></td>' : ''}<td></td><td></td><td></td><td class="n">${fmt(tot.pz, 0)}</td><td class="n">${fmt(tot.lb, 1)}</td><td class="n">${fmt(tot.kg, 1)}</td><td class="n">${fmt(tot.ft, 2)}</td></tr></table>`}
     ${obs.trim() ? `<div class="obs"><b>Observaciones:</b> ${esc(obs)}</div>` : ''}
-    <div class="pie">Documento informativo · ${esc(empresa.nombre)}</div>
+    <div class="pie">${conValores ? `Cubicaje = largo × ancho × alto (pulgadas) · ${esc(empresa.nombre)}` : `Documento informativo · ${esc(empresa.nombre)}`}</div>
     </div></body></html>`
 
   const texto = [
     `*${empresa.nombre}* · ${titulo} ${numero}`, `Fecha: ${fechaTxt}`, ...(destinatario ? [`Para: ${destinatario}`] : []), '',
-    ...elegidas.map((c, i) => `${i + 1}. WR ${c.guia} · ${fechaCorta(c.fecha_recibo)}${varios ? ' · ' + nombreCli(c.cliente_id) : ''}${c.remitente ? ' · ' + c.remitente : ''} · ${mercanciaCliente(c)} · ${fmt(c.piezas, 0)} pzs · ${fmt(c.peso_kg, 1)} kg`),
-    '', `*Total: ${elegidas.length} WR · ${fmt(tot.pz, 0)} piezas · ${fmt(tot.kg, 1)} kg · ${fmt(tot.ft, 2)} ft³*`, ...(obs.trim() ? ['', obs] : []),
+    ...(conValores ? [
+      ...elegidas.map((c, i) => `${i + 1}. ${c.remitente ? c.remitente + ' · ' : ''}${mercanciaCliente(c)} · Ref. ${c.guia} · ${(piezasDe[c.id] || []).map(p => `${fmt(p.largo, 0)}×${fmt(p.ancho, 0)}×${fmt(p.alto, 0)}`).join(', ')} · ${fmt(c.piezas, 0)} bulto${n2(c.piezas) === 1 ? '' : 's'} · ${fmt(pulg3Carga(c), 0)} pulg³ × ${tarifaTxt(c)} = ${cop(cobroCarga(c))}`),
+      '', `*Total: ${fmt(totVal.b, 0)} bultos · ${fmt(totVal.c3, 0)} pulg³ · ${cop(totVal.v)}*`,
+    ] : []),
+    ...(conValores ? [] : elegidas).map((c, i) => `${i + 1}. WR ${c.guia} · ${fechaCorta(c.fecha_recibo)}${varios ? ' · ' + nombreCli(c.cliente_id) : ''}${c.remitente ? ' · ' + c.remitente : ''} · ${mercanciaCliente(c)} · ${fmt(c.piezas, 0)} pzs · ${fmt(c.peso_kg, 1)} kg`),
+    ...(conValores ? [] : ['', `*Total: ${elegidas.length} WR · ${fmt(tot.pz, 0)} piezas · ${fmt(tot.kg, 1)} kg · ${fmt(tot.ft, 2)} ft³*`]), ...(obs.trim() ? ['', obs] : []),
   ].join('\n')
   const imprimir = () => { const w = window.open('', '_blank'); if (!w) return; w.document.write(html.replace('</body>', '<script>window.onload=()=>window.print()<\/script></body>')); w.document.close() }
   const copiar = async () => { try { await navigator.clipboard.writeText(texto); setCopiado(true); setTimeout(() => setCopiado(false), 2000) } catch {} }
@@ -712,7 +737,7 @@ function RelacionCarga({ cargas, clientes, bodegas, inicial, onCerrar }) {
         <div style={{ display:'flex', flexDirection:'column', gap:10, minHeight:0 }}>
           <div>
             <div style={{ fontSize:11, letterSpacing:3, color:'var(--gold)', fontWeight:700 }}>RELACIÓN DE RECIBIDOS</div>
-            <div style={{ fontSize:12, color:'var(--text3)' }}>Informativa y sin valores: recibos, proveedor, piezas y pesos.</div>
+            <div style={{ fontSize:12, color:'var(--text3)' }}>{conValores ? 'Con valores: medidas, cubicaje, tarifa y valor de cada recibo.' : 'Informativa y sin valores: recibos, proveedor, piezas y pesos.'}</div>
           </div>
           <div className="grid-2" style={{ gap:8 }}>
             <div><Etiqueta>Cliente</Etiqueta><select id="rel-cliente" value={cliente} onChange={e => setCliente(e.target.value)} style={iStyle}><option value="">Todos</option>{clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select></div>
@@ -732,11 +757,12 @@ function RelacionCarga({ cargas, clientes, bodegas, inicial, onCerrar }) {
             ))}
           </div>
           <div className="grid-2" style={{ gap:8 }}>
-            <div><Etiqueta>Título</Etiqueta><select value={titulo} onChange={e => setTitulo(e.target.value)} style={iStyle}>{['Relación de recibidos','Relación de carga'].map(t => <option key={t}>{t}</option>)}</select></div>
+            <div><Etiqueta>Título</Etiqueta><select value={titulo} onChange={e => setTitulo(e.target.value)} style={iStyle}>{['Relación de recibidos','Relación de carga','Relación de cobro'].map(t => <option key={t}>{t}</option>)}</select></div>
             <div><Etiqueta>Para (opcional)</Etiqueta><input value={para} onChange={e => setPara(e.target.value)} placeholder={destinatario || 'Nombre'} style={iStyle} /></div>
           </div>
           <div><Etiqueta>Observaciones</Etiqueta><input value={obs} onChange={e => setObs(e.target.value)} placeholder="Ej: mercancía en buen estado, cajas selladas" style={iStyle} /></div>
-          <label style={{ display:'flex', gap:8, fontSize:12, color:'var(--text2)', cursor:'pointer' }}><input type="checkbox" checked={agrupar} onChange={e => setAgrupar(e.target.checked)} /> Agrupar por fecha de recibo</label>
+          <label style={{ display:'flex', gap:8, fontSize:12, color:'var(--text2)', cursor:'pointer' }}><input id="rel-valores" type="checkbox" checked={conValores} onChange={e => { setConValores(e.target.checked); setTitulo(e.target.checked ? 'Relación de cobro' : 'Relación de recibidos') }} /> Con valores (medidas, cubicaje, tarifa y valor)</label>
+          {!conValores && <label style={{ display:'flex', gap:8, fontSize:12, color:'var(--text2)', cursor:'pointer' }}><input type="checkbox" checked={agrupar} onChange={e => setAgrupar(e.target.checked)} /> Agrupar por fecha de recibo</label>}
           <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
             <button onClick={imprimir} disabled={!elegidas.length} className="btn-gold" style={{ width:'auto', flex:1 }}>Descargar PDF / Imprimir</button>
             {wa && <a href={wa} target="_blank" rel="noreferrer" className="btn" style={{ textDecoration:'none', color:'#25D366', borderColor:'rgba(37,211,102,0.4)' }}>WhatsApp</a>}
@@ -757,7 +783,7 @@ function RelacionCarga({ cargas, clientes, bodegas, inicial, onCerrar }) {
 function ModalEditarValores({ carga, bodega, onCerrar, onGuardado }) {
   const conTarifaUsd = !!n2(carga.tarifa_costo_usd)
   const [f, setF] = useState({
-    cobro_por: carga.cobro_por || 'kg', kg: String(carga.peso_cobrable_kg ?? ''), unidades: String(carga.unidades ?? ''),
+    cobro_por: carga.cobro_por || 'kg', kg: String(carga.peso_cobrable_kg ?? ''), unidades: String(carga.unidades ?? ''), pulg3: String(pulg3Carga(carga) || ''),
     tarifa: String(carga.tarifa_cliente ?? ''), trm: String(carga.trm ?? ''),
     modo: conTarifaUsd ? 'tarifa' : 'total',
     costo_valor: conTarifaUsd ? String(carga.tarifa_costo_usd) : '', costo_moneda: 'USD', costo_unidad: 'kg',
@@ -777,7 +803,7 @@ function ModalEditarValores({ carga, bodega, onCerrar, onGuardado }) {
   }, [carga.id])
 
   const kgCli = n2(f.kg)
-  const cant = f.cobro_por === 'unidad' ? n2(f.unidades) : f.cobro_por === 'lb' ? kgCli / LB_A_KG : kgCli
+  const cant = f.cobro_por === 'unidad' ? n2(f.unidades) : f.cobro_por === 'in3' ? n2(f.pulg3) : f.cobro_por === 'lb' ? kgCli / LB_A_KG : kgCli
   const cobro = Math.round(cant * n2(f.tarifa))
   const base = f.costo_unidad === 'unidad' ? n2(f.unidades) : f.costo_unidad === 'lb' ? n2(carga.libras) : n2(carga.peso_kg) || n2(carga.libras) * LB_A_KG
   const costo = f.modo === 'total' ? Math.round(n2(String(f.costo_total).replace(/\./g, '')))
@@ -789,13 +815,14 @@ function ModalEditarValores({ carga, bodega, onCerrar, onGuardado }) {
     if (mesCerrado) return setError(`El mes ${mesCerrado.fecha.slice(0, 7)} está cerrado en Caja. Reábrelo para poder corregir.`)
     if (!n2(f.tarifa)) return setError('Escribe la tarifa al cliente.')
     if ((f.cobro_por === 'unidad' || (f.modo === 'tarifa' && f.costo_unidad === 'unidad')) && !n2(f.unidades)) return setError('Escribe las unidades.')
+    if (f.cobro_por === 'in3' && !n2(f.pulg3)) return setError('Escribe el cubicaje en pulgadas³.')
     setGuardando(true); setError('')
     const ref = `WR ${carga.guia}`
     const notaCobro = `${fmt(cant)} ${UNIDAD_CORTA[f.cobro_por]} × ${cop(n2(f.tarifa))}`
     const notaCosto = f.modo === 'total' ? 'Costo corregido a mano'
       : `${fmt(base)} ${f.costo_unidad === 'unidad' ? 'u' : f.costo_unidad + ' reales'} × ${f.costo_moneda === 'USD' ? 'US$' + fmt(f.costo_valor, 2) + ' · TRM ' + fmt(f.trm, 2) : cop(f.costo_valor)}`
     const { error: e } = await supabase.from('lrm_cargas').update({
-      cobro_por: f.cobro_por, unidades: n2(f.unidades) || null, peso_cobrable_kg: kgCli, tarifa_cliente: n2(f.tarifa), trm: n2(f.trm),
+      cobro_por: f.cobro_por, unidades: f.cobro_por === 'in3' ? Math.round(n2(f.pulg3)) : (n2(f.unidades) || null), peso_cobrable_kg: kgCli, tarifa_cliente: n2(f.tarifa), trm: n2(f.trm),
       costo_total: costo, tarifa_costo: Math.round(costo / Math.max(kgCli, 0.0001)),
       tarifa_costo_usd: f.modo === 'tarifa' && f.costo_moneda === 'USD' && f.costo_unidad === 'kg' ? n2(f.costo_valor) : null,
     }).eq('id', carga.id)
@@ -821,8 +848,9 @@ function ModalEditarValores({ carga, bodega, onCerrar, onGuardado }) {
 
         <Caja2 titulo="Lo que le cobras al cliente">
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(130px, 100%), 1fr))', gap:8 }}>
-            <div><Etiqueta>Cobras por</Etiqueta><select id="ed-cobro-por" value={f.cobro_por} onChange={set('cobro_por')} style={iStyle}><option value="kg">kg</option><option value="lb">lb</option><option value="unidad">unidad</option></select></div>
-            {f.cobro_por !== 'unidad' && <div><Etiqueta>Kg al cliente</Etiqueta><input id="ed-kg" inputMode="decimal" value={f.kg} onChange={set('kg')} style={iStyle} /></div>}
+            <div><Etiqueta>Cobras por</Etiqueta><select id="ed-cobro-por" value={f.cobro_por} onChange={set('cobro_por')} style={iStyle}><option value="kg">kg</option><option value="lb">lb</option><option value="unidad">unidad</option><option value="in3">cubicaje (pulg³)</option></select></div>
+            {f.cobro_por === 'in3' && <div><Etiqueta>Cubicaje (pulg³)</Etiqueta><input id="ed-pulg3" inputMode="numeric" value={f.pulg3} onChange={set('pulg3')} style={iStyle} /></div>}
+            {f.cobro_por !== 'unidad' && f.cobro_por !== 'in3' && <div><Etiqueta>Kg al cliente</Etiqueta><input id="ed-kg" inputMode="decimal" value={f.kg} onChange={set('kg')} style={iStyle} /></div>}
             {(f.cobro_por === 'unidad' || f.costo_unidad === 'unidad') && <div><Etiqueta>Unidades</Etiqueta><input id="ed-unidades" inputMode="numeric" value={f.unidades} onChange={set('unidades')} style={iStyle} /></div>}
             <div><Etiqueta>Tarifa (COP/{UNIDAD_CORTA[f.cobro_por]})</Etiqueta><input id="ed-tarifa" inputMode="numeric" value={f.tarifa} onChange={set('tarifa')} style={iStyle} /></div>
           </div>
@@ -946,8 +974,10 @@ export function htmlCuentaCobro({ carga, piezas, cliente, bodega, empresa, medio
   const modalidad = carga.modalidad === 'aereo' ? 'Aéreo' : 'Marítimo'
   const origen = origenDe(bodega)
   const ruta = `${origen} → Barranquilla`
+  const porCubicaje = carga.cobro_por === 'in3'
   const filasPiezas = piezas.map(p => {
     const pesoUnit = n2(p.peso_lb) + aiuPieza
+    if (porCubicaje) { const c3 = Math.round(n2(p.largo) * n2(p.ancho) * n2(p.alto)) * n2(p.cantidad); return `<tr><td>${p.cantidad}</td><td>${p.tipo === 'CART' ? 'Caja' : esc(p.tipo)}</td><td>${fmt(p.largo, 0)} × ${fmt(p.ancho, 0)} × ${fmt(p.alto, 0)}</td><td class="n">${fmt(c3, 0)}</td><td class="n">${fmt(pesoUnit * n2(p.cantidad), 1)}</td></tr>` }
     return `<tr><td>${p.cantidad}</td><td>${p.tipo === 'CART' ? 'Caja' : esc(p.tipo)}</td><td class="n">${fmt(pesoUnit, 1)}</td><td class="n">${fmt(pesoUnit * n2(p.cantidad), 1)}</td></tr>`
   }).join('')
   const mediosOk = (medios || []).filter(m => String(m.detalle || '').trim())
@@ -975,10 +1005,13 @@ export function htmlCuentaCobro({ carga, piezas, cliente, bodega, empresa, medio
     <h3>Cliente</h3><div class="grid">${dato('Nombre', cliente?.nombre || '')}${dato('Empresa', cliente?.empresa)}${dato('Teléfono', cliente?.telefono)}</div>
     <h3>Servicio</h3><div class="grid">${dato('Servicio', 'Importación y entrega en Barranquilla')}${dato('Origen', origen)}
       ${dato('Modalidad', modalidad)}${dato('Mercancía', mercancia)}${dato('Ref. envío', 'WR ' + carga.guia)}${dato('Fecha de recepción', fechaCorta(carga.fecha_recibo) + ' ' + (carga.fecha_recibo || '').slice(0, 4))}</div>
-    <h3>Detalle de la mercancía</h3><table><tr><th>Cant.</th><th>Empaque</th><th class="n">Peso c/u (lb)</th><th class="n">Peso total (lb)</th></tr>${filasPiezas}
-      <tr class="tot"><td>${carga.piezas}</td><td>Total</td><td></td><td class="n">${fmt(lbTotal, 1)} lb · ${fmt(kg, 1)} kg</td></tr></table>
+    <h3>Detalle de la mercancía</h3>${porCubicaje
+      ? `<table><tr><th>Bultos</th><th>Empaque</th><th>Medidas (pulg)</th><th class="n">Cubicaje (pulg³)</th><th class="n">Peso (lb)</th></tr>${filasPiezas}
+      <tr class="tot"><td>${carga.piezas}</td><td>Total</td><td></td><td class="n">${fmt(cant, 0)}</td><td class="n">${fmt(lbTotal, 1)}</td></tr></table>`
+      : `<table><tr><th>Cant.</th><th>Empaque</th><th class="n">Peso c/u (lb)</th><th class="n">Peso total (lb)</th></tr>${filasPiezas}
+      <tr class="tot"><td>${carga.piezas}</td><td>Total</td><td></td><td class="n">${fmt(lbTotal, 1)} lb · ${fmt(kg, 1)} kg</td></tr></table>`}
     <div class="cierre"><h3>Liquidación</h3><table class="liq"><tr><th>Concepto</th><th class="n">Cantidad</th><th class="n">Tarifa</th><th class="n">Valor</th></tr>
-      <tr><td>Servicio de importación ${esc(ruta)} · ${modalidad.toLowerCase()}</td><td class="n">${fmt(cant, 1)} ${uniLarga}</td><td class="n">${cop(tarifa)} / ${uni}</td><td class="n">${cop(total)}</td></tr></table>
+      <tr><td>Servicio de importación ${esc(ruta)} · ${modalidad.toLowerCase()}</td><td class="n">${fmt(cant, porCubicaje ? 0 : 1)} ${uniLarga}</td><td class="n">${porCubicaje ? fmt(tarifa, 2) : cop(tarifa)} / ${uni}</td><td class="n">${cop(total)}</td></tr></table>
     <div class="gran">Total a pagar: ${cop(total)}</div>
     ${mediosOk.length ? `<h3>Medios de pago</h3><div class="pago">${mediosOk.map(m => `<div class="m"><b>${esc(m.tipo)}</b><span>${esc(m.detalle)}${m.titular ? '<br>' + esc(m.titular) : ''}</span></div>`).join('')}</div>` : ''}
     <div class="pie">${empresa.condiciones ? `<div class="cond"><b>Condiciones:</b> ${esc(empresa.condiciones)}</div>` : '<div></div>'}
@@ -988,8 +1021,8 @@ export function htmlCuentaCobro({ carga, piezas, cliente, bodega, empresa, medio
   const texto = [
     `*${empresa.nombre}* · Cuenta de cobro ${numero}`, `Fecha: ${fechaHoy}`, `Cliente: ${cliente?.nombre || ''}`, ``,
     `Servicio de importación ${ruta} (${modalidad.toLowerCase()})`, `Mercancía: ${mercancia}`,
-    `${carga.piezas} cajas · ${fmt(lbTotal, 1)} lb · *${fmt(kg, 1)} kg*`, ``,
-    `${fmt(cant, 1)} ${uniLarga} × ${cop(tarifa)} = *${cop(total)}*`, `*Total a pagar: ${cop(total)}*`, ``,
+    porCubicaje ? `${carga.piezas} ${n2(carga.piezas) === 1 ? 'bulto' : 'bultos'} · ${piezas.map(p => `${fmt(p.largo, 0)}×${fmt(p.ancho, 0)}×${fmt(p.alto, 0)}`).join(', ')} pulg` : `${carga.piezas} cajas · ${fmt(lbTotal, 1)} lb · *${fmt(kg, 1)} kg*`, ``,
+    `${fmt(cant, porCubicaje ? 0 : 1)} ${uniLarga} × ${porCubicaje ? '$' + fmt(tarifa, 2) : cop(tarifa)} = *${cop(total)}*`, `*Total a pagar: ${cop(total)}*`, ``,
     ...(mediosOk.length ? ['*Medios de pago*', ...mediosOk.map(m => `• ${m.tipo}: ${m.detalle}${m.titular ? ' (' + m.titular + ')' : ''}`)] : []),
     ...(empresa.condiciones ? ['', empresa.condiciones] : []),
   ].join('\n')
