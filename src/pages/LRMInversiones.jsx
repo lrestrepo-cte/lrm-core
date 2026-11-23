@@ -9,6 +9,8 @@ import Tarifas from './lrm/Tarifas'
 import Aliados from './lrm/Aliados'
 import Consolidador from './lrm/Consolidador'
 import Servicios from './lrm/Servicios'
+import Reportes from './lrm/Reportes'
+import Marketing from './lrm/Marketing'
 import Cargas from './lrm/Cargas'
 import Ajustes from './lrm/Ajustes'
 import RedComercial from './lrm/RedComercial'
@@ -1620,6 +1622,8 @@ export default function LRMInversiones({ modo = 'trade', tab: tabExterno, onTab 
     consolidador:{ titulo:'Consolidador',     sub:'Junta la carga de tus clientes y llena contenedores al menor costo' },
     aliados:     { titulo:'Aliados y fletes', sub:'Tus aliados, tarifas de contenedores y cotización con tu margen' },
     tarifas:     { titulo:'Tarifas',          sub:'Tus costos y los precios de cada cliente con escalera de valor' },
+    marketing:   { titulo:'Marketing',        sub:'Estrategias, campañas, contenido, pauta en Meta, seguimientos y referidos para conseguir clientes' },
+    reportes:    { titulo:'Reportes y metas', sub:'El mes en una mirada: lo movido, lo facturado, lo ganado y cómo vas con tus metas' },
     cartera:     { titulo:'Cartera',          sub:'Lo que te deben, cliente por cliente, listo para enviar' },
     red:         { titulo:'Red comercial',    sub:'Vendedores, sus clientes y comisiones' },
     ajustes:     { titulo:'Ajustes',          sub:'Datos de cobro, medios de pago y limpieza' },
@@ -1642,6 +1646,8 @@ export default function LRMInversiones({ modo = 'trade', tab: tabExterno, onTab 
       {tab==='logistica'   && <Cargas />}
       {tab==='caja'        && <Caja />}
       {tab==='cartera'     && <Cartera />}
+      {tab==='reportes'    && <Reportes />}
+      {tab==='marketing'   && <Marketing />}
       {tab==='tarifas'     && <Tarifas />}
       {tab==='aliados'     && <Aliados />}
       {tab==='consolidador' && <Consolidador />}

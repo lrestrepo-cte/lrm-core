@@ -100,7 +100,7 @@ function estadoDeCuenta({ fila, empresa, medios, conHistorial }) {
     .cierre{page-break-inside:avoid;break-inside:avoid}
     .pago{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.m{border:1px solid #e5dcc3;border-radius:6px;padding:5px 8px}.m b{display:block;font-size:10.5px}.m span{color:#555;font-size:10px}
     .cond{font-size:9.5px;color:#555;background:#faf7ee;border-radius:6px;padding:6px 10px;margin-top:10px}
-    @media print{body{padding:0}}</style></head><body><div class="doc">
+    @media print{body{padding:0}}@media screen and (max-width:620px){body{padding:12px!important;font-size:11px}.top{flex-direction:column;gap:8px}.num,.t{text-align:left!important}.ruta,.kpis,.k,.datos,.cats,.cols{grid-template-columns:1fr 1fr!important}table{font-size:10px}td,th{padding:5px 4px!important}img{max-width:100%}}</style></head><body><div class="doc">
     <div class="top"><div>${logoDocumentoHTML()}
       <div class="emp">${esc(empresa.responsable)} · ${esc(empresa.documento)}<br>${esc(empresa.ciudad)} · ${esc(empresa.whatsapp)} · ${esc(empresa.correo)}</div></div>
       <div class="num"><div class="t">ESTADO DE CUENTA</div><div class="n1">${esc(cliente.nombre)}</div><div>Corte: ${hoy}</div></div></div>
@@ -143,7 +143,7 @@ function carteraCompleta({ filas, empresa }) {
     table{width:100%;border-collapse:collapse}th{background:#f6f1e3;text-align:left;font-size:9.5px;padding:4px 5px;color:#5a4a1a}td{padding:4px 5px;border-bottom:1px solid #eee}
     .n{text-align:right;white-space:nowrap}.tot td{font-weight:800;border-top:2px solid #1b1b1b}
     .tr{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:10px 0}.c{border:1px solid #e5dcc3;border-radius:6px;padding:6px 10px}.c span{display:block;font-size:9.5px;color:#777}.c b{font-size:13px}
-    @media print{body{padding:0}}</style></head><body>
+    @media print{body{padding:0}}@media screen and (max-width:620px){body{padding:12px!important;font-size:11px}.top{flex-direction:column;gap:8px}.num,.t{text-align:left!important}.ruta,.kpis,.k,.datos,.cats,.cols{grid-template-columns:1fr 1fr!important}table{font-size:10px}td,th{padding:5px 4px!important}img{max-width:100%}}</style></head><body>
     <div class="top">${logoDocumentoHTML(48)}<div><div class="t">CARTERA POR COBRAR</div><div class="n1">${cop(total)}</div><div style="font-size:10px;color:#555;text-align:right">Corte: ${fechaLarga()}</div></div></div>
     <div class="tr">${porTramo.map(t => `<div class="c"><span>${t.label}</span><b>${cop(t.v)}</b></div>`).join('')}</div>
     <table><tr><th>Cliente</th><th class="n">Cuentas</th><th class="n">En camino</th><th class="n">Entregado sin pagar</th><th class="n">Días</th><th class="n">Saldo</th></tr>

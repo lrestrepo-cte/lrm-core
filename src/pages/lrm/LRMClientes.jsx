@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase'
 import { PITCHES_LRM, ETAPAS_PITCH, PUBLICOS_PITCH, unirPitches } from './pitchesLRM'
 import { cobroCarga } from './tarifasLRM'
 import { linkRastreo } from './datosLRM'
+import { FUENTES } from './marketingLRM'
 
 export const NICHOS_LRM = ['Perfumes','Cosméticos','Celulares','Computadores','Tablets','Electrónica','Electrodomésticos','Relojes','Accesorios','Ropa y calzado','Partes y repuestos','Mercancía doméstica','Otro']
 // Un cliente puede comprar varias cosas: se guardan juntas en el mismo campo, separadas por coma
@@ -33,7 +34,7 @@ const iStyle = {
   width:'100%', padding:'9px 12px', borderRadius:8, background:'rgba(255,255,255,0.06)',
   border:'1px solid var(--border)', color:'var(--text)', fontSize:13, fontFamily:'inherit', outline:'none', marginTop:4,
 }
-const FORM_VACIO = { nombre:'', empresa:'', telefono:'', correo:'', nicho:'Otro', estado:'prospecto', proxima_accion:'', fecha_accion:'', origen:'Estados Unidos', volumen_mes:'', tarifa:'', referido_por:'', notas:'', valor_mes:'', codigo:'', tarifa_kg:'' }
+const FORM_VACIO = { fuente:'', ciudad:'', nombre:'', empresa:'', telefono:'', correo:'', nicho:'Otro', estado:'prospecto', proxima_accion:'', fecha_accion:'', origen:'Estados Unidos', volumen_mes:'', tarifa:'', referido_por:'', notas:'', valor_mes:'', codigo:'', tarifa_kg:'' }
 const cop = n => '$' + Math.round(Math.abs(n || 0)).toLocaleString('es-CO')
 const millones = n => '$' + (Math.abs(n || 0) / 1e6).toLocaleString('es-CO', { maximumFractionDigits:1 }) + ' M'
 
@@ -86,8 +87,12 @@ export default function LRMClientes() {
     if (!form.nombre.trim()) return
     setGuardando(true)
     const payload = { ...form, fecha_accion: form.fecha_accion || null, valor_mes: Number(String(form.valor_mes).replace(/\D/g, '')) || 0, tarifa_kg: Number(String(form.tarifa_kg).replace(/\D/g, '')) || 0, codigo: String(form.codigo || '').trim() || null }
-    if (editando) await supabase.from('lrm_clientes').update(payload).eq('id', editando.id)
-    else await supabase.from('lrm_clientes').insert(payload)
+    // fuente y ciudad son del SQL 23: si están vacías no se mandan; si la base aún no las tiene, se guarda sin ellas
+    if (!payload.fuente) delete payload.fuente
+    if (!payload.ciudad) delete payload.ciudad
+    const enviar = d => editando ? supabase.from('lrm_clientes').update(d).eq('id', editando.id) : supabase.from('lrm_clientes').insert(d)
+    const r = await enviar(payload)
+    if (r.error && /fuente|ciudad/.test(r.error.message)) { const { fuente, ciudad, ...sin } = payload; await enviar(sin) }
     setGuardando(false); setModal(false); cargar()
     if (editando && ficha?.id === editando.id) setFicha({ ...editando, ...payload })
   }
@@ -151,7 +156,11 @@ export default function LRMClientes() {
           <div style={{ background:'var(--bg2)', borderRadius:16, padding:24, width:'100%', maxWidth:520, border:'1px solid var(--border)', margin:'auto' }}>
             <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:16 }}>{editando ? 'Editar cliente' : 'Nuevo cliente'}</div>
             <div className="grid-2" style={{ gap:10, marginBottom:10 }}>
-              {[['nombre','Nombre *'],['empresa','Empresa'],['telefono','WhatsApp'],['correo','Correo'],['referido_por','Referido por']].map(([k,l]) => (
+              <div><div style={{ fontSize:11, color:'var(--text3)' }}>¿Cómo llegó?</div>
+                <select id="cli-fuente" value={form.fuente || ''} onChange={e => setForm(p => ({ ...p, fuente:e.target.value }))} style={iStyle}>
+                  <option value="">—</option>{Object.entries(FUENTES).map(([k, f]) => <option key={k} value={k}>{f.icono} {f.l}</option>)}
+                </select></div>
+              {[['nombre','Nombre *'],['empresa','Empresa'],['telefono','WhatsApp'],['correo','Correo'],['ciudad','Ciudad'],['referido_por','Referido por']].map(([k,l]) => (
                 <div key={k}><div style={{ fontSize:11, color:'var(--text3)' }}>{l}</div>
                   <input id={`cli-${k}`} value={form[k]} onChange={e => setForm(p => ({ ...p, [k]:e.target.value }))} style={iStyle} /></div>
               ))}
@@ -371,6 +380,7 @@ function Ficha({ cliente: c, onCerrar, onEditar, onEstado, onCambio }) {
           {c.correo && <a href={`mailto:${c.correo}`} className="btn" style={{ textDecoration:'none' }}>✉️ Correo</a>}
           <button onClick={() => onEditar(c)} className="btn">✏️ Editar</button>
           <BotonRastreo cliente={c} />
+          <BotonPortal cliente={c} />
           <select value={c.estado} onChange={e => onEstado(c, e.target.value)} style={{ ...iStyle, width:'auto', marginTop:0, padding:'6px 10px', fontSize:12, color:est.color }}>
             {ESTADOS_CLIENTE.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
           </select>
@@ -388,9 +398,9 @@ function Ficha({ cliente: c, onCerrar, onEditar, onEstado, onCambio }) {
         {c.notas && <div style={{ fontSize:12, color:'var(--text2)', padding:'10px 12px', borderRadius:8, background:'var(--bg4)', marginBottom:16, whiteSpace:'pre-wrap' }}>{c.notas}</div>}
 
         <Titulo>Próxima acción</Titulo>
-        <div style={{ display:'grid', gridTemplateColumns:'1fr 140px auto', gap:6, marginBottom:18 }}>
-          <input id="ficha-accion" value={accion.proxima_accion} onChange={e => setAccion(p => ({ ...p, proxima_accion:e.target.value }))} placeholder="Qué sigue con este cliente" style={{ ...iStyle, marginTop:0 }} />
-          <input type="date" value={accion.fecha_accion} onChange={e => setAccion(p => ({ ...p, fecha_accion:e.target.value }))} style={{ ...iStyle, marginTop:0 }} />
+        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:18 }}>
+          <input id="ficha-accion" value={accion.proxima_accion} onChange={e => setAccion(p => ({ ...p, proxima_accion:e.target.value }))} placeholder="Qué sigue con este cliente" style={{ ...iStyle, marginTop:0, flex:'1 1 220px', width:'auto', minWidth:0 }} />
+          <input type="date" value={accion.fecha_accion} onChange={e => setAccion(p => ({ ...p, fecha_accion:e.target.value }))} style={{ ...iStyle, marginTop:0, flex:'1 1 140px', width:'auto', minWidth:0 }} />
           <button onClick={guardarAccion} className="btn-gold">{aviso || 'Guardar'}</button>
         </div>
 
@@ -400,8 +410,8 @@ function Ficha({ cliente: c, onCerrar, onEditar, onEstado, onCambio }) {
             <button key={t.id} onClick={() => setNuevo(p => ({ ...p, tipo:t.id }))} className={nuevo.tipo === t.id ? 'btn-gold' : 'btn'} style={{ fontSize:11, padding:'5px 10px' }}>{t.icono} {t.nombre}</button>
           ))}
         </div>
-        <div style={{ display:'flex', gap:6, marginBottom:18 }}>
-          <input id="ficha-contacto" value={nuevo.resumen} onChange={e => setNuevo(p => ({ ...p, resumen:e.target.value }))} onKeyDown={e => e.key === 'Enter' && registrar()} placeholder="Qué hablaron o qué quedó pendiente" style={{ ...iStyle, marginTop:0 }} />
+        <div style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:18 }}>
+          <input id="ficha-contacto" value={nuevo.resumen} onChange={e => setNuevo(p => ({ ...p, resumen:e.target.value }))} onKeyDown={e => e.key === 'Enter' && registrar()} placeholder="Qué hablaron o qué quedó pendiente" style={{ ...iStyle, marginTop:0, flex:'1 1 220px', width:'auto', minWidth:0 }} />
           <button onClick={registrar} className="btn">Registrar</button>
         </div>
 
@@ -582,6 +592,100 @@ function BotonRastreo({ cliente }) {
           </div>
         </div>
       )}
+    </div>
+  )
+}
+// Acceso del cliente al portal (#/clientes) con usuario y clave
+const sinTildes = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+const usuarioSugerido = nombre => { const p = sinTildes(nombre).replace(/[^a-z ]/g, '').split(' ').filter(Boolean); return (p[0] || 'cliente') + (p[1] ? '.' + p[1] : '') }
+const claveAleatoria = () => { const c = 'abcdefghjkmnpqrstuvwxyz23456789'; let s = ''; for (let i = 0; i < 8; i++) s += c[Math.floor(Math.random() * c.length)]; return s }
+function BotonPortal({ cliente }) {
+  const [abierto, setAbierto] = useState(false)
+  return (
+    <>
+      <button id="cl-portal" onClick={() => setAbierto(true)} className="btn">🔑 Portal</button>
+      {abierto && <ModalPortal cliente={cliente} onCerrar={() => setAbierto(false)} />}
+    </>
+  )
+}
+function ModalPortal({ cliente, onCerrar }) {
+  const [acceso, setAcceso] = useState(undefined)     // undefined cargando · null sin acceso
+  const [falta, setFalta] = useState(false)
+  const [usuario, setUsuario] = useState(usuarioSugerido(cliente.nombre))
+  const [clave, setClave] = useState(claveAleatoria())
+  const [nuevaClave, setNuevaClave] = useState(null)   // la clave que acabas de crear o cambiar (solo se ve ahora)
+  const [error, setError] = useState('')
+  const [trabajando, setTrabajando] = useState(false)
+  const [confirmar, setConfirmar] = useState(false)
+  const cargar = async () => {
+    const { data, error } = await supabase.from('lrm_portal_usuarios').select('*').eq('cliente_id', cliente.id).maybeSingle()
+    if (error) { setFalta(true); return }
+    setAcceso(data || null)
+  }
+  useEffect(() => { cargar() }, [cliente.id])
+  const link = `${window.location.origin}/#/clientes`
+  const mensaje = (u, c) => [`Hola ${(cliente.nombre || '').split(' ')[0]}, ya tienes tu acceso al portal de clientes de LRM Trade Consulting.`, '', `Entra aquí: ${link}`, `Usuario: ${u}`, ...(c ? [`Clave: ${c}`] : []), '', 'Ahí ves tus envíos, cotizaciones, estado de cuenta y documentos.'].join('\n')
+  const crear = async () => {
+    setTrabajando(true); setError('')
+    const { error } = await supabase.rpc('lrm_crear_acceso_cliente', { p_cliente: cliente.id, p_usuario: usuario, p_clave: clave })
+    setTrabajando(false)
+    if (error) return setError(error.message)
+    setNuevaClave(clave); cargar()
+  }
+  const cambiarClave = async () => {
+    const c = claveAleatoria()
+    setTrabajando(true); setError('')
+    const { error } = await supabase.rpc('lrm_clave_acceso_cliente', { p_user: acceso.user_id, p_clave: c })
+    setTrabajando(false)
+    if (error) return setError(error.message)
+    setNuevaClave(c)
+  }
+  const activar = async () => { await supabase.from('lrm_portal_usuarios').update({ activo: !acceso.activo }).eq('user_id', acceso.user_id); cargar() }
+  const borrar = async () => {
+    if (!confirmar) return setConfirmar(true)
+    const { error } = await supabase.rpc('lrm_borrar_acceso_cliente', { p_user: acceso.user_id })
+    if (error) return setError(error.message)
+    setConfirmar(false); setNuevaClave(null); setAcceso(null); setUsuario(usuarioSugerido(cliente.nombre)); setClave(claveAleatoria())
+  }
+  const wa = acceso ? linkWhatsApp(cliente.telefono, cliente.nombre, mensaje(acceso.usuario, nuevaClave)) : null
+  return (
+    <div onClick={e => e.stopPropagation()} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.8)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:130, padding:12 }}>
+      <div style={{ background:'var(--bg2)', borderRadius:16, padding:22, width:'100%', maxWidth:460, border:'1px solid var(--gold-border)' }}>
+        <div style={{ fontSize:11, letterSpacing:2, fontWeight:700, color:'var(--gold)' }}>PORTAL DE CLIENTES</div>
+        <div style={{ fontSize:17, fontWeight:800, color:'var(--text)', marginBottom:4 }}>{cliente.nombre}</div>
+        <div style={{ fontSize:12, color:'var(--text3)', marginBottom:14 }}>Entra en <span style={{ color:'var(--gold)' }}>{link}</span> y ve sus envíos, cotizaciones (las puede aceptar), estado de cuenta y documentos. Nunca ve tus costos.</div>
+        {falta ? <div style={{ fontSize:13, color:'var(--gold)' }}>Para crear accesos corre en Supabase el archivo <b>22_lrm_portal_clientes.sql</b>.</div>
+          : acceso === undefined ? <div style={{ fontSize:13, color:'var(--text3)' }}>Cargando…</div>
+          : acceso === null ? (
+            <>
+              <div className="grid-2" style={{ gap:10 }}>
+                <div><div style={{ fontSize:11, color:'var(--text3)' }}>Usuario</div><input id="pt-usuario" value={usuario} onChange={e => setUsuario(sinTildes(e.target.value).replace(/[^a-z0-9._-]/g, ''))} style={iStyle} /></div>
+                <div><div style={{ fontSize:11, color:'var(--text3)' }}>Clave</div><input id="pt-clave" value={clave} onChange={e => setClave(e.target.value)} style={iStyle} /></div>
+              </div>
+              {error && <div style={{ fontSize:12, color:'var(--red)', marginTop:10 }}>{error}</div>}
+              <div style={{ display:'flex', gap:8, marginTop:14 }}>
+                <button id="pt-crear" onClick={crear} disabled={trabajando} className="btn-green" style={{ flex:1 }}>{trabajando ? 'Creando…' : 'Crear acceso'}</button>
+                <button onClick={onCerrar} className="btn" style={{ width:'auto' }}>Cerrar</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div style={{ padding:'10px 12px', borderRadius:10, background:'var(--bg4)', fontSize:13, color:'var(--text2)', lineHeight:1.7 }}>
+                <div>Usuario: <b id="pt-usuario-ok" style={{ color:'var(--text)' }}>{acceso.usuario}</b></div>
+                {nuevaClave && <div>Clave: <b id="pt-clave-ok" style={{ color:'var(--gold)' }}>{nuevaClave}</b> <span style={{ fontSize:11, color:'var(--text3)' }}>· mándasela ahora, después no se vuelve a ver</span></div>}
+                <div style={{ fontSize:12, color: acceso.activo ? 'var(--green)' : 'var(--red)' }}>{acceso.activo ? '● Activo' : '● Desactivado'}{acceso.ultimo_ingreso ? ` · entró por última vez el ${new Date(acceso.ultimo_ingreso).toLocaleDateString('es-CO', { day:'numeric', month:'short' })}` : ' · todavía no ha entrado'}</div>
+              </div>
+              {error && <div style={{ fontSize:12, color:'var(--red)', marginTop:10 }}>{error}</div>}
+              <div style={{ display:'flex', gap:8, marginTop:12, flexWrap:'wrap' }}>
+                {wa && <a id="pt-wa" href={wa} target="_blank" rel="noreferrer" className="btn" style={{ textDecoration:'none', color:'#25D366' }}>💬 Enviar acceso por WhatsApp</a>}
+                <button onClick={cambiarClave} disabled={trabajando} className="btn" style={{ width:'auto' }}>🔁 Nueva clave</button>
+                <button onClick={activar} className="btn" style={{ width:'auto' }}>{acceso.activo ? 'Desactivar' : 'Activar'}</button>
+                <button onClick={borrar} onBlur={() => setConfirmar(false)} className="btn" style={{ width:'auto', color:'var(--red)' }}>{confirmar ? '¿Borrar acceso?' : 'Borrar'}</button>
+                <button onClick={onCerrar} className="btn" style={{ width:'auto', marginLeft:'auto' }}>Cerrar</button>
+              </div>
+            </>
+          )}
+      </div>
     </div>
   )
 }

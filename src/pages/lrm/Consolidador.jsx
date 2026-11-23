@@ -12,7 +12,10 @@ import { CONTENEDORES } from './Aliados'
 import { useDatosLRM } from './datosLRM'
 import { useTarifas, escaleraPara, costoPara, escalonDe, tramoTexto, CONSOLIDADO } from './tarifasLRM'
 import ModalListaEmpaque from './ListaEmpaque'
+import Documentos from '../../components/Documentos'
 import CotizacionConsolidado from './CotizacionConsolidado'
+import { RUTAS, EXTRA_HITOS, MERCANCIA, FRECUENCIAS, DIAS, rutaDe, rutaPorOrigen, tituloHito, siguienteHito, estadoTrasHito, semanaISO, proximoDia, masDias } from './rutasConsolidado'
+import { linkRastreo } from './datosLRM'
 import { descargarExcel } from './leerListaEmpaque'
 
 // Precio por m³ de un item, en su moneda (columnas nuevas tarifa_m3 + moneda; las viejas eran tarifa_m3_usd)
@@ -76,6 +79,8 @@ export default function Consolidador() {
   const [productos, setProductos] = useState([])
   const [movsCaja, setMovsCaja] = useState([])
   const [cierres, setCierres] = useState([])
+  const [hitos, setHitos] = useState([])
+  const [filtroRuta, setFiltroRuta] = useState('todas')
   const [abierto, setAbierto] = useState(null)
   const [nuevo, setNuevo] = useState(false)
   const [faltaTabla, setFaltaTabla] = useState(false)
@@ -96,33 +101,44 @@ export default function Consolidador() {
     ])
     setMovsCaja(mv.error ? null : (mv.data || []))   // null = falta el SQL 18
     setCierres((ci.data || []).map(x => x.mes))
+    const hi = await supabase.from('lrm_consolidado_hitos').select('*').order('fecha').order('created_at')
+    setHitos(hi.error ? null : (hi.data || []))   // null = falta el SQL 20
   }
   useEffect(() => { cargar() }, [])
   if (faltaTabla) return <div className="panel" style={{ border:'1px solid var(--gold-border)', color:'var(--gold)', fontSize:13 }}>Para usar el Consolidador corre en Supabase el archivo <b>12_lrm_consolidados.sql</b>.</div>
 
   const cons = lista.find(c => c.id === abierto)
-  if (cons) return <Detalle cons={cons} items={items.filter(i => i.consolidado_id === cons.id)} productos={productos} movsCaja={movsCaja && movsCaja.filter(m => m.consolidado_id === cons.id)} cierres={cierres} tarifas={tarifas} clientes={clientes} onVolver={() => setAbierto(null)} onCambio={cargar} />
+  if (cons) return <Detalle cons={cons} items={items.filter(i => i.consolidado_id === cons.id)} productos={productos} movsCaja={movsCaja && movsCaja.filter(m => m.consolidado_id === cons.id)} cierres={cierres} hitos={hitos && hitos.filter(h => h.consolidado_id === cons.id)} tarifas={tarifas} clientes={clientes} onVolver={() => setAbierto(null)} onCambio={cargar} onAbrir={setAbierto} />
   return (
     <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, flexWrap:'wrap' }}>
         <div style={{ fontSize:13, color:'var(--text3)' }}>Junta la carga de varios clientes y llena contenedores.</div>
         <button id="cs-nuevo" onClick={() => setNuevo(true)} className="btn-gold" style={{ width:'auto' }}>+ Nuevo consolidado</button>
       </div>
-      {lista.length === 0 ? <div className="panel"><Vacio>Crea tu primer consolidado, por ejemplo "Shanghái · diciembre".</Vacio></div> : (
+      {lista.length > 0 && (
+        <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+          {[['todas', 'Todas las rutas'], ...Object.entries(RUTAS).filter(([k]) => lista.some(c => rutaDe(c) === RUTAS[k])).map(([k, r]) => [k, `${r.bandera} ${r.l}`])].map(([k, l]) => (
+            <button key={k} onClick={() => setFiltroRuta(k)} className={filtroRuta === k ? 'btn-gold' : 'btn'} style={{ width:'auto', fontSize:12 }}>{l} ({k === 'todas' ? lista.length : lista.filter(c => rutaDe(c) === RUTAS[k]).length})</button>
+          ))}
+        </div>
+      )}
+      {lista.length === 0 ? <div className="panel"><Vacio>Crea tu primer consolidado: Miami semanal, Panamá o China.</Vacio></div> : (
         <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(min(320px, 100%), 1fr))', gap:12 }}>
-          {lista.map(c => {
+          {lista.filter(c => filtroRuta === 'todas' || rutaDe(c) === RUTAS[filtroRuta]).map(c => {
             const its = items.filter(i => i.consolidado_id === c.id && activa(i))
             const m3 = its.reduce((s, i) => s + n2(i.cbm), 0)
             const nCli = new Set(its.map(i => i.cliente_id)).size
             const mejor = planes(m3, its.reduce((s, i) => s + n2(i.peso_kg), 0), tarifas.filter(t => t.origen === c.origen && t.destino === c.destino))[0]
             const e = ESTADOS[c.estado] || ESTADOS.abierto
+            const r = rutaDe(c), ult = (hitos || []).filter(h => h.consolidado_id === c.id).slice(-1)[0]
             return (
               <div key={c.id} onClick={() => setAbierto(c.id)} className="panel cs-card" style={{ cursor:'pointer', borderLeft:`3px solid ${e.c}` }}>
-                <div style={{ fontSize:11, color:'var(--text3)' }}>CONS-{String(c.numero || '').padStart(3, '0')} · {c.origen} → {c.destino}</div>
+                <div style={{ fontSize:11, color:'var(--text3)' }}>{r.bandera} CONS-{String(c.numero || '').padStart(3, '0')} · {c.origen} → {c.destino}{c.mercancia === 'especial' ? ' · especial' : ''}</div>
                 <div style={{ fontSize:16, fontWeight:800, color:'var(--text)' }}>{c.nombre}</div>
                 <div style={{ fontSize:12, color:e.c, marginTop:2 }}>{e.l}{c.fecha_cierre ? ` · cierra ${fechaCorta(c.fecha_cierre)}` : ''}</div>
                 <div style={{ fontSize:13, color:'var(--text2)', marginTop:8 }}><b style={{ color:'var(--text)' }}>{fmt(m3)} m³</b> · {nCli} cliente{nCli === 1 ? '' : 's'} · {its.length} carga{its.length === 1 ? '' : 's'}</div>
                 {mejor && <div style={{ fontSize:12, color:'var(--gold)', marginTop:4 }}>{mejor.texto}{mejor.cap ? ` · ${fmt(mejor.lleno * 100, 0)}% lleno` : ''}</div>}
+                {ult && <div style={{ fontSize:11.5, color:'var(--text2)', marginTop:4 }}>📍 {ult.titulo} · {fechaCorta(ult.fecha)}</div>}
               </div>
             )
           })}
@@ -135,7 +151,15 @@ export default function Consolidador() {
 
 function ModalConsolidado({ cons, tarifas, onCerrar, onGuardado, onBorrado }) {
   const origenes = [...new Set(['Shanghái', 'Ningbo', 'Shenzhen', 'Guangzhou', 'Colón (Panamá)', ...tarifas.map(t => t.origen)])]
-  const [f, setF] = useState({ nombre:'', origen:'Shanghái', destino:'Barranquilla', fecha_cierre:'', notas:'', ...(cons || {}) })
+  const [f, setF] = useState({ nombre:'', origen:'Shanghái', destino:'Barranquilla', fecha_cierre:'', notas:'', ruta:'china', mercancia:'general', frecuencia:'por_contenedor', ...(cons || {}) })
+  // Arranque rápido por ruta: Miami semanal, Panamá, China
+  const usarRuta = k => {
+    const r = RUTAS[k], hoy = hoyISO()
+    const cierre = r.diaCierre ? proximoDia(hoy, r.diaCierre) : ''
+    const mes = new Date(hoy + 'T12:00:00').toLocaleDateString('es-CO', { month:'long' })
+    setF(p => ({ ...p, ruta:k, origen: r.origen || p.origen, mercancia: r.mercancia, frecuencia: r.frecuencia, dia_cierre: r.diaCierre || null,
+      fecha_cierre: cierre || p.fecha_cierre, nombre: k === 'miami' ? `Miami · semana ${semanaISO(cierre || hoy)}` : `${r.origen || r.l} · ${mes}` }))
+  }
   const [error, setError] = useState('')
   const set = k => e => setF(p => ({ ...p, [k]: e.target.value }))
   const [confirmar, setConfirmar] = useState(false)
@@ -143,20 +167,30 @@ function ModalConsolidado({ cons, tarifas, onCerrar, onGuardado, onBorrado }) {
   const guardar = async () => {
     if (!f.nombre.trim()) return setError('Ponle un nombre, ej. "Shanghái · diciembre".')
     const datos = { nombre: f.nombre.trim(), origen: f.origen, destino: f.destino, fecha_cierre: f.fecha_cierre || null, notas: f.notas || null }
+    if (f.ruta || (cons && 'ruta' in cons)) Object.assign(datos, { ruta: f.ruta || rutaPorOrigen(f.origen), mercancia: f.mercancia || 'general', frecuencia: f.frecuencia || null, dia_cierre: f.dia_cierre ? Number(f.dia_cierre) : null })
     if (f.etd || f.eta || (cons && 'etd' in cons)) Object.assign(datos, { etd: f.etd || null, eta: f.eta || null })
     if (f.etd && f.eta && f.eta < f.etd) return setError('La llegada (ETA) no puede ser antes de la salida (ETD).')
     const r = f.id ? await supabase.from('lrm_consolidados').update(datos).eq('id', f.id).select().single() : await supabase.from('lrm_consolidados').insert(datos).select().single()
-    if (r.error) return setError(/etd|eta/.test(r.error.message) ? 'Para guardar las fechas de salida y llegada corre en Supabase el archivo 17_lrm_consolidado_fechas.sql.' : 'No se pudo guardar: ' + r.error.message)
+    if (r.error) return setError(/ruta|mercancia|frecuencia|dia_cierre/.test(r.error.message) ? 'Para las rutas y frecuencias corre en Supabase el archivo 20_lrm_hitos_rutas.sql.' : /etd|eta/.test(r.error.message) ? 'Para guardar las fechas de salida y llegada corre en Supabase el archivo 17_lrm_consolidado_fechas.sql.' : 'No se pudo guardar: ' + r.error.message)
     onGuardado(r.data?.id || f.id)
   }
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:110, padding:12 }}>
       <div style={{ background:'var(--bg2)', borderRadius:16, padding:22, width:'100%', maxWidth:480, border:'1px solid var(--border)' }}>
         <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', marginBottom:14 }}>{f.id ? 'Editar consolidado' : 'Nuevo consolidado'}</div>
+        {!f.id && (
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:12 }}>
+            {Object.entries(RUTAS).map(([k, r]) => <button key={k} type="button" id={`cs-ruta-${k}`} onClick={() => usarRuta(k)} className={f.ruta === k ? 'btn-gold' : 'btn'} style={{ width:'auto', fontSize:12 }}>{r.bandera} {r.l}{r.frecuencia === 'semanal' ? ' semanal' : ''}</button>)}
+          </div>
+        )}
         <div style={{ marginBottom:10 }}><Etiqueta>Nombre</Etiqueta><input id="cs-nombre" value={f.nombre} onChange={set('nombre')} placeholder="Shanghái · diciembre" style={iStyle} autoFocus /></div>
         <div className="grid-2" style={{ gap:10, marginBottom:10 }}>
           <div><Etiqueta>Origen</Etiqueta><input id="cs-origen" list="cs-origenes" value={f.origen} onChange={set('origen')} style={iStyle} /><datalist id="cs-origenes">{origenes.map(o => <option key={o} value={o} />)}</datalist></div>
           <div><Etiqueta>Destino</Etiqueta><input value={f.destino} onChange={set('destino')} style={iStyle} /></div>
+          <div><Etiqueta>Ruta</Etiqueta><select id="cs-ruta" value={f.ruta || rutaPorOrigen(f.origen)} onChange={set('ruta')} style={iStyle}>{Object.entries(RUTAS).map(([k, r]) => <option key={k} value={k}>{r.bandera} {r.l}</option>)}</select></div>
+          <div><Etiqueta>Mercancía</Etiqueta><select id="cs-mercancia" value={f.mercancia || 'general'} onChange={set('mercancia')} style={iStyle}>{Object.entries(MERCANCIA).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
+          <div><Etiqueta>Frecuencia</Etiqueta><select value={f.frecuencia || 'por_contenedor'} onChange={set('frecuencia')} style={iStyle}>{Object.entries(FRECUENCIAS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></div>
+          {f.frecuencia === 'semanal' ? <div><Etiqueta>Cierra cada</Etiqueta><select value={f.dia_cierre || ''} onChange={set('dia_cierre')} style={iStyle}><option value="">—</option>{DIAS.map((d, i) => <option key={d} value={i + 1}>{d}</option>)}</select></div> : <div />}
           <div><Etiqueta>Recibe carga hasta</Etiqueta><input type="date" value={f.fecha_cierre || ''} onChange={set('fecha_cierre')} style={iStyle} /></div>
           <div><Etiqueta>Salida estimada (ETD)</Etiqueta><input id="cs-etd" type="date" value={f.etd || ''} onChange={set('etd')} style={iStyle} /></div>
           <div><Etiqueta>Llegada estimada (ETA)</Etiqueta><input id="cs-eta" type="date" value={f.eta || ''} onChange={set('eta')} style={iStyle} /></div>
@@ -182,7 +216,9 @@ function ModalConsolidado({ cons, tarifas, onCerrar, onGuardado, onBorrado }) {
 }
 
 // ── Un consolidado por dentro ──────────────────────────────────────────────
-function Detalle({ cons, items: todos, productos, movsCaja, cierres, tarifas, clientes, onVolver, onCambio }) {
+function Detalle({ cons, items: todos, productos, movsCaja, cierres, hitos, tarifas, clientes, onVolver, onCambio, onAbrir }) {
+  const [hito, setHito] = useState(null)        // hito por registrar
+  const [avisar, setAvisar] = useState(null)    // hito recién registrado para avisar a los clientes
   const [pasarCaja, setPasarCaja] = useState(false)
   const items = todos.filter(activa)
   const canceladas = todos.filter(i => !activa(i))
@@ -253,7 +289,12 @@ function Detalle({ cons, items: todos, productos, movsCaja, cierres, tarifas, cl
         <div>
           <button onClick={onVolver} className="btn" style={{ fontSize:11, padding:'3px 9px', width:'auto', marginBottom:6 }}>← Consolidados</button>
           <div style={{ fontSize:11, color:'var(--text3)' }}>CONS-{String(cons.numero || '').padStart(3, '0')} · {cons.origen} → {cons.destino}{cons.fecha_cierre ? ` · recibe hasta ${fechaCorta(cons.fecha_cierre)}` : ''}{cons.etd ? ` · sale ${fechaCorta(cons.etd)}` : ''}{cons.eta ? ` · llega ${fechaCorta(cons.eta)}` : ''}</div>
-          <div style={{ fontSize:20, fontWeight:800, color:'var(--text)' }}>{cons.nombre}</div>
+          <div style={{ fontSize:20, fontWeight:800, color:'var(--text)' }}>{rutaDe(cons).bandera} {cons.nombre}</div>
+          <div style={{ display:'flex', gap:6, marginTop:4, flexWrap:'wrap' }}>
+            <span style={{ fontSize:10.5, padding:'2px 8px', borderRadius:999, background:'var(--bg4)', color:'var(--text2)' }}>{rutaDe(cons).l}</span>
+            {cons.mercancia && <span style={{ fontSize:10.5, padding:'2px 8px', borderRadius:999, background: cons.mercancia === 'especial' ? 'rgba(232,162,58,0.15)' : 'var(--bg4)', color: cons.mercancia === 'especial' ? '#E8A23A' : 'var(--text2)' }}>{MERCANCIA[cons.mercancia]}</span>}
+            {cons.frecuencia && <span style={{ fontSize:10.5, padding:'2px 8px', borderRadius:999, background:'var(--bg4)', color:'var(--text2)' }}>{FRECUENCIAS[cons.frecuencia]}{cons.frecuencia === 'semanal' && cons.dia_cierre ? ` · cierra los ${DIAS[cons.dia_cierre - 1]}` : ''}</span>}
+          </div>
         </div>
         <div style={{ display:'flex', gap:8, alignItems:'center', flexWrap:'wrap' }}>
           <select value={cons.estado} onChange={setEstado} style={{ ...iStyle, marginTop:0, width:'auto', color:e.c }}>{Object.entries(ESTADOS).map(([k, x]) => <option key={k} value={k}>{x.l}</option>)}</select>
@@ -274,6 +315,55 @@ function Detalle({ cons, items: todos, productos, movsCaja, cierres, tarifas, cl
           </div>
         ))}
       </div>
+
+      {/* Bitácora del envío: hitos que ve el cliente */}
+      {hitos === null ? (
+        <div className="panel" style={{ fontSize:12, color:'var(--gold)' }}>Para la bitácora del envío (cierre, zarpe, Colón, llegada…) corre en Supabase el archivo <b>20_lrm_hitos_rutas.sql</b>.</div>
+      ) : (() => {
+        const sig = siguienteHito(cons, hitos)
+        const pasos = rutaDe(cons).hitos
+        const hechos = new Set(hitos.map(h => h.hito))
+        const nClientes = porCliente.filter(c => c.id).length
+        return (
+          <div className="panel" style={{ border:'1px solid rgba(55,138,221,0.35)' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', gap:10, flexWrap:'wrap', alignItems:'center', marginBottom:10 }}>
+              <div style={{ fontSize:11, letterSpacing:2, fontWeight:700, color:'#378ADD' }}>BITÁCORA DEL ENVÍO</div>
+              <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
+                {sig && <button id="cs-hito-sig" onClick={() => setHito({ def: sig })} className="btn-gold" style={{ width:'auto', fontSize:12 }}>📍 {tituloHito(sig, cons)}</button>}
+                <select id="cs-hito-otro" value="" onChange={e => { const d = [...pasos, ...EXTRA_HITOS].find(x => x.id === e.target.value); if (d) setHito({ def: d }) }} style={{ ...iStyle, marginTop:0, width:'auto', maxWidth:'100%', fontSize:12 }}>
+                  <option value="">Otro hito…</option>
+                  {[...pasos, ...EXTRA_HITOS].map(d => <option key={d.id} value={d.id}>{d.id === 'otro' ? 'Otro (escribirlo)' : tituloHito(d, cons)}</option>)}
+                </select>
+                {cons.frecuencia === 'semanal' && <button id="cs-siguiente-semana" onClick={async () => {
+                  const datos = { nombre: cons.ruta === 'miami' || rutaDe(cons) === RUTAS.miami ? `Miami · semana ${semanaISO(masDias(cons.fecha_cierre || hoyISO(), 7))}` : `${cons.nombre} (siguiente)`, origen: cons.origen, destino: cons.destino,
+                    fecha_cierre: masDias(cons.fecha_cierre, 7), etd: masDias(cons.etd, 7), eta: masDias(cons.eta, 7), ruta: cons.ruta, mercancia: cons.mercancia, frecuencia: cons.frecuencia, dia_cierre: cons.dia_cierre, costo_modo: cons.costo_modo }
+                  const r = await supabase.from('lrm_consolidados').insert(datos).select().single()
+                  if (!r.error) { await onCambio(); onAbrir && onAbrir(r.data.id) }
+                }} className="btn" style={{ width:'auto', fontSize:12 }}>+ Semana siguiente</button>}
+              </div>
+            </div>
+            {/* Ruta completa: hechos en color, pendientes en gris */}
+            <div style={{ display:'flex', gap:4, marginBottom:10 }}>
+              {pasos.map(d => <div key={d.id} title={tituloHito(d, cons)} style={{ flex:1, height:6, borderRadius:3, background: hechos.has(d.id) ? '#378ADD' : 'rgba(255,255,255,0.08)' }} />)}
+            </div>
+            {hitos.length === 0 ? <div style={{ fontSize:12, color:'var(--text4)' }}>Sin hitos todavía. Registra cada paso del envío y avísale a tus {nClientes} cliente{nClientes === 1 ? '' : 's'} con un clic.</div> : (
+              <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                {[...hitos].reverse().map(h => (
+                  <div key={h.id} className="cs-hito" style={{ display:'flex', gap:10, alignItems:'center', fontSize:12.5, padding:'6px 8px', borderRadius:8, background:'var(--bg4)' }}>
+                    <span style={{ width:58, color:'var(--text3)', flexShrink:0 }}>{fechaCorta(h.fecha)}</span>
+                    <span style={{ flex:1, color:'var(--text)' }}>{h.titulo}{h.lugar ? <span style={{ color:'var(--text3)' }}> · {h.lugar}</span> : null}{h.nota_cliente ? <span style={{ color:'var(--text3)' }}> · {h.nota_cliente}</span> : null}{!h.visible_cliente ? <span style={{ color:'var(--text4)' }}> · interno</span> : null}</span>
+                    {h.visible_cliente && <button onClick={() => setAvisar(h)} className="btn" style={{ width:'auto', fontSize:11, padding:'2px 8px', color: h.avisado ? 'var(--text3)' : '#25D366' }}>{h.avisado ? '✓ Avisado' : '💬 Avisar'}</button>}
+                    <button onClick={async () => { if (window.confirm('¿Borrar este hito?')) { await supabase.from('lrm_consolidado_hitos').delete().eq('id', h.id); onCambio() } }} title="Borrar" className="btn" style={{ width:'auto', fontSize:11, padding:'2px 7px', color:'var(--text4)' }}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })()}
+
+      {/* Documentos del envío: BL, DIM, facturas y fotos (por cliente o de todo el envío) */}
+      <div className="panel"><Documentos entidad="consolidado" entidadId={cons.id} clientes={porCliente.filter(c => c.id).map(c => ({ id: c.id, nombre: c.nombre }))} titulo="Documentos y fotos del envío" /></div>
 
       {/* Caja: lo facturado a los clientes y el costo registrado */}
       {(() => {
@@ -396,6 +486,8 @@ function Detalle({ cons, items: todos, productos, movsCaja, cierres, tarifas, cl
         )}
       </div>
 
+      {hito && <ModalHito cons={cons} def={hito.def} onCerrar={() => setHito(null)} onGuardado={async h => { setHito(null); await onCambio(); if (h.visible_cliente) setAvisar(h) }} />}
+      {avisar && <ModalAvisarHito cons={cons} hito={avisar} porCliente={porCliente} clientes={clientes} onCerrar={async marcado => { setAvisar(null); if (marcado) onCambio() }} />}
       {pasarCaja && <ModalPasarCaja cons={cons} porCliente={porCliente} movs={movsCaja || []} cierres={cierres || []} costo={costo} tarifaDe={tarifaItem} onCerrar={() => setPasarCaja(false)} onGuardado={() => { setPasarCaja(false); onCambio() }} />}
       {cotizar && <CotizacionConsolidado cons={cons} cliente={cotizar} valorItem={valorItem} tarifaDe={tarifaItem} trm={trmUso} onCerrar={() => { setCotizar(null); onCambio() }} />}
       {lista && <ModalListaEmpaque item={lista} consolidado={cons} cliente={nombreCli(lista.cliente_id)} onCerrar={() => setLista(null)} onGuardado={() => { setLista(null); onCambio() }} />}
@@ -573,6 +665,92 @@ function ModalPasarCaja({ cons, porCliente, movs, cierres, costo, tarifaDe, onCe
         <div style={{ display:'flex', gap:8, marginTop:14 }}>
           <button id="pc-guardar" onClick={guardar} disabled={guardando || nada} className="btn-green" style={{ flex:1, opacity: nada ? 0.5 : 1 }}>{guardando ? 'Guardando…' : 'Registrar en Caja'}</button>
           <button onClick={onCerrar} className="btn" style={{ width:'auto' }}>Cerrar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+// ── Registrar un hito del envío ─────────────────────────────────────────────
+function ModalHito({ cons, def, onCerrar, onGuardado }) {
+  const [f, setF] = useState({ titulo: tituloHito(def, cons), fecha: hoyISO(), lugar:'', nota_cliente:'', nota_interna:'', visible_cliente:true, eta: cons.eta || '' })
+  const [error, setError] = useState('')
+  const set = k => e => setF(p => ({ ...p, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value }))
+  const cambiaEstado = estadoTrasHito(cons.estado, def)
+  const pideEta = ['zarpe', 'transbordo', 'colon', 'cargado'].includes(def.id)
+  const guardar = async () => {
+    if (!f.titulo.trim()) return setError('Escribe qué pasó.')
+    const r = await supabase.from('lrm_consolidado_hitos').insert({ consolidado_id: cons.id, hito: def.id, titulo: f.titulo.trim(), fecha: f.fecha, lugar: f.lugar || null,
+      nota_cliente: f.nota_cliente || null, nota_interna: f.nota_interna || null, visible_cliente: f.visible_cliente }).select().single()
+    if (r.error) return setError('No se pudo guardar: ' + r.error.message)
+    // El hito mueve el consolidado: estado y fechas
+    const cambio = {}
+    if (cambiaEstado) cambio.estado = cambiaEstado
+    if (def.fecha === 'etd') cambio.etd = f.fecha
+    if (pideEta && f.eta && f.eta !== cons.eta) cambio.eta = f.eta
+    if (def.id === 'cierre' && !cons.fecha_cierre) cambio.fecha_cierre = f.fecha
+    if (Object.keys(cambio).length) await supabase.from('lrm_consolidados').update(cambio).eq('id', cons.id)
+    onGuardado(r.data)
+  }
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:120, padding:12 }}>
+      <div style={{ background:'var(--bg2)', borderRadius:16, padding:22, width:'100%', maxWidth:480, border:'1px solid rgba(55,138,221,0.45)' }}>
+        <div style={{ fontSize:11, letterSpacing:2, fontWeight:700, color:'#378ADD' }}>NUEVO HITO · {cons.nombre}</div>
+        <div style={{ margin:'10px 0' }}><Etiqueta>Qué pasó (lo ve el cliente)</Etiqueta><input id="hi-titulo" value={f.titulo} onChange={set('titulo')} style={iStyle} autoFocus /></div>
+        <div className="grid-2" style={{ gap:10 }}>
+          <div><Etiqueta>Fecha</Etiqueta><input id="hi-fecha" type="date" value={f.fecha} onChange={set('fecha')} style={iStyle} /></div>
+          <div><Etiqueta>Lugar</Etiqueta><input value={f.lugar} onChange={set('lugar')} placeholder="Ej: Puerto de Shanghái" style={iStyle} /></div>
+          {pideEta && <div style={{ gridColumn:'1 / -1' }}><Etiqueta>Llegada estimada (ETA) actualizada</Etiqueta><input id="hi-eta" type="date" value={f.eta} onChange={set('eta')} style={iStyle} /></div>}
+          <div style={{ gridColumn:'1 / -1' }}><Etiqueta>Nota para el cliente (opcional)</Etiqueta><input value={f.nota_cliente} onChange={set('nota_cliente')} placeholder="Ej: buque MSC Ana · contenedor MSCU1234567" style={iStyle} /></div>
+          <div style={{ gridColumn:'1 / -1' }}><Etiqueta>Nota interna (solo tú)</Etiqueta><input value={f.nota_interna} onChange={set('nota_interna')} style={iStyle} /></div>
+          <label style={{ gridColumn:'1 / -1', fontSize:12.5, color:'var(--text2)', display:'flex', gap:8, alignItems:'center', cursor:'pointer' }}><input type="checkbox" checked={f.visible_cliente} onChange={set('visible_cliente')} /> Que lo vean los clientes en su portal</label>
+        </div>
+        {cambiaEstado && <div style={{ fontSize:12, color:'var(--text3)', marginTop:10 }}>El consolidado pasa a <b style={{ color:(ESTADOS[cambiaEstado] || {}).c }}>{(ESTADOS[cambiaEstado] || {}).l}</b>{def.fecha === 'etd' ? ' y la salida (ETD) queda con esta fecha' : ''}.</div>}
+        {error && <div style={{ fontSize:12, color:'var(--red)', marginTop:10 }}>{error}</div>}
+        <div style={{ display:'flex', gap:8, marginTop:14 }}>
+          <button id="hi-guardar" onClick={guardar} className="btn-green" style={{ flex:1 }}>Registrar{f.visible_cliente ? ' y avisar' : ''}</button>
+          <button onClick={onCerrar} className="btn" style={{ width:'auto' }}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ── Avisar a todos los clientes del envío (un WhatsApp por cliente, ya escrito) ──
+function ModalAvisarHito({ cons, hito, porCliente, clientes, onCerrar }) {
+  const { empresa } = useDatosLRM()
+  const [enviados, setEnviados] = useState({})
+  const [copiado, setCopiado] = useState(false)
+  const filas = porCliente.filter(c => c.id).map(c => ({ ...c, cliente: clientes.find(x => x.id === c.id) }))
+  const mensaje = c => [
+    `📍 Hola ${String(c.nombre || '').split(' ')[0]}, actualización de tu carga en el consolidado *${cons.nombre}* (${cons.origen} → ${cons.destino}):`, '',
+    `*${hito.titulo}*${hito.lugar ? ` · ${hito.lugar}` : ''} · ${fechaCorta(hito.fecha)}`,
+    ...(hito.nota_cliente ? [hito.nota_cliente] : []),
+    ...(cons.eta ? [`Llegada estimada: ${fechaCorta(cons.eta)}`] : []),
+    ...(linkRastreo(c.cliente) ? ['', `Sigue tu carga aquí: ${linkRastreo(c.cliente)}`] : []),
+    '', `*${empresa.nombre}* · We bring it. Safe and on time.`,
+  ].join('\n')
+  const general = mensaje({ nombre:'' }).replace('Hola , ', 'Hola, ').replace(/\n\nSigue tu carga aquí: .*$/m, '')
+  const marcar = async () => { await supabase.from('lrm_consolidado_hitos').update({ avisado:true }).eq('id', hito.id); onCerrar(true) }
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:125, padding:12 }}>
+      <div style={{ background:'var(--bg2)', borderRadius:16, padding:22, width:'100%', maxWidth:560, maxHeight:'92vh', overflowY:'auto', border:'1px solid rgba(37,211,102,0.35)' }}>
+        <div style={{ fontSize:11, letterSpacing:2, fontWeight:700, color:'#25D366' }}>AVISAR A LOS CLIENTES</div>
+        <div style={{ fontSize:16, fontWeight:800, color:'var(--text)', margin:'2px 0 12px' }}>📍 {hito.titulo}</div>
+        {filas.length === 0 ? <div style={{ fontSize:12, color:'var(--text4)' }}>Este consolidado todavía no tiene clientes.</div> : filas.map(c => {
+          const tel = c.cliente?.telefono, link = tel ? linkWhatsApp(tel, c.nombre, mensaje(c)) : null
+          return (
+            <div key={c.id} className="av-fila" style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:8, background:'var(--bg4)', marginBottom:6 }}>
+              <div style={{ fontSize:13, color:'var(--text)' }}>{c.nombre}<div style={{ fontSize:11, color:'var(--text3)' }}>{fmt(c.m3, 2)} m³ · {tel || 'sin WhatsApp en el CRM'}</div></div>
+              {link ? <a href={link} target="_blank" rel="noreferrer" onClick={() => setEnviados(p => ({ ...p, [c.id]: true }))} className="btn av-wa" style={{ textDecoration:'none', color: enviados[c.id] ? 'var(--text3)' : '#25D366', whiteSpace:'nowrap' }}>{enviados[c.id] ? '✓ Enviado' : '💬 Enviar'}</a> : <span style={{ fontSize:11, color:'var(--text4)' }}>—</span>}
+            </div>
+          )
+        })}
+        <div style={{ fontSize:11, color:'var(--text3)', margin:'10px 0 6px' }}>Mensaje para tu lista de difusión o grupo:</div>
+        <div id="av-texto" style={{ fontSize:12, color:'var(--text2)', whiteSpace:'pre-wrap', background:'var(--bg4)', borderRadius:10, padding:10 }}>{general}</div>
+        <div style={{ display:'flex', gap:8, marginTop:12, flexWrap:'wrap' }}>
+          <button onClick={async () => { try { await navigator.clipboard.writeText(general); setCopiado(true); setTimeout(() => setCopiado(false), 2000) } catch {} }} className="btn" style={{ width:'auto' }}>{copiado ? '✓ Copiado' : 'Copiar mensaje'}</button>
+          <button id="av-listo" onClick={marcar} className="btn-green" style={{ flex:1 }}>Listo, ya avisé</button>
+          <button onClick={() => onCerrar(false)} className="btn" style={{ width:'auto' }}>Después</button>
         </div>
       </div>
     </div>

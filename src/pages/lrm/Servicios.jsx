@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { linkWhatsApp, hoyISO, fechaCorta } from './LRMClientes'
 import { useDatosLRM, logoDocumentoHTML } from './datosLRM'
+import Documentos from '../../components/Documentos'
 
 // ── Catálogos ───────────────────────────────────────────────────────────────
 export const VEHICULOS_SRV = ['Carry / van', 'NHR', 'Camión 350', 'Camión 500', 'Camión 600', 'Camión 3 toneladas', 'Turbo', 'Sencillo', 'Doble troque', 'Tractomula', "Portacontenedor 20'", "Portacontenedor 40'", 'Cama baja', 'Otro']
@@ -190,7 +191,7 @@ export default function Servicios() {
                     return (
                       <div key={s.id} onClick={() => setAbierto(s)} className="sv-card" style={{ cursor:'pointer', padding:'10px 11px', borderRadius:10, background:'var(--bg4)', marginBottom:6, borderLeft:`3px solid ${e.c}` }}>
                         <div style={{ display:'flex', justifyContent:'space-between', gap:6 }}>
-                          <span style={{ fontSize:11, color:'var(--text3)' }}>{codigoSrv(s)}{s.estado === 'programado' ? ' · programado' : ''}{s.estado === 'cancelado' ? ' · cancelado' : ''}</span>
+                          <span style={{ fontSize:11, color:'var(--text3)' }}>{codigoSrv(s)}{s.estado === 'programado' ? ' · programado' : ''}{s.estado === 'cancelado' ? ' · cancelado' : ''}{s.aceptado_por === 'cliente' && !p.cobrado ? <b style={{ color:'var(--gold)' }}> · aceptó en el portal</b> : null}</span>
                           <b style={{ fontSize:12.5, color:'var(--gold)' }}>{cop(t.precio)}</b>
                         </div>
                         <div style={{ fontSize:13.5, fontWeight:800, color:'var(--text)', marginTop:2 }}>{nombreCli(s.cliente_id)}</div>
@@ -459,12 +460,12 @@ function EditorServicio({ srv, lineas: lineas0, clientes, recursos, movs, cuenta
                   const sub = n2(l.cantidad) * n2(l.precio), cos = n2(l.cantidad) * n2(l.costo)
                   return (
                     <div key={i} className="sv-linea" style={{ padding:8, borderRadius:10, background:'var(--bg4)', display:'flex', flexDirection:'column', gap:6 }}>
-                      <div style={{ display:'flex', gap:6 }}>
+                      <div className="sv-linea-top" style={{ display:'flex', gap:6 }}>
                         <select value={l.concepto} onChange={e => { updL(i, 'concepto', e.target.value); updL(i, 'unidad', CONCEPTOS.find(c => c.id === e.target.value)?.unidad || l.unidad) }} style={{ ...celda, width:170, flexShrink:0 }}>{CONCEPTOS.map(c => <option key={c.id} value={c.id}>{c.icono} {c.id}</option>)}</select>
                         <input value={l.detalle || ''} onChange={e => updL(i, 'detalle', e.target.value)} placeholder={l.concepto === 'Coteros' ? 'Detalle: ej. descargue contenedor 40 pies' : 'Detalle (lo ve el cliente)'} style={celda} />
                         <button onClick={() => { setCambios(true); setLs(p => p.filter((_, j) => j !== i)) }} title="Quitar" className="btn" style={{ padding:'2px 9px', fontSize:12, color:'var(--red)', width:'auto' }}>×</button>
                       </div>
-                      <div style={{ display:'grid', gridTemplateColumns:'64px 84px 1fr 1fr 1.25fr', gap:6, alignItems:'end' }}>
+                      <div className="sv-linea-grid" style={{ display:'grid', gridTemplateColumns:'64px 84px 1fr 1fr 1.25fr', gap:6, alignItems:'end' }}>
                         <div><Etiqueta>Cant.</Etiqueta><input className="sv-cant" inputMode="decimal" value={l.cantidad} onChange={e => updL(i, 'cantidad', e.target.value)} style={{ ...celda, textAlign:'right' }} /></div>
                         <div><Etiqueta>Unidad</Etiqueta><input value={l.unidad || ''} onChange={e => updL(i, 'unidad', e.target.value)} style={celda} /></div>
                         <div><Etiqueta>Te cuesta c/u</Etiqueta><input className="sv-costo" inputMode="numeric" value={l.costo} onChange={e => updL(i, 'costo', e.target.value)} style={{ ...celda, textAlign:'right', color:'var(--red)' }} /></div>
@@ -514,7 +515,8 @@ function EditorServicio({ srv, lineas: lineas0, clientes, recursos, movs, cuenta
               <button id="sv-guardar" onClick={guardar} disabled={guardando} className="btn-green" style={{ flex:1, minWidth:140 }}>{guardando ? 'Guardando…' : nuevo ? 'Guardar cotización' : 'Guardar cambios'}</button>
               {!nuevo && <button id="sv-doc" onClick={() => setDoc(true)} className="btn" style={{ width:'auto' }}>📄 Cotización PDF</button>}
             </div>
-            {desfase && !cambios && <div style={{ fontSize:12, color:'#E8A23A' }}>Lo que está en Caja no coincide con el servicio. Dale Guardar para corregirlo.</div>}
+            {f.aceptado_por === 'cliente' && cobrado < 1 && vendido ? <div id="sv-portal" style={{ fontSize:12.5, color:'var(--gold)' }}>✓ El cliente la aceptó desde el portal. Dale <b>Guardar cambios</b> para pasarla a Caja.</div>
+              : desfase && !cambios && <div style={{ fontSize:12, color:'#E8A23A' }}>Lo que está en Caja no coincide con el servicio. Dale Guardar para corregirlo.</div>}
 
             {/* Paso a paso según el estado */}
             {f.estado === 'cotizado' && !nuevo && (
@@ -609,6 +611,7 @@ function EditorServicio({ srv, lineas: lineas0, clientes, recursos, movs, cuenta
               </>
             )}
 
+            {!nuevo && <div className="panel" style={{ padding:14 }}><Documentos entidad="servicio" entidadId={f.id} clienteId={f.cliente_id} titulo="Fotos y documentos del servicio" compacto /></div>}
             {f.estado === 'cancelado' && <div className="panel" style={{ padding:14, color:'var(--text3)', fontSize:13 }}>Cancelado{f.motivo ? `: ${f.motivo}` : ''}. <button onClick={() => cambiarEstado('cotizado', { motivo:null })} className="btn" style={{ width:'auto', fontSize:11, marginLeft:8 }}>↺ Volver a cotizado</button></div>}
           </div>
         </div>
@@ -715,7 +718,7 @@ function DocCotizacion({ srv, lineas, cliente, empresa, onCerrar }) {
     .total small{display:block;color:#C9A84C;font-size:10px;letter-spacing:1px}.total b{font-size:19px}
     .notas{margin-top:14px;font-size:10.5px;color:#444;padding-left:16px}.notas li{margin:3px 0}
     .pie{margin-top:16px;padding-top:10px;border-top:1px solid #eee;display:flex;justify-content:space-between;font-size:10.5px;color:#555}.lema{color:#8a6d1f;font-weight:700}
-    @media print{body{padding:0}}</style></head><body><div class="doc">
+    @media print{body{padding:0}}@media screen and (max-width:620px){body{padding:12px!important;font-size:11px}.top{flex-direction:column;gap:8px}.num,.t{text-align:left!important}.ruta,.kpis,.k,.datos,.cats,.cols{grid-template-columns:1fr 1fr!important}table{font-size:10px}td,th{padding:5px 4px!important}img{max-width:100%}}</style></head><body><div class="doc">
     <div class="top"><div>${logoDocumentoHTML()}<div class="emp">${escH(empresa.ciudad)} · ${escH(empresa.whatsapp)} · ${escH(empresa.correo)}</div></div>
       <div class="num"><div class="t">COTIZACIÓN DE SERVICIO</div><div class="n1">${escH(codigoSrv(srv))}</div><div>${hoy} · válida ${escH(srv.vigencia_dias || 8)} días</div><div>Cliente: <b>${escH(cliente?.nombre || '')}</b></div></div></div>
     <h4>SERVICIO</h4>

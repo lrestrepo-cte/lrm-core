@@ -99,6 +99,7 @@ const NAV_TRADE = [
   { seccion:'Comercial', items:[
       { id:'clientes',    label:'CRM',            icono:'crm',        activo:true  },
       { id:'red',         label:'Red comercial',  icono:'red',        activo:true  },
+      { id:'marketing',   label:'Marketing',      icono:'marketing',  activo:true  },
       { id:'comex',       label:'Cotizador',      icono:'cotizador',  activo:true  },
       { id:'tarifas',     label:'Tarifas',        icono:'tarifas',    activo:true  },
   ] },
@@ -111,6 +112,7 @@ const NAV_TRADE = [
   { seccion:'Finanzas',  items:[
       { id:'caja',        label:'Caja',           icono:'caja',       activo:true  },
       { id:'cartera',     label:'Cartera',        icono:'cartera',    activo:true  },
+      { id:'reportes',    label:'Reportes y metas', icono:'reportes', activo:true  },
   ] },
   { seccion:'Sistema',   items:[ { id:'ajustes',     label:'Ajustes',        icono:'ajustes',    activo:true  } ] },
 ]
@@ -130,6 +132,8 @@ export function IconoNav({ tipo, size = 16 }) {
     case 'servicios':   return <svg {...p}><path d="M2.5 7h11v9h-11z"/><path d="M13.5 10h4l3 3.2V16h-7"/><circle cx="6.5" cy="17.5" r="1.8"/><circle cx="16.5" cy="17.5" r="1.8"/></svg>
     case 'aliados':     return <svg {...p}><path d="M3 15.5h13l3.5-4H6.5"/><path d="M4 15.5l1.5 4h12l2-4"/><path d="M9 11.5V7h5v4.5"/><path d="M11.5 7V4"/></svg>
     case 'consolidador': return <svg {...p}><rect x="2.5" y="7" width="19" height="11" rx="1.5"/><path d="M7 7v11M11.5 7v11M16 7v11"/><path d="M6 4h12"/></svg>
+    case 'marketing':   return <svg {...p}><path d="M3 10v4h3l6 4V6L6 10z"/><path d="M16 9a4 4 0 0 1 0 6"/><path d="M19 6.5a8 8 0 0 1 0 11"/></svg>
+    case 'reportes':    return <svg {...p}><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
     case 'cartera':     return <svg {...p}><path d="M6 2.5h12v19l-3-2-3 2-3-2-3 2z"/><path d="M9 7.5h6M9 11h6M9 14.5h3.5"/></svg>
     case 'ajustes':     return <svg {...p}><circle cx="12" cy="12" r="3"/><path d="M12 2.5v3M12 18.5v3M4.2 6.2l2.1 2.1M17.7 15.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 17.8l2.1-2.1M17.7 8.3l2.1-2.1"/></svg>
     case 'cobro':       return <svg {...p}><path d="M6 2.5h9l4 4v15H6z"/><path d="M15 2.5v4h4M9 12h7M9 16h5"/></svg>

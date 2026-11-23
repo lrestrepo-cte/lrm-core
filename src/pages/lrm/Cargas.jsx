@@ -8,6 +8,7 @@ import { supabase } from '../../lib/supabase'
 import { hoyISO, fechaCorta, NICHOS_LRM, nichoPrincipal } from './LRMClientes'
 import { ETAPAS } from './Dashboard'
 import { useDivisas } from '../../lib/divisas'
+import Documentos from '../../components/Documentos'
 import { BODEGA_POR_DEFECTO, useDatosLRM, AVISOS_LRM, DIAS_TRANSITO, logoDocumentoHTML, linkRastreo } from './datosLRM'
 import { linkWhatsApp } from './LRMClientes'
 import { useTarifas, escaleraPara, costoPara, escalonDe, tramoTexto, cobroCarga, cantidadCobro, unidadCobro, costoCarga, UNIDAD_CORTA } from './tarifasLRM'
@@ -613,6 +614,8 @@ function ModalDetalle({ carga, cliente, clienteFicha, bodega, onAvanzar, onAvisa
           })}
         </div>
 
+        <div className="panel" style={{ padding:12, marginBottom:14 }}><Documentos entidad="carga" entidadId={carga.id} clienteId={carga.cliente_id} compacto /></div>
+
         <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
           <button onClick={() => setVerCuenta(true)} className="btn-gold">🧾 Generar cuenta de cobro</button>
           <button id="det-editar" onClick={() => setEditar(true)} className="btn">✏️ Editar cobro y costo</button>
@@ -678,7 +681,7 @@ function RelacionCarga({ cargas, clientes, bodegas, inicial, onCerrar }) {
     tr.grupo td{background:#faf7ee;color:#8a6d1f;font-weight:700;font-size:10px;letter-spacing:.3px;padding:6px 5px}
     .pie{margin-top:14px;font-size:9.5px;color:#888;text-align:center}
     .obs{margin-top:10px;font-size:10.5px;background:#faf7ee;border-radius:6px;padding:7px 10px}
-    @media print{body{padding:0}}</style></head><body><div class="doc">
+    @media print{body{padding:0}}@media screen and (max-width:620px){body{padding:12px!important;font-size:11px}.top{flex-direction:column;gap:8px}.num,.t{text-align:left!important}.ruta,.kpis,.k,.datos,.cats,.cols{grid-template-columns:1fr 1fr!important}table{font-size:10px}td,th{padding:5px 4px!important}img{max-width:100%}}</style></head><body><div class="doc">
     <div class="top"><div>${logoDocumentoHTML()}
       <div class="emp">${esc(empresa.responsable)} · ${esc(empresa.ciudad)} · ${esc(empresa.whatsapp)} · ${esc(empresa.correo)}</div></div>
       <div class="num"><div class="t">${esc(titulo)}</div><div class="n1">${numero}</div><div>${fechaTxt}</div></div></div>
@@ -705,7 +708,7 @@ function RelacionCarga({ cargas, clientes, bodegas, inicial, onCerrar }) {
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:100, padding:12 }}>
-      <div style={{ background:'var(--bg2)', borderRadius:16, padding:16, width:'100%', maxWidth:1120, border:'1px solid var(--gold-border)', height:'94vh', display:'grid', gridTemplateColumns:'minmax(0, 340px) minmax(0, 1fr)', gap:14 }}>
+      <div className="doc-split" style={{ background:'var(--bg2)', borderRadius:16, padding:16, width:'100%', maxWidth:1120, border:'1px solid var(--gold-border)', height:'94vh', display:'grid', gridTemplateColumns:'minmax(0, 340px) minmax(0, 1fr)', gap:14 }}>
         <div style={{ display:'flex', flexDirection:'column', gap:10, minHeight:0 }}>
           <div>
             <div style={{ fontSize:11, letterSpacing:3, color:'var(--gold)', fontWeight:700 }}>RELACIÓN DE RECIBIDOS</div>
@@ -965,7 +968,7 @@ export function htmlCuentaCobro({ carga, piezas, cliente, bodega, empresa, medio
     .pago{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}.m{border:1px solid #e5dcc3;border-radius:6px;padding:5px 8px}.m b{display:block;font-size:10.5px}.m span{color:#555;font-size:10px}
     .pie{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;margin-top:10px}
     .cond{font-size:9.5px;color:#555;background:#faf7ee;border-radius:6px;padding:6px 10px;flex:1}.firma{font-size:10px;color:#555;text-align:center}.firma .l{border-top:1px solid #999;width:200px;padding-top:3px;margin-top:26px}
-    @media print{body{padding:0}}</style></head><body><div class="doc">
+    @media print{body{padding:0}}@media screen and (max-width:620px){body{padding:12px!important;font-size:11px}.top{flex-direction:column;gap:8px}.num,.t{text-align:left!important}.ruta,.kpis,.k,.datos,.cats,.cols{grid-template-columns:1fr 1fr!important}table{font-size:10px}td,th{padding:5px 4px!important}img{max-width:100%}}</style></head><body><div class="doc">
     <div class="top"><div>${logoDocumentoHTML()}
       <div class="emp">${esc(empresa.responsable)} · ${esc(empresa.documento)}<br>${esc(empresa.ciudad)} · ${esc(empresa.whatsapp)} · ${esc(empresa.correo)}</div></div>
       <div class="num"><div class="t">CUENTA DE COBRO</div><div class="n1">${numero}</div><div>Fecha: ${fechaHoy}</div></div></div>

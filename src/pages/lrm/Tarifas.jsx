@@ -332,7 +332,7 @@ export function PropuestaTarifas({ cliente, categorias, escalera, onCerrar }) {
     tr.mejor td{background:#faf5e6}.min{font-size:10.5px;color:#8a6d1f;padding:6px 12px;background:#faf7ee}
     .notas{margin-top:16px;font-size:11px;color:#444}.notas li{margin:3px 0}
     .pie{margin-top:18px;padding-top:10px;border-top:1px solid #eee;display:flex;justify-content:space-between;font-size:10.5px;color:#555}
-    @media print{body{padding:0}}</style></head><body><div class="doc">
+    @media print{body{padding:0}}@media screen and (max-width:620px){body{padding:12px!important;font-size:11px}.top{flex-direction:column;gap:8px}.num,.t{text-align:left!important}.ruta,.kpis,.k,.datos,.cats,.cols{grid-template-columns:1fr 1fr!important}table{font-size:10px}td,th{padding:5px 4px!important}img{max-width:100%}}</style></head><body><div class="doc">
     <div class="top"><div>${logoDocumentoHTML()}
       <div class="emp">${escH(empresa.ciudad)} · ${escH(empresa.whatsapp)} · ${escH(empresa.correo)}</div></div>
       <div class="num"><div class="t">PROPUESTA DE TARIFAS</div><div class="n1">${escH(cliente?.nombre)}</div><div>${hoyLargo()}${vigencia ? ` · válida ${escH(vigencia)} días` : ''}</div></div></div>
@@ -358,7 +358,7 @@ export function PropuestaTarifas({ cliente, categorias, escalera, onCerrar }) {
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:120, padding:12 }}>
-      <div style={{ background:'var(--bg2)', borderRadius:16, padding:18, width:'100%', maxWidth:1080, border:'1px solid var(--gold-border)', height:'94vh', display:'grid', gridTemplateColumns:'minmax(0, 300px) minmax(0, 1fr)', gap:16 }}>
+      <div className="doc-split" style={{ background:'var(--bg2)', borderRadius:16, padding:18, width:'100%', maxWidth:1080, border:'1px solid var(--gold-border)', height:'94vh', display:'grid', gridTemplateColumns:'minmax(0, 300px) minmax(0, 1fr)', gap:16 }}>
         <div style={{ display:'flex', flexDirection:'column', gap:12, overflowY:'auto' }}>
           <div>
             <div style={{ fontSize:11, letterSpacing:3, color:'var(--gold)', fontWeight:700 }}>PROPUESTA DE TARIFAS</div>

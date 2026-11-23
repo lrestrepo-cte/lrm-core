@@ -79,7 +79,7 @@ export default function CotizacionConsolidado({ cons, cliente, valorItem, tarifa
     .notas{margin-top:14px;font-size:10.5px;color:#444;padding-left:16px}.notas li{margin:3px 0}
     .pie{margin-top:16px;padding-top:10px;border-top:1px solid #eee;display:flex;justify-content:space-between;font-size:10.5px;color:#555}
     .lema{color:#8a6d1f;font-weight:700}
-    @media print{body{padding:0}}</style></head><body><div class="doc">
+    @media print{body{padding:0}}@media screen and (max-width:620px){body{padding:12px!important;font-size:11px}.top{flex-direction:column;gap:8px}.num,.t{text-align:left!important}.ruta,.kpis,.k,.datos,.cats,.cols{grid-template-columns:1fr 1fr!important}table{font-size:10px}td,th{padding:5px 4px!important}img{max-width:100%}}</style></head><body><div class="doc">
     <div class="top"><div>${logoDocumentoHTML()}<div class="emp">${escH(empresa.ciudad)} · ${escH(empresa.whatsapp)} · ${escH(empresa.correo)}</div></div>
       <div class="num"><div class="t">COTIZACIÓN INTEGRAL · CARGA CONSOLIDADA</div><div class="n1">${escH(numero)}</div>
       <div>${fechaLarga(new Date().toISOString().slice(0, 10))}${vigencia ? ` · válida ${escH(vigencia)} días` : ''}</div><div>Cliente: <b>${escH(cliente.nombre)}</b></div></div></div>
@@ -136,7 +136,7 @@ export default function CotizacionConsolidado({ cons, cliente, valorItem, tarifa
 
   return (
     <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.85)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:120, padding:12 }}>
-      <div className="cot-caja" style={{ background:'var(--bg2)', borderRadius:16, padding:18, width:'100%', maxWidth:1120, border:'1px solid var(--gold-border)', height:'94vh', display:'grid', gridTemplateColumns:'minmax(0, 300px) minmax(0, 1fr)', gap:16 }}>
+      <div className="cot-caja doc-split" style={{ background:'var(--bg2)', borderRadius:16, padding:18, width:'100%', maxWidth:1120, border:'1px solid var(--gold-border)', height:'94vh', display:'grid', gridTemplateColumns:'minmax(0, 300px) minmax(0, 1fr)', gap:16 }}>
         <div style={{ display:'flex', flexDirection:'column', gap:12, overflowY:'auto' }}>
           <div>
             <div style={{ fontSize:11, letterSpacing:3, color:'var(--gold)', fontWeight:700 }}>COTIZACIÓN INTEGRAL</div>

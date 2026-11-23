@@ -121,10 +121,10 @@ function DatosCobro() {
       <div style={{ fontSize:11, color:'var(--text3)', marginBottom:8 }}>Los que dejes sin número o llave no salen en la cuenta de cobro.</div>
       <datalist id="tipos-pago">{TIPOS_SUGERIDOS.map(t => <option key={t} value={t} />)}</datalist>
       {m.map((x, i) => (
-        <div key={i} style={{ display:'grid', gridTemplateColumns:'minmax(140px,1fr) minmax(140px,1.2fr) minmax(140px,1.4fr) auto', gap:6, marginBottom:6, alignItems:'end' }}>
-          <div><div style={{ fontSize:10, color:'var(--text4)' }}>Medio</div><input list="tipos-pago" value={x.tipo} onChange={setMedio(i, 'tipo')} placeholder="Nequi" style={iS} /></div>
-          <div><div style={{ fontSize:10, color:'var(--text4)' }}>Número / llave / usuario</div><input value={x.detalle} onChange={setMedio(i, 'detalle')} placeholder="300 000 0000" style={iS} /></div>
-          <div><div style={{ fontSize:10, color:'var(--text4)' }}>Titular (opcional)</div><input value={x.titular || ''} onChange={setMedio(i, 'titular')} style={iS} /></div>
+        <div key={i} className="medio-fila" style={{ display:'flex', flexWrap:'wrap', gap:6, marginBottom:8, alignItems:'flex-end', paddingBottom:8, borderBottom:'1px solid var(--border)' }}>
+          <div style={{ flex:'1 1 140px', minWidth:0 }}><div style={{ fontSize:10, color:'var(--text4)' }}>Medio</div><input list="tipos-pago" value={x.tipo} onChange={setMedio(i, 'tipo')} placeholder="Nequi" style={iS} /></div>
+          <div style={{ flex:'1.2 1 160px', minWidth:0 }}><div style={{ fontSize:10, color:'var(--text4)' }}>Número / llave / usuario</div><input value={x.detalle} onChange={setMedio(i, 'detalle')} placeholder="300 000 0000" style={iS} /></div>
+          <div style={{ flex:'1.4 1 160px', minWidth:0 }}><div style={{ fontSize:10, color:'var(--text4)' }}>Titular (opcional)</div><input value={x.titular || ''} onChange={setMedio(i, 'titular')} style={iS} /></div>
           <button onClick={() => setM(prev => prev.filter((_, j) => j !== i))} className="btn" style={{ height:36 }}>✕</button>
         </div>
       ))}

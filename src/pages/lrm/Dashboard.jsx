@@ -5,6 +5,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { linkWhatsApp, hoyISO, fechaCorta } from './LRMClientes'
+import { SECUENCIAS } from './marketingLRM'
 
 const cop = n => '$' + Math.round(Math.abs(n || 0)).toLocaleString('es-CO')
 const millones = n => (n < 0 ? '−' : '') + '$' + (Math.abs(n || 0) / 1e6).toLocaleString('es-CO', { maximumFractionDigits: 1 }) + ' M'
@@ -86,6 +87,8 @@ function calcular({ clientes, cargas, movs, contactos, temas, ajustes, consolida
   vivos.filter(c => c.fecha_accion && c.fecha_accion <= hoy).forEach(c => hoyLista.push({
     tipo:'contactar', quien:c.nombre, cliente_id:c.id, telefono:c.telefono,
     que: c.proxima_accion || 'Hacer seguimiento',
+    // Si va en una secuencia de seguimiento, el WhatsApp sale con el mensaje de ese paso
+    mensaje: SECUENCIAS[c.secuencia]?.pasos[c.secuencia_paso || 0]?.mensaje?.replace(/\{nombre\}/g, String(c.nombre || '').split(' ')[0]),
     alerta: c.fecha_accion < hoy, nota: c.fecha_accion < hoy ? `atrasado desde el ${fechaCorta(c.fecha_accion)}` : null,
   }))
   cartera.filter(c => c.vence && c.vence <= hoy).forEach(c => hoyLista.push({
@@ -140,6 +143,8 @@ function calcular({ clientes, cargas, movs, contactos, temas, ajustes, consolida
     if (sv.condicion_pago === 'anticipo_50' && sv.abonado < 1 && sv.fecha && sv.fecha <= masDias(hoy, 2))
       hoyLista.push({ tipo:'cobrar', quien, que:`Falta el anticipo del 50% (${cop(sv.total / 2)}) antes del servicio`, alerta:true, ir:'servicios' })
   })
+  servicios.filter(sv => sv.aceptado_por === 'cliente' && ['aceptado', 'programado', 'en_curso'].includes(sv.estado) && !movs.some(m => m.servicio_id === sv.id && m.tipo === 'cobro_cliente')).forEach(sv =>
+    hoyLista.push({ tipo:'servicio', quien:`${srvCod(sv)} · ${nombreCli(sv.cliente_id)}`, que:`¡Aceptó la cotización en el portal! Pásala a Caja y prográmala (${cop(totalSrv(sv.id))})`, alerta:true, ir:'servicios' }))
   servicios.filter(sv => sv.estado === 'completado' && totalSrv(sv.id) - abonadoSrv(sv.id) > 1).forEach(sv =>
     hoyLista.push({ tipo:'cobrar', quien:`${srvCod(sv)} · ${nombreCli(sv.cliente_id)}`, que:`Completado con saldo de ${cop(totalSrv(sv.id) - abonadoSrv(sv.id))}`, monto: totalSrv(sv.id) - abonadoSrv(sv.id), ir:'servicios', telefono: cli[sv.cliente_id]?.telefono, cliente_id: sv.cliente_id }))
   const sinRespuesta = servicios.filter(sv => sv.estado === 'cotizado' && diasDesde(sv.created_at?.slice(0, 10)) >= 3)
@@ -214,7 +219,7 @@ export default function Dashboard({ onIr }) {
   useEffect(() => { cargar() }, [])
 
   const escribir = async (h) => {
-    const link = linkWhatsApp(h.telefono, h.quien)
+    const link = linkWhatsApp(h.telefono, h.quien, h.mensaje)
     if (link) window.open(link, '_blank')
     if (h.cliente_id) await supabase.from('lrm_contactos').insert({ cliente_id: h.cliente_id, tipo:'whatsapp', resumen: h.que })
     cargar()
@@ -303,7 +308,7 @@ export default function Dashboard({ onIr }) {
           {enMovimiento.length === 0 ? <Vacio>No hay cargas en camino.</Vacio> : (
             <div style={{ display:'flex', flexDirection:'column', gap:6 }}>
               {enMovimiento.map(c => {
-                const e = ETAPAS.find(x => x.id === c.etapa)
+                const e = ETAPAS.find(x => x.id === c.etapa) || ETAPAS[0]
                 return (
                   <div key={c.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'9px 12px', borderRadius:10, background:'var(--bg4)', borderLeft:`3px solid ${e.color}` }}>
                     <div style={{ flex:1, minWidth:0 }}>

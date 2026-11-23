@@ -14,9 +14,9 @@ const ETAPAS = [
 ]
 const DIAS_TRANSITO = { maritimo: 8, aereo: 3 }
 const idx = e => Math.max(0, ETAPAS.findIndex(x => x.id === e))
-const C = { fondo:'#F6F3EC', papel:'#FFFFFF', tinta:'#16140F', suave:'#6B655A', linea:'#E7E1D3', oro:'#B8922F', oroClaro:'#F3EAD2', verde:'#2E8B57' }
+export const C = { fondo:'#F6F3EC', papel:'#FFFFFF', tinta:'#16140F', suave:'#6B655A', linea:'#E7E1D3', oro:'#B8922F', oroClaro:'#F3EAD2', verde:'#2E8B57' }
 
-const fecha = (iso, conHora) => {
+export const fecha = (iso, conHora) => {
   if (!iso) return ''
   const d = iso.length === 10 ? new Date(iso + 'T12:00:00') : new Date(iso)
   return d.toLocaleDateString('es-CO', { day:'numeric', month:'short', ...(conHora ? { hour:'numeric', minute:'2-digit' } : {}) })
@@ -104,11 +104,11 @@ export default function Rastreo({ token }) {
   )
 }
 
-function Caja({ children, pad = '18px' }) {
+export function Caja({ children, pad = '18px' }) {
   return <div style={{ background:C.papel, border:`1px solid ${C.linea}`, borderRadius:16, padding:pad, marginBottom:12, boxShadow:'0 1px 2px rgba(22,20,15,0.04)' }}>{children}</div>
 }
 
-function Carga({ c }) {
+export function Carga({ c }) {
   const i = idx(c.etapa)
   // Fecha de cada etapa: la última vez que la carga entró a esa etapa
   const fechas = {}
@@ -165,7 +165,7 @@ const ETAPAS_CONS = [
   { id:'entregado',  corto:'Entregada' },
 ]
 const ESTADO_ITEM = { por_llegar:'Por llegar a la bodega', en_bodega:'✓ En bodega', novedad:'Con novedad · te contactamos' }
-function Consolidado({ x }) {
+export function Consolidado({ x }) {
   const i = Math.max(0, ETAPAS_CONS.findIndex(e => e.id === x.estado))
   const items = x.items || []
   const tot = items.reduce((t, it) => ({ b: t.b + Number(it.bultos || 0), kg: t.kg + Number(it.kg || 0), m3: t.m3 + Number(it.cbm || 0) }), { b:0, kg:0, m3:0 })
@@ -174,7 +174,7 @@ function Consolidado({ x }) {
     <Caja>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:14 }}>
         <div style={{ minWidth:0 }}>
-          <div style={{ fontSize:12, color:C.suave }}>Carga consolidada · {x.origen} → {x.destino}</div>
+          <div style={{ fontSize:12, color:C.suave }}>Carga consolidada · {x.origen} → {x.destino}{x.mercancia === 'especial' ? ' · mercancía especial' : ''}</div>
           <div style={{ fontSize:17, fontWeight:800, marginTop:2 }}>{x.nombre}</div>
           <div style={{ fontSize:13, color:C.suave, marginTop:2 }}>
             {tot.b ? `${kg(tot.b)} bultos · ` : ''}{tot.kg ? `${kg(tot.kg)} kg · ` : ''}{Number(tot.m3).toLocaleString('es-CO', { maximumFractionDigits: 2 })} m³ · Marítimo
@@ -192,6 +192,17 @@ function Consolidado({ x }) {
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8, marginTop:14 }}>
           <div style={{ fontSize:13, background:C.fondo, borderRadius:10, padding:'10px 12px' }}><div style={{ fontSize:11, color:C.suave }}>Salida estimada</div><b>{x.etd ? fecha(x.etd) : 'Por confirmar'}</b></div>
           <div style={{ fontSize:13, background:C.fondo, borderRadius:10, padding:'10px 12px' }}><div style={{ fontSize:11, color:C.suave }}>Llegada estimada</div><b>{x.eta ? fecha(x.eta) : 'Por confirmar'}</b></div>
+        </div>
+      )}
+      {(x.hitos || []).length > 0 && (
+        <div style={{ marginTop:14, borderLeft:`2px solid ${C.linea}`, paddingLeft:12, display:'flex', flexDirection:'column', gap:8 }}>
+          {[...x.hitos].reverse().map((h, k) => (
+            <div key={k} className="rt-hito" style={{ position:'relative' }}>
+              <span style={{ position:'absolute', left:-18, top:4, width:10, height:10, borderRadius:5, background: k === 0 ? C.oro : C.linea }} />
+              <div style={{ fontSize:13, fontWeight: k === 0 ? 800 : 600, color: k === 0 ? C.tinta : C.suave }}>{h.titulo}</div>
+              <div style={{ fontSize:11.5, color:C.suave }}>{fecha(h.fecha)}{h.lugar ? ` · ${h.lugar}` : ''}{h.nota ? ` · ${h.nota}` : ''}</div>
+            </div>
+          ))}
         </div>
       )}
       {x.estado === 'abierto' && items.length > 0 && (
@@ -215,7 +226,7 @@ const ETAPAS_SRV = [
   { id:'en_curso',   corto:'En camino' },
   { id:'completado', corto:'Completado' },
 ]
-function Servicio({ x }) {
+export function Servicio({ x }) {
   const i = Math.max(0, ETAPAS_SRV.findIndex(e => e.id === x.estado))
   return (
     <Caja>

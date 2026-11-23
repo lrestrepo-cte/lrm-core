@@ -136,6 +136,20 @@ body {
   .sub-nav-item { flex-shrink: 0; }
   .panel { padding: 14px 14px; }
   .kpi-val { font-size: 20px; }
+  /* Celular: sin zoom al escribir (iOS lo hace con letra < 16px), barra de arriba limpia */
+  input, select, textarea { font-size: 16px !important; }
+  .live-badge { display: none; }
+  .topbar-sub { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 62vw; }
+  /* Documentos con panel de opciones a un lado: en el celular van uno debajo del otro */
+  .doc-split { grid-template-columns: 1fr !important; height: auto !important; max-height: 94vh; overflow-y: auto !important; }
+  .doc-split iframe { height: 72vh !important; min-height: 460px; }
+  .doc-split > div:first-child { overflow: visible !important; }
+  /* Líneas de un servicio: en el celular en dos columnas */
+  .sv-linea-top { flex-wrap: wrap; }
+  .sv-linea-top > select { width: 100% !important; }
+  .sv-linea-top > input { flex: 1; }
+  .sv-linea-grid { grid-template-columns: 1fr 1fr !important; }
+  .sv-linea-grid > div:nth-child(5) { grid-column: 1 / -1; }
 }
 
 @media print {
