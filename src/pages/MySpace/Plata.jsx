@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
-import { PERSONAS, P_COLOR, P_EMOJI, CATS_GASTO } from './finanzas'
+import { PERSONAS, P_COLOR, P_EMOJI, CATS_GASTO } from './Finanzas'
 import { Cuentas, Fijos, Orden, RegistroRapido, SelectCuenta } from './Cuentas'
 
 function cop(n) {

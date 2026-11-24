@@ -2,9 +2,9 @@
 // Clave guardada en el servidor, pantalla "Hoy" con la rutina ancla y las áreas de tu vida.
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
-import Plata from './myspace/Plata'
-import Habitos from './myspace/Habitos'
-import { RegistroRapido, useOrden, useCuentas } from './myspace/Cuentas'
+import Plata from './MySpace/Plata'
+import Habitos from './MySpace/Habitos'
+import { RegistroRapido, useOrden, useCuentas } from './MySpace/Cuentas'
 
 const AZUL = '#7B93FF'
 const cop = n => '$' + Math.round(Math.abs(Number(n) || 0)).toLocaleString('es-CO')

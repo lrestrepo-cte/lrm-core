@@ -1,8 +1,7 @@
-
 // MySpace · Plata (Fase 1): cuentas, gasto en una línea, pagos fijos y el orden de la plata
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
-import { PERSONAS, CATS_GASTO, DUENOS, TIPOS_CUENTA, esCredito, saldos, leerLinea, BOLSAS, bolsaDe } from './finanzas'
+import { PERSONAS, CATS_GASTO, DUENOS, TIPOS_CUENTA, esCredito, saldos, leerLinea, BOLSAS, bolsaDe } from './Finanzas'
 
 const AZUL = '#7B93FF'
 export const cop = n => (Number(n) < 0 ? '−' : '') + '$' + Math.round(Math.abs(Number(n) || 0)).toLocaleString('es-CO')
