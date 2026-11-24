@@ -4,6 +4,9 @@ import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import Plata from './MySpace/Plata'
 import Habitos from './MySpace/Habitos'
+import MiDia, { useAjuste, useReloj } from './MySpace/MiDia'
+import Coach from './MySpace/Coach'
+import { armarDia, ahoraEn, hora12 } from './MySpace/Rutina'
 import { RegistroRapido, useOrden, useCuentas } from './MySpace/Cuentas'
 
 const AZUL = '#7B93FF'
@@ -14,16 +17,17 @@ const masDias = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d
 // ─── Las áreas ────────────────────────────────────────────────────────────────
 const AREAS = [
   { id:'hoy',        nombre:'Hoy',          icono:'☀️' },
+  { id:'dia',        nombre:'Mi día',       icono:'🕐' },
   { id:'plata',      nombre:'Plata',        icono:'💰' },
   { id:'habitos',    nombre:'Hábitos',      icono:'🔁' },
   { id:'estudios',   nombre:'Estudios',     icono:'🎓', fase:2, trae:'El camino al grado: materias que faltan, comparar seguir en Administración o pasarte a Negocios internacionales, semestre, entregas, notas y pagos.' },
   { id:'lucia',      nombre:'Lucía',        icono:'👧', fase:2, trae:'Colegio, salud, gastos, fechas importantes, llevarla y recogerla, y los momentos juntos. También tu gente: tus papás, tu hermano, Carlos.' },
-  { id:'fitness',    nombre:'Fitness',      icono:'💪', fase:3, trae:'Gym, peso, comidas, sueño y citas médicas.' },
+  { id:'fitness',    nombre:'Coach',        icono:'💪' },
   { id:'espiritual', nombre:'Espiritual',   icono:'🙏', fase:3, trae:'Devocional, Living Room, oraciones y sus respuestas, y tus conversaciones con Carlos.' },
   { id:'diario',     nombre:'Diario',       icono:'📓', fase:3, trae:'Tres líneas al día: lo que pensaste, lo que aprendiste, lo que agradeces. Privado.' },
   { id:'suenos',     nombre:'Sueños 2027',  icono:'🌄', fase:4, trae:'Oficina, apartamento, LRM, Capitán en Silencio, ZABÚ, tus papás, Sara y su hija: cada sueño partido en pasos, y la revisión de los domingos.' },
 ]
-const PRINCIPALES = ['hoy', 'plata', 'habitos', 'diario']
+const PRINCIPALES = ['hoy', 'dia', 'plata', 'habitos']
 
 // ─── La rutina ancla: cinco cosas pequeñas cada día ───────────────────────────
 const RUTINA = [
@@ -111,6 +115,31 @@ function Candado({ onAbrir }) {
   )
 }
 
+// ─── Lo que toca ahora (de Mi día) ────────────────────────────────────────────
+function AhoraCard({ irA }) {
+  const dia = useAjuste('mi_dia'), coach = useAjuste('coach')
+  const reloj = useReloj(30000)
+  if (dia.valor === undefined) return null
+  if (!dia.valor) return (
+    <div className="panel" onClick={() => irA('dia')} style={{ cursor:'pointer', borderLeft:`4px solid ${AZUL}` }}>
+      <div style={{ fontSize:14.5, fontWeight:800, color:'var(--text)' }}>🕐 Arma tu día</div>
+      <div style={{ fontSize:12.5, color:'var(--text3)', marginTop:2 }}>Dime a qué hora te levantas, te acuestas y tus compromisos fijos, y la app te arma el día con horas.</div>
+    </div>
+  )
+  const bloques = armarDia(hoyISO(), dia.valor, coach.valor?.plan)
+  const min = reloj.getHours() * 60 + reloj.getMinutes()
+  const { actual, siguiente } = ahoraEn(bloques, min)
+  return (
+    <div className="panel" onClick={() => irA('dia')} style={{ cursor:'pointer', borderLeft:`4px solid ${AZUL}`, display:'flex', gap:14, alignItems:'center' }}>
+      <div id="hoy-reloj" style={{ fontSize:26, fontWeight:900, color:'var(--text)', flexShrink:0 }}>{reloj.toLocaleTimeString('es-CO', { hour:'numeric', minute:'2-digit' })}</div>
+      <div style={{ minWidth:0 }}>
+        {actual ? <div id="hoy-ahora" style={{ fontSize:14.5, fontWeight:800, color:'var(--text)' }}>Ahora: {actual.icono} {actual.nombre}</div> : <div style={{ fontSize:14.5, fontWeight:800, color:'var(--text)' }}>Tiempo libre</div>}
+        {siguiente && <div style={{ fontSize:12.5, color:'var(--text3)', marginTop:2 }}>Sigue: {siguiente.icono} {siguiente.nombre} · {hora12(siguiente.inicio)}</div>}
+      </div>
+    </div>
+  )
+}
+
 // ─── Hoy ──────────────────────────────────────────────────────────────────────
 function Hoy({ irA }) {
   const hoy = hoyISO()
@@ -168,6 +197,8 @@ function Hoy({ irA }) {
         <div style={{ fontSize:24, fontWeight:800, color:'var(--text)', marginTop:2 }}>{hora < 12 ? 'Buenos días' : hora < 19 ? 'Buenas tardes' : 'Buenas noches'}, Luis</div>
         <div style={{ fontSize:13, color:'var(--text3)', marginTop:4 }}>Un 1% cada día. Si fallas un día no pasa nada; lo único prohibido es fallar dos seguidos.</div>
       </div>
+
+      <AhoraCard irA={irA} />
 
       <RegistroRapido compacto onGuardado={() => { setVuelta(v => v + 1); recargarOrden() }} />
 
@@ -320,7 +351,9 @@ export default function MySpace() {
 
       {area === 'hoy' && <Hoy irA={irA} />}
       {area === 'plata' && <Plata />}
-      {area === 'habitos' && <Habitos />}
+      {area === 'habitos' && <Habitos irA={irA} />}
+      {area === 'dia' && <MiDia />}
+      {area === 'fitness' && <Coach />}
       {area === 'clave' && <Clave />}
       {actual?.fase && <Proximamente area={actual} />}
 

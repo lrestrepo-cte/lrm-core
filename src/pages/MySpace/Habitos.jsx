@@ -1,6 +1,8 @@
 // MySpace · Hábitos (Fase 1): un hábito mínimo por área, racha, semana y recordatorios en el calendario
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
+import { armarDia, BLOQUE_DE_AREA, hora12 } from './Rutina'
+import { useAjuste } from './MiDia'
 
 const AZUL = '#7B93FF'
 export const AREAS_HABITO = [
@@ -30,41 +32,16 @@ export function rachaDe(h, hecho, hoy = hoyISO()) {
   return n
 }
 
-// ─── Calendario (.ics): hábitos con hora y pagos fijos ─────────────────────────
-export function archivoCalendario(habitos, fijos = []) {
-  const hoy = hoyISO().replace(/-/g, ''), ahora = new Date().toISOString().replace(/[-:]/g, '').slice(0, 15) + 'Z'
-  const esc = s => String(s || '').replace(/[\\;,]/g, m => '\\' + m).replace(/\n/g, '\\n')
-  const ev = []
-  habitos.filter(h => h.activo && h.hora).forEach(h => {
-    const hh = String(h.hora).slice(0, 5).replace(':', '')
-    const byday = DIAS.filter(d => String(h.dias || 'LMXJVSD').includes(d[0])).map(d => d[2]).join(',')
-    ev.push(['BEGIN:VEVENT', `UID:habito-${h.id}@lrmcore`, `DTSTAMP:${ahora}`, `DTSTART:${hoy}T${hh}00`, 'DURATION:PT15M',
-      `RRULE:FREQ=WEEKLY;BYDAY=${byday}`, `SUMMARY:${esc((AREAS_HABITO.find(a => a.id === h.area)?.icono || '') + ' ' + h.nombre)}`,
-      `DESCRIPTION:${esc('Mínimo: ' + (h.minimo || h.nombre) + ' · MySpace')}`,
-      'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${esc(h.nombre)}`, 'TRIGGER:PT0M', 'END:VALARM', 'END:VEVENT'].join('\r\n'))
-  })
-  fijos.filter(f => f.activo).forEach(f => {
-    ev.push(['BEGIN:VEVENT', `UID:fijo-${f.id}@lrmcore`, `DTSTAMP:${ahora}`, `DTSTART:${hoy.slice(0, 6)}${String(Math.min(28, f.dia)).padStart(2, '0')}T080000`, 'DURATION:PT15M',
-      `RRULE:FREQ=MONTHLY;BYMONTHDAY=${Math.min(28, f.dia)}`, `SUMMARY:${esc('💳 Pagar ' + f.nombre + ' $' + Math.round(f.monto).toLocaleString('es-CO'))}`,
-      'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${esc('Pagar ' + f.nombre)}`, 'TRIGGER:PT0M', 'END:VALARM', 'END:VEVENT'].join('\r\n'))
-  })
-  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//LRM Core//MySpace//ES', 'CALSCALE:GREGORIAN', 'X-WR-CALNAME:MySpace', ...ev, 'END:VCALENDAR'].join('\r\n') + '\r\n'
-}
-async function descargarCalendario(habitos) {
-  const f = await supabase.from('my_space_fijos').select('*')
-  const blob = new Blob([archivoCalendario(habitos, f.data || [])], { type: 'text/calendar;charset=utf-8' })
-  const url = URL.createObjectURL(blob), a = document.createElement('a')
-  a.href = url; a.download = 'MySpace.ics'; document.body.appendChild(a); a.click(); a.remove()
-  setTimeout(() => URL.revokeObjectURL(url), 4000)
-}
-
 // ─── Hábitos ──────────────────────────────────────────────────────────────────
-export default function Habitos() {
+export default function Habitos({ irA }) {
   const hoy = hoyISO()
+  const dia = useAjuste('mi_dia'), coach = useAjuste('coach')
+  // La hora de cada hábito la pone Mi día
+  const rutinaHoy = useMemo(() => dia.valor ? armarDia(hoy, dia.valor, coach.valor?.plan) : [], [dia.valor, coach.valor])
+  const horaDe = h => { const b = rutinaHoy.find(x => x.id === BLOQUE_DE_AREA[h.area]) || (h.area === 'fisica' ? rutinaHoy.find(x => x.tipo === 'futbol') : null); return b ? hora12(b.inicio) : null }
   const [habitos, setHabitos] = useState(null)
   const [reg, setReg] = useState([])
   const [editar, setEditar] = useState(null)
-  const [ayuda, setAyuda] = useState(false)
   const [error, setError] = useState('')
 
   const cargar = async () => {
@@ -105,22 +82,15 @@ export default function Habitos() {
           <div style={{ fontSize:12.5, color:'var(--text3)', marginTop:2, maxWidth:520 }}>Un hábito por área, con su versión mínima: lo que haces aunque el día salga mal. Un 1% cada día.</div>
         </div>
         <div style={{ display:'flex', gap:8 }}>
-          {habitos.some(h => h.hora) && <button id="ha-calendario" type="button" className="btn" onClick={() => { descargarCalendario(habitos); setAyuda(true) }} style={{ width:'auto' }}>📅 Al calendario</button>}
+          {irA && <button id="ha-midia" type="button" className="btn" onClick={() => irA('dia')} style={{ width:'auto' }}>🕐 Mi día</button>}
           <button id="ha-nuevo" type="button" className="btn-gold" onClick={() => setEditar({ area: sinHabito[0]?.id || 'mental' })} style={{ width:'auto' }}>+ Hábito</button>
         </div>
       </div>
 
-      {ayuda && (
-        <div className="panel" style={{ fontSize:13, color:'var(--text2)', lineHeight:1.6 }}>
-          <b style={{ color:'var(--text)' }}>Se descargó MySpace.ics.</b> En el iPhone: ábrelo y toca <b>Agregar todo</b>; quedan en tu Calendario con alarma a la hora de cada hábito y el día de cada pago fijo. En Google Calendar (computador): Configuración → Importar. Si cambias horas, borra los eventos viejos antes de importar de nuevo.
-          <div><button type="button" className="btn" onClick={() => setAyuda(false)} style={{ width:'auto', marginTop:8 }}>Entendido</button></div>
-        </div>
-      )}
-
       {habitos.length === 0 ? (
         <div className="panel">
           <div style={{ fontSize:14, fontWeight:700, color:'var(--text)', marginBottom:6 }}>Arma tus 8 hábitos</div>
-          <div style={{ fontSize:13, color:'var(--text2)', lineHeight:1.6, marginBottom:12 }}>Toca un área, ajusta el ejemplo a tu vida y ponle hora si quieres que te avise el calendario.</div>
+          <div style={{ fontSize:13, color:'var(--text2)', lineHeight:1.6, marginBottom:12 }}>Toca un área y ajusta el ejemplo a tu vida. La hora la pone Mi día.</div>
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(150px, 1fr))', gap:8 }}>
             {AREAS_HABITO.map(a => (
               <button key={a.id} id={`ha-area-${a.id}`} type="button" onClick={() => setEditar({ area: a.id, nombre: a.ej, minimo: a.min })}
@@ -151,7 +121,7 @@ export default function Habitos() {
                     <div style={{ fontSize:14.5, fontWeight:700, color:'var(--text)' }}>{a.icono} {h.nombre}</div>
                     <div style={{ fontSize:12, color: alerta ? 'var(--red)' : 'var(--text3)', marginTop:1 }}>
                       {alerta ? 'La vez pasada no salió: hoy no se puede fallar' : !hoyT ? 'Hoy no toca' : `Mínimo: ${h.minimo || h.nombre}`}
-                      {h.hora ? ` · ⏰ ${String(h.hora).slice(0, 5)}` : ''}
+                      {horaDe(h) ? ` · ⏰ ${horaDe(h)}` : ''}
                     </div>
                   </div>
                   <div style={{ flexShrink:0, textAlign:'right' }}>
@@ -201,7 +171,7 @@ function ModalHabito({ h0, onCerrar, onListo }) {
             <button key={d} type="button" id={`mh-dia-${d}`} onClick={() => dia(d)} style={{ flex:1, padding:'8px 0', borderRadius:10, fontFamily:'inherit', fontSize:12, fontWeight:700, cursor:'pointer',
               background: f.dias.includes(d) ? `${AZUL}26` : 'transparent', color: f.dias.includes(d) ? AZUL : 'var(--text3)', border:`1px solid ${f.dias.includes(d) ? AZUL + '66' : 'var(--border)'}` }}>{l}</button>
           ))}</div></div>
-        <div style={{ marginBottom:16 }}><div style={{ fontSize:11.5, color:'var(--text3)' }}>Hora del recordatorio (opcional)</div><input id="mh-hora" type="time" value={f.hora} onChange={set('hora')} style={iStyle} /></div>
+        <div style={{ fontSize:12, color:'var(--text3)', marginBottom:16 }}>La hora no la pones tú: la toma de Mi día según el área.</div>
         {error && <div style={{ fontSize:12.5, color:'var(--red)', marginBottom:10 }}>{error}</div>}
         <div style={{ display:'flex', gap:8 }}>
           <button id="mh-guardar" type="button" className="btn-gold" onClick={guardar}>Guardar</button>

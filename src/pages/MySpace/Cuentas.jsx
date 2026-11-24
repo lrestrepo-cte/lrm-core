@@ -79,7 +79,7 @@ export function RegistroRapido({ onGuardado, compacto }) {
     if (r.error && /cuenta_id/.test(r.error.message || '')) { delete fila.cuenta_id; r = await supabase.from('my_space_gastos_v2').insert(fila) }
     if (r.error) return setEstado('No se guardó: ' + r.error.message)
     try { if (g.cuenta_id) localStorage.setItem('ms_cuenta_def', g.cuenta_id) } catch { /* nada */ }
-    setEstado(`✓ ${g.descripcion} · ${cop(g.monto)}`); setTexto(''); onGuardado?.()
+    setEstado(`✓ ${g.descripcion} · ${cop(g.monto)} · ${new Date().toLocaleTimeString('es-CO', { hour:'numeric', minute:'2-digit' })}`); setTexto(''); onGuardado?.()
   }
   const chip = { padding:'6px 8px', borderRadius:10, background:'rgba(255,255,255,0.05)', border:'1px solid var(--border)', color:'var(--text)', fontSize:13, fontFamily:'inherit', maxWidth:'100%' }
   return (
