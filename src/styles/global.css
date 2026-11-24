@@ -196,3 +196,22 @@ body {
 .neg-marca-nombre { font-size:32px; font-weight:900; letter-spacing:-1px; color:var(--text); }
 .neg-marca-desc { font-size:13px; color:var(--text3); margin-top:6px; }
 .neg-marca-parte { font-size:10px; letter-spacing:3px; color:var(--text4); margin-top:14px; text-transform:uppercase; }
+/* MySpace: menú de abajo en el celular, áreas arriba en el computador */
+.ms-nav-bottom { display: none; }
+.ms-item:active { transform: scale(0.99); }
+@media (max-width: 767px) {
+  .ms-wrap { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+  .ms-nav-top { display: none !important; }
+  .ms-nav-bottom { display: grid; grid-template-columns: repeat(5, 1fr); position: fixed; left: 0; right: 0; bottom: 0; z-index: 60;
+    padding: 6px 6px calc(6px + env(safe-area-inset-bottom, 0px)); background: rgba(10,10,12,0.94); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-top: 1px solid var(--border); }
+  .ms-nav-bottom button { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0; border: none; border-radius: 12px; background: transparent;
+    color: var(--text3); font-family: var(--font); font-size: 10.5px; font-weight: 700; cursor: pointer; }
+  .ms-nav-bottom button span { font-size: 20px; line-height: 1.1; }
+  .ms-nav-bottom button.on { color: #7B93FF; background: rgba(123,147,255,0.12); }
+  .ms-mas { position: fixed; inset: 0; z-index: 59; background: rgba(0,0,0,0.55); display: flex; align-items: flex-end; }
+  .ms-mas-hoja { width: 100%; background: var(--bg2, #141416); border-top: 1px solid var(--border); border-radius: 22px 22px 0 0;
+    padding: 18px 16px calc(92px + env(safe-area-inset-bottom, 0px)); }
+  .ms-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+  .ms-subnav { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .ms-subnav .sub-nav-item { flex-shrink: 0; }
+}
