@@ -30,7 +30,7 @@ const TITULOS = {
   calidad:       'Calidad',
   agenda:        'Agenda',
   contabilidad:  'Contabilidad',
-  configuracion: 'Configuración LRM Core',
+  configuracion: 'Configuración LRM Corp',
   myspace:       'My Space',
   inversiones:   'LRM Trade Consulting',
 }
@@ -132,8 +132,9 @@ export default function App() {
     setNegNav('dashboard'); setNavActivo('dashboard'); setSidebarOpen(false)
     ponerHash(n?.slug || '')
   }
-  // App instalada (pantalla completa en el celular): solo LRM Trade, sin LRM Core ni los otros negocios
-  const esApp = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true
+  // App instalada (pantalla completa en el celular): solo LRM Trade, sin LRM Corp ni los otros negocios
+  // (con ?app=corp es la app de LRM Corp: entra a las tres puertas, no solo a LRM Trade)
+  const esApp = (window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true) && new URLSearchParams(window.location.search).get('app') !== 'corp'
   const irCore    = () => { if (esApp) return entrarNegocio('inversiones'); setVista('core'); setNavActivo('dashboard'); setSidebarOpen(false); ponerHash('') }
   const volverLRM = () => { if (esApp) return entrarNegocio('inversiones'); setVista('negocios'); setNavActivo('dashboard'); setSidebarOpen(false); ponerHash('') }
   const elegirEspacio = (id) => {
@@ -160,7 +161,7 @@ export default function App() {
   if (usuario.rol==='vendedor') return <VendedorApp usuario={usuario} onCerrarSesion={cerrarSesion} />
   if (usuario.rol==='cocina')   return <CocinaApp   usuario={usuario} onCerrarSesion={cerrarSesion} />
 
-  // LRM Core: las tres puertas
+  // LRM Corp: las tres puertas
   if (vista === 'core') return <PuertasCore onElegir={elegirEspacio} subtitulo={`Hola, ${usuario.nombre?.split(' ')[0] || ''}. ¿A dónde vamos?`} />
 
   // Business: elegir el negocio
@@ -172,7 +173,7 @@ export default function App() {
       <div className="main-area">
         <div className="topbar">
           <div style={{ display:'flex', alignItems:'center', gap:14 }}>
-            <button onClick={irCore} className="btn" style={{ fontSize:12 }}>← LRM Core</button>
+            <button onClick={irCore} className="btn" style={{ fontSize:12 }}>← LRM Corp</button>
             <div className="topbar-title">{vista === 'myspace' ? 'MySpace' : 'Capitán en Silencio'}</div>
           </div>
           <button onClick={cerrarSesion} className="btn" style={{ fontSize:12 }}>Salir</button>

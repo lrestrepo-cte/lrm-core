@@ -15,7 +15,16 @@ export const esAppInstalada = () => typeof window !== 'undefined' && (window.mat
 const appClientes = new URLSearchParams(window.location.search).get('app') === 'clientes'
 let recordadaClientes = false
 try { recordadaClientes = esAppInstalada() && localStorage.getItem('lrm_app') === 'clientes' } catch { /* sin almacenamiento */ }
+// LRM Corp, la entrada de todo (las tres puertas): ?app=corp o #/corp. También se instala como su propia app.
+const appCorp = new URLSearchParams(window.location.search).get('app') === 'corp' || /^#\/corp\b/.test(window.location.hash)
+if (/^#\/corp\b/.test(window.location.hash)) window.history.replaceState(null, '', window.location.pathname + '?app=corp')
 if ((appClientes || recordadaClientes) && !/^#\/(clientes|rastreo)/.test(window.location.hash)) window.location.hash = '#/clientes'
+else if (appCorp) {
+  document.querySelector('link[rel="manifest"]')?.setAttribute('href', '/manifest-corp.webmanifest')
+  document.querySelector('meta[name="apple-mobile-web-app-title"]')?.setAttribute('content', 'LRM Corp')
+  document.querySelector('link[rel="apple-touch-icon"]')?.setAttribute('href', '/corp/apple-touch-icon.png')
+  document.title = 'LRM Corp'
+}
 else if (esAppInstalada() && !/^#\/(lrm-trade|rastreo|clientes)/.test(window.location.hash)) window.location.hash = '#/lrm-trade'
 // En el portal, el "Agregar a inicio" instala la app de clientes (no la de LRM Trade)
 if (/^#\/clientes\b/.test(window.location.hash)) {
