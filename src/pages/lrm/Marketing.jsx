@@ -159,7 +159,7 @@ function Campanas({ campanas, envios, clientes, ultimoContacto, movs, onCambio }
 }
 
 const PLANTILLAS_CAMPANA = [
-  { nombre:'Prospección comerciantes', tipo:'whatsapp', objetivo:'Conseguir prospectos nuevos', mensaje:'Hola {nombre}, soy Luis de LRM Trade Consulting 👋 Traemos mercancía desde Miami (cada semana), Panamá y China hasta Barranquilla con todo incluido. ¿Te interesa que te cotice tu próximo pedido?', segmento:{ estados:['prospecto'] } },
+  { nombre:'Prospección comerciantes', tipo:'whatsapp', objetivo:'Conseguir prospectos nuevos', mensaje:'Hola {nombre}, soy Luis de LRM Trade Consulting 👋 Traemos mercancía desde Miami (salidas lunes y viernes), Panamá y China hasta Barranquilla con todo incluido. ¿Te interesa que te cotice tu próximo pedido?', segmento:{ estados:['prospecto'] } },
   { nombre:'Reactivar clientes dormidos', tipo:'whatsapp', objetivo:'Que vuelvan a mover carga', mensaje:'Hola {nombre}, ¿cómo va todo? Hace rato no movemos carga juntos. Esta semana hay salida desde Miami y el consolidado de China está abierto. ¿Te separo espacio?', segmento:{ estados:['activo'], diasSinContacto:30 } },
   { nombre:'Cierre de consolidado China', tipo:'whatsapp', objetivo:'Llenar el contenedor', mensaje:'{nombre}, el consolidado de China cierra pronto 🚢 Todo incluido por m³: flete, legalización y entrega en Barranquilla. ¿Te guardo espacio?', segmento:{ estados:['activo', 'propuesta', 'conversacion'] } },
   { nombre:'Pauta Meta · WhatsApp', tipo:'meta', objetivo:'Conversaciones por WhatsApp', mensaje:'', segmento:{} },

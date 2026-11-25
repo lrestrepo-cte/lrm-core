@@ -9,6 +9,7 @@ import { PITCHES_LRM, ETAPAS_PITCH, PUBLICOS_PITCH, unirPitches } from './pitche
 import { cobroCarga } from './tarifasLRM'
 import { linkRastreo, urlPublica } from './datosLRM'
 import { FUENTES } from './marketingLRM'
+import { leerConfig, configCompleta, lineasCasillero, textoWhatsApp } from './casillero'
 
 export const NICHOS_LRM = ['Perfumes','Cosméticos','Celulares','Computadores','Tablets','Electrónica','Electrodomésticos','Relojes','Accesorios','Ropa y calzado','Partes y repuestos','Mercancía doméstica','Otro']
 // Un cliente puede comprar varias cosas: se guardan juntas en el mismo campo, separadas por coma
@@ -271,7 +272,7 @@ function Lista({ clientes, onAbrir, onEditar, onEstado }) {
   const q = buscar.trim().toLowerCase()
   const visibles = clientes
     .filter(c => filtro === 'todos' || c.estado === filtro)
-    .filter(c => !q || [c.nombre, c.empresa, c.nicho, c.notas, c.telefono].some(v => (v || '').toLowerCase().includes(q)))
+    .filter(c => !q || [c.nombre, c.empresa, c.nicho, c.notas, c.telefono, c.casillero].some(v => (v || '').toLowerCase().includes(q)))
     .sort((a, b) => (a.fecha_accion || '9999') < (b.fecha_accion || '9999') ? -1 : 1)
   return (
     <div>
@@ -381,6 +382,7 @@ function Ficha({ cliente: c, onCerrar, onEditar, onEstado, onCambio }) {
           <button onClick={() => onEditar(c)} className="btn">✏️ Editar</button>
           <BotonRastreo cliente={c} />
           <BotonPortal cliente={c} />
+          <BotonCasillero cliente={c} onCambio={onCambio} />
           <select value={c.estado} onChange={e => onEstado(c, e.target.value)} style={{ ...iStyle, width:'auto', marginTop:0, padding:'6px 10px', fontSize:12, color:est.color }}>
             {ESTADOS_CLIENTE.map(e => <option key={e.id} value={e.id}>{e.nombre}</option>)}
           </select>
@@ -595,6 +597,96 @@ function BotonRastreo({ cliente }) {
     </div>
   )
 }
+// ─── Casillero virtual: código del cliente y su dirección en Miami ───────────────
+function BotonCasillero({ cliente, onCambio }) {
+  const [abierto, setAbierto] = useState(false)
+  return (
+    <>
+      <button id="cl-casillero" onClick={() => setAbierto(true)} className="btn" style={cliente.casillero ? { color:'var(--gold)', borderColor:'rgba(201,168,76,0.4)' } : undefined}>📦 {cliente.casillero || 'Casillero'}</button>
+      {abierto && <ModalCasillero cliente={cliente} onCambio={onCambio} onCerrar={() => setAbierto(false)} />}
+    </>
+  )
+}
+function ModalCasillero({ cliente, onCambio, onCerrar }) {
+  const [cfg, setCfg] = useState(null)
+  const [codigo, setCodigo] = useState(cliente.casillero || '')
+  const [editar, setEditar] = useState(false)
+  const [error, setError] = useState('')
+  const [copiado, setCopiado] = useState('')
+  const [empresa, setEmpresa] = useState('LRM Trade Consulting')
+  useEffect(() => {
+    supabase.from('lrm_ajustes').select('clave,valor').in('clave', ['casillero', 'empresa']).then(r => {
+      const m = Object.fromEntries((r.data || []).map(x => [x.clave, x.valor]))
+      const c = leerConfig(m.casillero); setCfg(c); if (!configCompleta(c)) setEditar(true)
+      try { const e = JSON.parse(m.empresa || '{}'); if (e.nombre) setEmpresa(e.nombre) } catch { /* nada */ }
+    })
+  }, [])
+  const asignar = async () => {
+    setError('')
+    const { data, error } = await supabase.rpc('lrm_asignar_casillero', { p_cliente: cliente.id })
+    if (error) return setError(/function|does not exist/i.test(error.message) ? 'Corre en Supabase el archivo 29_lrm_casillero.sql' : error.message)
+    setCodigo(data); onCambio?.()
+  }
+  const guardarCfg = async () => {
+    if (!cfg.direccion1 || !cfg.zip) return setError('Escribe al menos la dirección y el código postal de la bodega.')
+    const r = await supabase.from('lrm_ajustes').upsert({ clave:'casillero', valor: JSON.stringify(cfg) })
+    if (r.error) return setError(r.error.message)
+    setError(''); setEditar(false)
+  }
+  const copiar = async (t, k) => { try { await navigator.clipboard.writeText(t); setCopiado(k); setTimeout(() => setCopiado(''), 1500) } catch { /* nada */ } }
+  if (!cfg) return null
+  const lineas = codigo ? lineasCasillero(cfg, codigo, cliente.nombre) : []
+  const texto = codigo ? textoWhatsApp(cfg, codigo, cliente.nombre, empresa) : ''
+  const wa = codigo ? linkWhatsApp(cliente.telefono, cliente.nombre, texto) : null
+  const set = k => e => setCfg(p => ({ ...p, [k]: e.target.value }))
+  return (
+    <div onClick={onCerrar} style={{ position:'fixed', inset:0, zIndex:60, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', padding:16 }}>
+      <div onClick={e => e.stopPropagation()} className="panel" style={{ width:'100%', maxWidth:480, maxHeight:'90vh', overflowY:'auto' }}>
+        <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:12 }}>
+          <div style={{ fontSize:16, fontWeight:800, color:'var(--text)' }}>📦 Casillero de {cliente.nombre}</div>
+          <button onClick={onCerrar} className="btn">✕</button>
+        </div>
+        {editar ? (
+          <div>
+            <div style={{ fontSize:12.5, color:'var(--text3)', marginBottom:12 }}>Dirección de tu bodega en Miami. Se llena una sola vez y sirve para todos tus clientes.</div>
+            {[['bodega', 'Nombre de la bodega (opcional)', 'RD Star - Ok Cargo'], ['direccion1', 'Dirección (calle y número)', ''], ['linea2', 'Línea 2: cómo va el código', 'Suite {codigo}'], ['ciudad', 'Ciudad', 'Doral'], ['estado', 'Estado', 'FL'], ['zip', 'Código postal (ZIP)', ''], ['telefono', 'Teléfono de la bodega (opcional)', ''], ['prefijo', 'Prefijo de los códigos', 'LRM'], ['nota', 'Nota para el cliente (opcional)', 'Horario de recibo, etc.']].map(([k, l, ph]) => (
+              <div key={k} style={{ marginBottom:10 }}><div style={{ fontSize:11.5, color:'var(--text3)' }}>{l}</div><input id={`cs-${k}`} value={cfg[k] || ''} onChange={set(k)} placeholder={ph} style={iStyle} /></div>
+            ))}
+            <div style={{ fontSize:11.5, color:'var(--text3)', marginBottom:12 }}>Usa la dirección exacta que te dio la bodega para casilleros. En la línea 2, <b>{'{codigo}'}</b> se cambia por el código de cada cliente.</div>
+            {error && <div style={{ fontSize:12.5, color:'var(--red)', marginBottom:10 }}>{error}</div>}
+            <button id="cs-guardar" className="btn-gold" onClick={guardarCfg}>Guardar dirección</button>
+          </div>
+        ) : !codigo ? (
+          <div>
+            <div style={{ fontSize:13.5, color:'var(--text2)', lineHeight:1.6, marginBottom:14 }}>Dale a {cliente.nombre.split(' ')[0]} su código de casillero. Con él compra en Amazon o cualquier tienda y tú sabes de quién es cada paquete que llega a la bodega.</div>
+            {error && <div style={{ fontSize:12.5, color:'var(--red)', marginBottom:10 }}>{error}</div>}
+            <button id="cs-asignar" className="btn-gold" onClick={asignar}>Asignar casillero</button>
+          </div>
+        ) : (
+          <div>
+            <div style={{ textAlign:'center', padding:'14px', borderRadius:14, background:'rgba(201,168,76,0.08)', border:'1px solid rgba(201,168,76,0.3)', marginBottom:14 }}>
+              <div style={{ fontSize:11, letterSpacing:2, color:'var(--text3)' }}>CÓDIGO DE CASILLERO</div>
+              <div id="cs-codigo" style={{ fontSize:30, fontWeight:900, color:'var(--gold)', letterSpacing:2 }}>{codigo}</div>
+            </div>
+            {lineas.map(([k, v]) => (
+              <div key={k} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'8px 0', borderTop:'1px solid var(--border)' }}>
+                <div style={{ minWidth:0 }}><div style={{ fontSize:10.5, color:'var(--text3)' }}>{k}</div><div style={{ fontSize:13.5, color:'var(--text)', fontWeight:600 }}>{v}</div></div>
+                <button className="btn" style={{ fontSize:11, flexShrink:0 }} onClick={() => copiar(v, k)}>{copiado === k ? '✓' : 'Copiar'}</button>
+              </div>
+            ))}
+            <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginTop:14 }}>
+              {wa && <a id="cs-wa" href={wa} target="_blank" rel="noreferrer" className="btn" style={{ color:'#25D366', borderColor:'rgba(37,211,102,0.4)', textDecoration:'none' }}>💬 Enviar por WhatsApp</a>}
+              <button className="btn" onClick={() => copiar(texto, 'todo')}>{copiado === 'todo' ? '✓ Copiado' : 'Copiar mensaje'}</button>
+              <button className="btn" onClick={() => setEditar(true)}>⚙ Dirección de la bodega</button>
+            </div>
+            <div style={{ fontSize:11.5, color:'var(--text3)', marginTop:10 }}>Cuando pegues un recibo de bodega que traiga este código en la referencia o en el consignatario, la app escoge al cliente sola. El cliente también lo ve en su portal, en "Mi casillero".</div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
 // Acceso del cliente al portal (#/clientes) con usuario y clave
 const sinTildes = t => String(t || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
 const usuarioSugerido = nombre => { const p = sinTildes(nombre).replace(/[^a-z ]/g, '').split(' ').filter(Boolean); return (p[0] || 'cliente') + (p[1] ? '.' + p[1] : '') }

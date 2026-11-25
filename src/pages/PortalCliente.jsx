@@ -5,6 +5,8 @@
 // Todo llega por la función lrm_portal (SQL 22): solo lo suyo, sin costos ni márgenes.
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabase'
+import { lineasCasillero, PASOS_COMPRA, NO_TRAER } from './lrm/casillero'
+import { LOGISTICA } from './lrm/pitchesLRM'
 import { C, fecha, Caja, Carga, Consolidado, Servicio, SEMAFORO, Etiqueta, entregadaEn, recienEntregada } from './Rastreo'
 
 export const DOMINIO_CLIENTES = 'clientes.lrmcore.app'
@@ -100,7 +102,7 @@ function Panel({ d, recargar }) {
   const [tab, setTab] = useState(pendientes.length ? 'cotizaciones' : 'envios')
   const irA = t => { setTab(t); document.getElementById('pc-scroll')?.scrollTo({ top:0, behavior:'smooth' }) }
   const wa = d.empresa?.whatsapp ? `https://wa.me/${(String(d.empresa.whatsapp).replace(/\D/g, '').length === 10 ? '57' : '') + String(d.empresa.whatsapp).replace(/\D/g, '')}?text=${encodeURIComponent(`Hola, soy ${d.nombre}. `)}` : null
-  const TABS = [['envios', 'Mis envíos', enCurso], ['entregadas', 'Entregadas', historial.length], ['cotizaciones', 'Cotizaciones', pendientes.length], ['cuenta', 'Estado de cuenta', saldo > 1 ? '!' : 0], ['documentos', 'Documentos', (d.documentos || []).length]]
+  const TABS = [['envios', 'Mis envíos', enCurso], ['entregadas', 'Entregadas', historial.length], ['cotizaciones', 'Cotizaciones', pendientes.length], ['cuenta', 'Estado de cuenta', saldo > 1 ? '!' : 0], ['documentos', 'Documentos', (d.documentos || []).length], ['casillero', 'Mi casillero', 0]]
   return (
     <>
       <h1 style={{ fontSize:26, fontWeight:800, margin:'0 0 4px', letterSpacing:-0.5 }}>Hola, {String(d.nombre || '').split(' ')[0]}</h1>
@@ -120,6 +122,7 @@ function Panel({ d, recargar }) {
       {tab === 'cotizaciones' && <Cotizaciones lista={cotizaciones} recargar={recargar} />}
       {tab === 'cuenta' && <Cuenta d={d} cargado={cargado} pagado={pagado} saldo={saldo} cobros={cobros} />}
       {tab === 'documentos' && <Docs docs={d.documentos || []} wa={wa} />}
+      {tab === 'casillero' && <Casillero wa={wa} />}
 
       {wa && <a href={wa} target="_blank" rel="noreferrer" style={{ display:'block', textAlign:'center', marginTop:22, padding:'14px', borderRadius:12, background:'#fff', border:`1px solid ${C.linea}`, color:C.tinta, textDecoration:'none', fontWeight:700, fontSize:14 }}>💬 Escríbenos por WhatsApp</a>}
     </>
@@ -414,4 +417,72 @@ function Docs({ docs, wa }) {
       </div>
     </Caja>
   ))}{solicitar}</>
+}
+// ─── Mi casillero: la dirección en Miami para comprar en cualquier tienda ───────
+function Casillero({ wa }) {
+  const [c, setC] = useState(undefined)
+  const [copiado, setCopiado] = useState('')
+  useEffect(() => { supabase.rpc('lrm_portal_casillero').then(({ data, error }) => setC(error ? null : data)) }, [])
+  const copiar = async (t, k) => { try { await navigator.clipboard.writeText(t); setCopiado(k); setTimeout(() => setCopiado(''), 1500) } catch { /* nada */ } }
+  if (c === undefined) return <Caja><div style={{ fontSize:14, color:C.suave }}>Cargando…</div></Caja>
+  const dir = c?.direccion || {}
+  if (!c?.codigo || !dir.direccion1) return (
+    <>
+      <Caja><div style={{ fontSize:14, color:C.suave, lineHeight:1.6 }}>Con un casillero tienes tu propia dirección en Miami para comprar en Amazon, eBay, Walmart o cualquier tienda de EE.UU. Nosotros lo recibimos y te lo traemos a Colombia.</div></Caja>
+      {wa && <a id="pc-pedir-casillero" href={wa.replace(/text=([^&]*)/, (m, t) => 'text=' + t + encodeURIComponent('Quiero mi casillero en Miami.'))} target="_blank" rel="noreferrer" style={{ ...boton, display:'block', textAlign:'center', textDecoration:'none', boxSizing:'border-box' }}>📦 Pedir mi casillero</a>}
+    </>
+  )
+  const lineas = lineasCasillero(dir, c.codigo, c.nombre)
+  const todo = lineas.map(([k, v]) => `${k.split(' (')[0]}: ${v}`).join('\n')
+  const aviso = wa ? wa.replace(/text=([^&]*)/, (m, t) => 'text=' + t + encodeURIComponent(`Hice una compra a mi casillero ${c.codigo}. Tienda: \nNúmero de rastreo: \nQué es y cuánto costó: `)) : null
+  return (
+    <>
+      <div style={{ background:C.tinta, color:'#fff', borderRadius:18, padding:'20px 18px', marginBottom:12, textAlign:'center' }}>
+        <div style={{ fontSize:11, letterSpacing:2.5, opacity:0.7 }}>TU CASILLERO EN MIAMI</div>
+        <div id="pc-casillero-codigo" style={{ fontSize:34, fontWeight:900, letterSpacing:2, color:C.oro, marginTop:4 }}>{c.codigo}</div>
+        <div style={{ fontSize:12.5, opacity:0.75, marginTop:4 }}>Tu código va siempre junto a tu nombre y en la Suite</div>
+      </div>
+      <Caja>
+        <div style={{ fontSize:13, fontWeight:800, marginBottom:6 }}>Dirección de envío (cópiala tal cual en la tienda)</div>
+        {lineas.map(([k, v]) => (
+          <div key={k} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:10, padding:'9px 0', borderTop:`1px solid ${C.linea}` }}>
+            <div style={{ minWidth:0 }}><div style={{ fontSize:11, color:C.suave }}>{k}</div><div style={{ fontSize:14.5, fontWeight:700 }}>{v}</div></div>
+            <button onClick={() => copiar(v, k)} style={{ flexShrink:0, padding:'6px 12px', borderRadius:999, border:`1px solid ${C.linea}`, background: copiado === k ? C.oroClaro : '#fff', fontSize:12, fontWeight:700, fontFamily:'inherit', cursor:'pointer', color:C.tinta }}>{copiado === k ? '✓ Copiado' : 'Copiar'}</button>
+          </div>
+        ))}
+        <button onClick={() => copiar(todo, 'todo')} style={{ ...boton, marginTop:10, background:'#fff', color:C.tinta, border:`1px solid ${C.linea}` }}>{copiado === 'todo' ? '✓ Dirección copiada' : 'Copiar toda la dirección'}</button>
+        {dir.nota && <div style={{ fontSize:12.5, color:C.suave, marginTop:10 }}>{dir.nota}</div>}
+      </Caja>
+      <Caja>
+        <div style={{ fontSize:13, fontWeight:800, marginBottom:10 }}>Tiempos de envío</div>
+        <div id="pc-tiempos" style={{ display:'grid', gap:10 }}>
+          <div style={{ padding:'12px 14px', borderRadius:12, background:'#EEF4FB', border:'1px solid #D3E2F3' }}>
+            <div style={{ fontSize:13.5, fontWeight:800 }}>🚢 Marítimo · {LOGISTICA.maritimo.que}</div>
+            <div style={{ fontSize:12.5, color:C.suave, marginTop:2 }}>{LOGISTICA.maritimo.cargues}.</div>
+            {LOGISTICA.maritimo.reglas.map(([a, b]) => <div key={a} style={{ fontSize:13, marginTop:6 }}>{a} → <b>{b}</b></div>)}
+            <div style={{ fontSize:13, marginTop:8 }}>{LOGISTICA.maritimo.transito}. <b>{LOGISTICA.maritimo.total}.</b></div>
+          </div>
+          <div style={{ padding:'12px 14px', borderRadius:12, background:'#FBF6E8', border:'1px solid #EFE2BC' }}>
+            <div style={{ fontSize:13.5, fontWeight:800 }}>✈️ Aéreo · {LOGISTICA.aereo.que}</div>
+            <div style={{ fontSize:13, marginTop:6 }}><b>{LOGISTICA.aereo.salida}.</b></div>
+            <div style={{ fontSize:12.5, color:C.suave, marginTop:4 }}>{LOGISTICA.aereo.nota}.</div>
+          </div>
+        </div>
+      </Caja>
+      <Caja>
+        <div style={{ fontSize:13, fontWeight:800, marginBottom:8 }}>Cómo comprar</div>
+        {PASOS_COMPRA.map((p, i) => (
+          <div key={i} style={{ display:'flex', gap:10, padding:'6px 0', fontSize:13.5, lineHeight:1.5 }}>
+            <span style={{ flexShrink:0, width:22, height:22, borderRadius:999, background:C.oroClaro, color:'#7A5E14', fontSize:12, fontWeight:800, display:'flex', alignItems:'center', justifyContent:'center' }}>{i + 1}</span><span>{p}</span>
+          </div>
+        ))}
+      </Caja>
+      <Caja>
+        <div style={{ fontSize:13, fontWeight:800, marginBottom:8 }}>No lo envíes a tu casillero</div>
+        <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>{NO_TRAER.map(x => <span key={x} style={{ fontSize:12, padding:'4px 10px', borderRadius:999, background:'#FBEAEA', color:'#8A2A2A' }}>{x}</span>)}</div>
+        <div style={{ fontSize:12, color:C.suave, marginTop:10 }}>¿Dudas con un producto? Pregúntanos antes de comprar.</div>
+      </Caja>
+      {aviso && <a id="pc-aviso-compra" href={aviso} target="_blank" rel="noreferrer" style={{ ...boton, display:'block', textAlign:'center', textDecoration:'none', boxSizing:'border-box', background:'#25D366' }}>💬 Avisar una compra</a>}
+    </>
+  )
 }

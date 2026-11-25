@@ -11,6 +11,7 @@ import { useDivisas } from '../../lib/divisas'
 import Documentos from '../../components/Documentos'
 import { BODEGA_POR_DEFECTO, useDatosLRM, AVISOS_LRM, DIAS_TRANSITO, logoDocumentoHTML, linkRastreo } from './datosLRM'
 import { linkWhatsApp } from './LRMClientes'
+import { clientePorCasillero } from './casillero'
 import { useTarifas, escaleraPara, costoPara, escalonDe, tramoTexto, cobroCarga, cantidadCobro, unidadCobro, costoCarga, UNIDAD_CORTA, PULG3_POR_PIE3, pulg3Carga } from './tarifasLRM'
 
 const cop = n => '$' + Math.round(Math.abs(n || 0)).toLocaleString('es-CO')
@@ -346,6 +347,8 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
   const llenarDesdeBloque = () => {
     const d = leerBloqueRecibo(bloque)
     if (!d.guia && d.piezas.length === 0) return setAviso('No reconocí el formato. Pega el bloque tal cual te lo entregó Claude.')
+    // Si el recibo trae el código de casillero (en la referencia o en el consignatario), el cliente se escoge solo
+    const dueno = clientePorCasillero(`${d.referencia || ''} ${d.consignatario || ''}`, clientes)
     const bod = d.bodega && bodegas.find(b => sinTildes(b.nombre).includes(sinTildes(d.bodega)) || sinTildes(d.bodega).includes(sinTildes(b.nombre)))
     setF(p => ({
       ...p,
@@ -354,10 +357,12 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
       ...(d.consignatario && { consignatario: d.consignatario }), ...(d.descripcion && { descripcion: limpiarDescripcion(d.descripcion) }),
       ...(d.modalidad && { modalidad: d.modalidad }), ...(d.flete && { flete: d.flete }),
       ...(bod && { bodega_id: bod.id, aiu_lb_pieza: String(bod.aiu_lb_pieza ?? p.aiu_lb_pieza) }),
+      ...(dueno && { cliente_id: dueno.id, categoria: nichoPrincipal(dueno, NICHOS_LRM) || p.categoria }),
     }))
+    if (dueno) setTarifaAuto(true)
     if (d.piezas.length) setPiezas(d.piezas)
     if (d.bodega && !bod) setNuevaBod({ nombre: d.bodega, operador:'', usd:'5', aiu:'2' })   // la bodega del recibo no existe: se propone crearla
-    setAviso(`Listo: ${d.piezas.length} renglón(es) de piezas. Ahora elige tu cliente LRM (quien te paga) y revisa los totales contra el papel.`)
+    setAviso(dueno ? `Listo: ${d.piezas.length} renglón(es) de piezas. Casillero ${dueno.casillero}: es de ${dueno.nombre}. Revisa los totales contra el papel.` : `Listo: ${d.piezas.length} renglón(es) de piezas. Ahora elige tu cliente LRM (quien te paga) y revisa los totales contra el papel.`)
     setBloque('')
   }
 
@@ -456,7 +461,7 @@ function ModalRecibo({ bodegas: bodegasIniciales, clientes: clientesIniciales, o
               <div style={{ display:'flex', gap:6 }}>
                 <select id="wr-cliente" value={f.cliente_id} onChange={alCambiarCliente} style={{ ...iStyle, borderColor: f.cliente_id ? 'var(--border)' : 'rgba(232,162,58,0.6)' }}>
                   <option value="">Elegir cliente…</option>
-                  {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}{c.codigo ? ` · ${c.codigo}` : ''}</option>)}
+                  {clientes.map(c => <option key={c.id} value={c.id}>{c.nombre}{c.casillero ? ` · ${c.casillero}` : c.codigo ? ` · ${c.codigo}` : ''}</option>)}
                 </select>
                 <button type="button" onClick={() => setNuevoCli('')} className="btn" style={{ marginTop:4, whiteSpace:'nowrap', fontSize:11 }}>+ Nuevo</button>
               </div>
