@@ -50,6 +50,7 @@ export default function PortalCliente() {
         {estado === 'revisando' && <Caja><div style={{ color:C.suave, fontSize:14 }}>Cargando…</div></Caja>}
         {estado === 'login' && <Login error={error} setError={setError} onEntrar={cargar} />}
         {estado === 'dentro' && d && <Panel d={d} recargar={cargar} />}
+        {estado !== 'revisando' && <Instalar />}
         <footer style={{ textAlign:'center', marginTop:36, fontSize:12, color:C.suave }}>
           <div style={{ fontWeight:700, color:C.oro }}>We bring it. Safe and on time.</div>
           <div style={{ marginTop:4 }}>{d?.empresa?.nombre || 'LRM Trade Consulting'} · Barranquilla, Colombia</div>
@@ -484,5 +485,37 @@ function Casillero({ wa }) {
       </Caja>
       {aviso && <a id="pc-aviso-compra" href={aviso} target="_blank" rel="noreferrer" style={{ ...boton, display:'block', textAlign:'center', textDecoration:'none', boxSizing:'border-box', background:'#25D366' }}>💬 Avisar una compra</a>}
     </>
+  )
+}
+
+// ─── Instalar la app de clientes en el celular ─────────────────────────────────
+function Instalar() {
+  const instalada = window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone === true
+  const ios = /iphone|ipad|ipod/i.test(navigator.userAgent)
+  const [prompt, setPrompt] = useState(() => window.__lrmInstalar || null)
+  const [cerrado, setCerrado] = useState(() => { try { return localStorage.getItem('lrm_instalar_cerrado') === '1' } catch { return false } })
+  const [ver, setVer] = useState(false)
+  useEffect(() => { const f = () => setPrompt(window.__lrmInstalar); window.addEventListener('lrm-instalable', f); return () => window.removeEventListener('lrm-instalable', f) }, [])
+  if (instalada || cerrado) return null
+  const cerrar = () => { setCerrado(true); try { localStorage.setItem('lrm_instalar_cerrado', '1') } catch { /* nada */ } }
+  const instalar = async () => { if (prompt) { prompt.prompt(); await prompt.userChoice.catch(() => {}); window.__lrmInstalar = null; setPrompt(null) } else setVer(true) }
+  return (
+    <div id="pc-instalar" style={{ marginTop:20, padding:'14px 16px', borderRadius:16, background:'#fff', border:`1px solid ${C.linea}` }}>
+      <div style={{ display:'flex', gap:12, alignItems:'center' }}>
+        <img src="/icon-192.png" alt="" style={{ width:44, height:44, borderRadius:12, flexShrink:0 }} />
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:14, fontWeight:800 }}>Ten LRM en tu celular</div>
+          <div style={{ fontSize:12.5, color:C.suave }}>Entra a tus envíos con un toque, sin buscar el link.</div>
+        </div>
+        <button onClick={cerrar} aria-label="Cerrar" style={{ background:'none', border:'none', fontSize:18, color:C.suave, cursor:'pointer', padding:4 }}>×</button>
+      </div>
+      {!ver ? <button id="pc-instalar-btn" onClick={instalar} style={{ ...boton, marginTop:12, padding:'11px' }}>📲 Instalar la app</button> : (
+        <div style={{ marginTop:12, fontSize:13.5, lineHeight:1.7 }}>
+          {ios ? <>1. Abre este link en <b>Safari</b>.<br />2. Toca <b>Compartir</b> (el cuadro con la flecha hacia arriba).<br />3. Toca <b>Agregar a inicio</b> y luego <b>Agregar</b>.</>
+            : <>1. Toca el menú <b>⋮</b> del navegador.<br />2. Toca <b>Instalar app</b> o <b>Agregar a pantalla principal</b>.</>}
+          <div style={{ fontSize:12, color:C.suave, marginTop:6 }}>Queda con el nombre <b>LRM Clientes</b> y abre directo en tu portal.</div>
+        </div>
+      )}
+    </div>
   )
 }

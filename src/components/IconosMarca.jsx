@@ -1,17 +1,13 @@
-// Identidad visual de LRM Core: el logo (monograma LRM) y un ícono de línea por negocio.
+// Identidad visual de LRM Corp: el logo (monograma LRM) y un ícono de línea por negocio.
 // Todo en SVG para que se vea nítido en cualquier pantalla y tome el color del negocio.
 
-export function LogoLRM({ size = 40, color = '#C9A84C', fondo = '#111' }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 64 64" fill="none" aria-label="LRM">
-      <rect x="2" y="2" width="60" height="60" rx="15" fill={fondo} stroke={color} strokeWidth="2.5" />
-      <g stroke={color} strokeWidth="4.2" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M13 19v26h9" />
-        <path d="M27 45V19h6.5a6.5 6.5 0 0 1 0 13H27M33.5 32l6 13" />
-        <path d="M44 45V19l6 13 6-13v26" />
-      </g>
-    </svg>
-  )
+// Ícono de LRM Corp (el original, en public/corp)
+export function LogoLRM({ size = 40 }) {
+  return <img src="/corp/icono-corp.png" alt="LRM Corp" width={size} height={size} style={{ width:size, height:size, borderRadius:size * 0.24, display:'block', flexShrink:0 }} />
+}
+// Logo completo de LRM Corp: LRM · CORP · Conectando negocios, construyendo futuro
+export function LogoCorp({ ancho = 260, claro = false }) {
+  return <img src={claro ? '/corp/logo-corp-claro.png' : '/corp/logo-corp.png'} alt="LRM Corp · Conectando negocios, construyendo futuro" style={{ width:'100%', maxWidth:ancho, height:'auto', display:'block' }} />
 }
 
 const TRAZOS = {

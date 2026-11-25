@@ -225,6 +225,11 @@ export default function Login({ onLogin }) {
             <button onClick={loginCEO} disabled={loading} style={btnColor(colorNeg)}>
               {loading ? 'Verificando...' : 'Ingresar →'}
             </button>
+            {negActual?.id === 'inversiones' && (
+              <a id="login-soy-cliente" href="/?app=clientes#/clientes" style={{ display:'block', textAlign:'center', marginTop:16, fontSize:12.5, color:'rgba(255,255,255,0.5)', textDecoration:'none' }}>
+                ¿Eres cliente? <span style={{ color:colorNeg, fontWeight:700 }}>Entra a tu portal →</span>
+              </a>
+            )}
           </div>
         )}
 

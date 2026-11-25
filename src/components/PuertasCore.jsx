@@ -1,7 +1,7 @@
-// Las tres puertas de LRM Core: Business, MySpace y Capitán en Silencio.
+// Las tres puertas de LRM Corp: Business, MySpace y Capitán en Silencio.
 // Se usa en la entrada (antes del login) y en el inicio (ya dentro).
 import { ESPACIOS, NEGOCIOS } from '../lib/espacios'
-import { LogoLRM, IconoNegocio } from './IconosMarca'
+import { LogoCorp, IconoNegocio } from './IconosMarca'
 
 export function IconoEspacio({ tipo, size = 26 }) {
   const p = { width:size, height:size, viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', strokeWidth:1.6, strokeLinecap:'round', strokeLinejoin:'round' }
@@ -22,10 +22,7 @@ export default function PuertasCore({ onElegir, subtitulo }) {
       <div className="core-glow" aria-hidden="true" />
       <div className="core-inner">
         <header className="core-head">
-          <div style={{ display:'flex', justifyContent:'center', marginBottom:14 }}><LogoLRM size={56} /></div>
-          <div className="core-eyebrow">LRM CORE</div>
-          <h1 className="core-title">Matrix</h1>
-          <p className="core-sub">Conectando negocios, construyendo futuro</p>
+          <h1 style={{ display:'flex', justifyContent:'center', margin:'0 0 6px' }}><LogoCorp ancho={300} /></h1>
           {subtitulo && <p className="core-sub" style={{ marginTop:6 }}>{subtitulo}</p>}
         </header>
 
@@ -43,7 +40,7 @@ export default function PuertasCore({ onElegir, subtitulo }) {
           ))}
         </div>
 
-        <footer className="core-pie">Barranquilla · LRM Core Matrix</footer>
+        <footer className="core-pie">Barranquilla · LRM Corp</footer>
       </div>
     </div>
   )
@@ -54,9 +51,9 @@ export function PuertasNegocios({ onElegir, onVolver }) {
     <div className="core-wrap">
       <div className="core-glow" aria-hidden="true" />
       <div className="core-inner">
-        <button type="button" onClick={onVolver} className="btn" style={{ marginBottom:18, width:'auto', alignSelf:'flex-start' }}>← LRM Core</button>
+        <button type="button" onClick={onVolver} className="btn" style={{ marginBottom:18, width:'auto', alignSelf:'flex-start' }}>← LRM Corp</button>
         <header className="core-head">
-          <div className="core-eyebrow">LRM CORE</div>
+          <div className="core-eyebrow">LRM CORP</div>
           <h1 className="core-title">Business</h1>
           <p className="core-sub">Elige el negocio</p>
         </header>
@@ -73,7 +70,7 @@ export function PuertasNegocios({ onElegir, onVolver }) {
             </button>
           ))}
         </div>
-        <footer className="core-pie">Barranquilla · LRM Core Matrix</footer>
+        <footer className="core-pie">Barranquilla · LRM Corp</footer>
       </div>
     </div>
   )
