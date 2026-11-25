@@ -199,6 +199,9 @@ body {
 /* MySpace: menú de abajo en el celular, áreas arriba en el computador */
 .ms-nav-bottom { display: none; }
 .ms-item:active { transform: scale(0.99); }
+.ms-hero { padding: 18px; border-radius: 18px; background: linear-gradient(135deg, color-mix(in srgb, var(--acento, #7B93FF) 20%, transparent), rgba(255,255,255,0.02) 70%); border: 1px solid color-mix(in srgb, var(--acento, #7B93FF) 35%, transparent); }
+.ms-card-btn { transition: transform .15s ease, border-color .15s ease; }
+.ms-card-btn:hover { transform: translateY(-2px); }
 @media (max-width: 767px) {
   .ms-wrap { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
   .ms-nav-top { display: none !important; }

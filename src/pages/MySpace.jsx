@@ -1,5 +1,6 @@
-// MySpace · tu centro de control personal (Fases 0 y 1)
-// Clave guardada en el servidor, pantalla "Hoy" con la rutina ancla y las áreas de tu vida.
+// MySpace · tu centro de mando personal
+// Clave guardada en el servidor. La Matriz: tu día, tu plata, tus negocios (con el botón para pasar
+// plata a lo personal), el devocional en curso y la rutina ancla. Y las áreas de tu vida.
 import { useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import Plata from './MySpace/Plata'
@@ -8,6 +9,10 @@ import MiDia, { useAjuste, useReloj } from './MySpace/MiDia'
 import Coach from './MySpace/Coach'
 import { armarDia, ahoraEn, hora12 } from './MySpace/Rutina'
 import { RegistroRapido, useOrden, useCuentas } from './MySpace/Cuentas'
+import Negocios from './MySpace/Negocios'
+import Diario from './MySpace/Diario'
+import Espiritual, { useBiblia, siguienteDia } from './MySpace/Espiritual'
+import { PLANES, fraseDelDia } from './MySpace/Planes'
 
 const AZUL = '#7B93FF'
 const cop = n => '$' + Math.round(Math.abs(Number(n) || 0)).toLocaleString('es-CO')
@@ -16,15 +21,15 @@ const masDias = (iso, n) => { const d = new Date(iso + 'T12:00:00'); d.setDate(d
 
 // ─── Las áreas ────────────────────────────────────────────────────────────────
 const AREAS = [
-  { id:'hoy',        nombre:'Hoy',          icono:'☀️' },
+  { id:'hoy',        nombre:'Matriz',       icono:'🧭' },
   { id:'dia',        nombre:'Mi día',       icono:'🕐' },
   { id:'plata',      nombre:'Plata',        icono:'💰' },
   { id:'habitos',    nombre:'Hábitos',      icono:'🔁' },
   { id:'estudios',   nombre:'Estudios',     icono:'🎓', fase:2, trae:'El camino al grado: materias que faltan, comparar seguir en Administración o pasarte a Negocios internacionales, semestre, entregas, notas y pagos.' },
   { id:'lucia',      nombre:'Lucía',        icono:'👧', fase:2, trae:'Colegio, salud, gastos, fechas importantes, llevarla y recogerla, y los momentos juntos. También tu gente: tus papás, tu hermano, Carlos.' },
   { id:'fitness',    nombre:'Coach',        icono:'💪' },
-  { id:'espiritual', nombre:'Espiritual',   icono:'🙏', fase:3, trae:'Devocional, Living Room, oraciones y sus respuestas, y tus conversaciones con Carlos.' },
-  { id:'diario',     nombre:'Diario',       icono:'📓', fase:3, trae:'Tres líneas al día: lo que pensaste, lo que aprendiste, lo que agradeces. Privado.' },
+  { id:'espiritual', nombre:'Espiritual',   icono:'🙏' },
+  { id:'diario',     nombre:'Diario',       icono:'📓' },
   { id:'suenos',     nombre:'Sueños 2027',  icono:'🌄', fase:4, trae:'Oficina, apartamento, LRM, Capitán en Silencio, ZABÚ, tus papás, Sara y su hija: cada sueño partido en pasos, y la revisión de los domingos.' },
 ]
 const PRINCIPALES = ['hoy', 'dia', 'plata', 'habitos']
@@ -140,7 +145,31 @@ function AhoraCard({ irA }) {
   )
 }
 
-// ─── Hoy ──────────────────────────────────────────────────────────────────────
+// ─── Frase del día y el devocional en curso ───────────────────────────────────
+function FraseYDevocional({ irA }) {
+  const [texto, autor] = fraseDelDia(hoyISO())
+  const { hechos } = useBiblia()
+  const lista = Array.isArray(hechos) ? hechos : []
+  const enCurso = PLANES.find(p => lista.some(h => h.plan === p.id) && siguienteDia(p, lista)) || PLANES.find(p => siguienteDia(p, lista)) || PLANES[0]
+  const dia = siguienteDia(enCurso, lista)
+  const hoyListo = lista.some(h => h.fecha === hoyISO())
+  return (
+    <div className="ms-kpis" style={{ display:'grid', gridTemplateColumns:'minmax(0, 1.4fr) minmax(0, 1fr)', gap:10 }}>
+      <div className="panel" style={{ padding:'14px 16px', minWidth:0 }}>
+        <div style={{ fontSize:11, fontWeight:800, letterSpacing:1.2, color:'var(--gold)', textTransform:'uppercase' }}>Para hoy</div>
+        <div id="hoy-frase" style={{ fontSize:14.5, fontWeight:700, color:'var(--text)', lineHeight:1.45, marginTop:6 }}>“{texto}”</div>
+        {autor && <div style={{ fontSize:11.5, color:'var(--text3)', marginTop:4 }}>{autor}</div>}
+      </div>
+      <button type="button" id="hoy-devocional" onClick={() => irA('espiritual')} className="panel ms-card-btn" style={{ padding:'14px 16px', minWidth:0, textAlign:'left', cursor:'pointer', fontFamily:'inherit', borderTop:`3px solid ${enCurso.color}` }}>
+        <div style={{ fontSize:11, fontWeight:800, letterSpacing:1.2, color:enCurso.color, textTransform:'uppercase' }}>{hoyListo ? '✓ Devocional de hoy' : 'Devocional'}</div>
+        <div style={{ fontSize:14, fontWeight:800, color:'var(--text)', marginTop:6 }}>{enCurso.icono} {enCurso.titulo}</div>
+        <div style={{ fontSize:12, color:'var(--text3)', marginTop:2 }}>{dia ? `Día ${dia} de ${enCurso.dias.length} · ${enCurso.dias[dia - 1].t}` : 'Plan terminado'}</div>
+      </button>
+    </div>
+  )
+}
+
+// ─── La Matriz ────────────────────────────────────────────────────────────────
 function Hoy({ irA }) {
   const hoy = hoyISO()
   const [hechos, setHechos] = useState([])      // [{fecha,item}] de los últimos 60 días
@@ -148,7 +177,7 @@ function Hoy({ irA }) {
   const [error, setError] = useState('')
   const [vuelta, setVuelta] = useState(0)
   const { d: orden, recargar: recargarOrden } = useOrden()
-  const { cuentas, saldo } = useCuentas()
+  const { cuentas, saldo, recargar: recargarCuentas } = useCuentas()
   const disponible = cuentas.filter(c => c.activa && c.dueno === 'luis' && c.moneda === 'COP').reduce((t, c) => t + (saldo[c.id]?.disponible || 0), 0)
 
   const cargar = async () => {
@@ -198,7 +227,11 @@ function Hoy({ irA }) {
         <div style={{ fontSize:13, color:'var(--text3)', marginTop:4 }}>Un 1% cada día. Si fallas un día no pasa nada; lo único prohibido es fallar dos seguidos.</div>
       </div>
 
+      <FraseYDevocional irA={irA} />
+
       <AhoraCard irA={irA} />
+
+      <Negocios onCambio={() => { setVuelta(v => v + 1); recargarCuentas(); recargarOrden() }} />
 
       <RegistroRapido compacto onGuardado={() => { setVuelta(v => v + 1); recargarOrden() }} />
 
@@ -354,6 +387,8 @@ export default function MySpace() {
       {area === 'habitos' && <Habitos irA={irA} />}
       {area === 'dia' && <MiDia />}
       {area === 'fitness' && <Coach />}
+      {area === 'espiritual' && <Espiritual />}
+      {area === 'diario' && <Diario />}
       {area === 'clave' && <Clave />}
       {actual?.fase && <Proximamente area={actual} />}
 

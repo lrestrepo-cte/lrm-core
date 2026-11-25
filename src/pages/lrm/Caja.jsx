@@ -61,18 +61,18 @@ function Bloque({ titulo, extra, children, style }) {
 
 // ── Cálculos ────────────────────────────────────────────────────────────────
 // Efecto de un movimiento sobre una cuenta
-function efectoEnCuenta(m, cuentaId) {
+export function efectoEnCuenta(m, cuentaId) {
   const monto = Number(m.monto || 0)
   if (m.tipo === 'traslado') return (m.cuenta_destino_id === cuentaId ? monto : 0) - (m.cuenta_id === cuentaId ? monto : 0)
   if (m.cuenta_id !== cuentaId) return 0
   return (TIPOS[m.tipo]?.signo || 0) * monto
 }
-const saldoCuenta = (c, movs, hasta) =>
+export const saldoCuenta = (c, movs, hasta) =>
   Number(c.saldo_inicial || 0) + movs.filter(m => !hasta || m.fecha <= hasta).reduce((s, m) => s + efectoEnCuenta(m, c.id), 0)
 
 const suma = (movs, f) => movs.filter(f).reduce((s, m) => s + Number(m.monto || 0), 0)
 
-function resumenDelMes(mes, movs, cuentas) {
+export function resumenDelMes(mes, movs, cuentas) {
   const delMes = movs.filter(m => (m.fecha || '').startsWith(mes))
   const de = (tipo, concepto) => suma(delMes, m => m.tipo === tipo && (!concepto || m.concepto === concepto))
   const entro = de('abono_cliente') + de('ingreso')
