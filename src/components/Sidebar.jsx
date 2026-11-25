@@ -118,7 +118,7 @@ const NAV_TRADE = [
   { seccion:'Sistema',   items:[ { id:'ajustes',     label:'Ajustes',        icono:'ajustes',    activo:true  } ] },
 ]
 
-// Íconos de línea (mismo trazo que las puertas de LRM Core)
+// Íconos de línea (mismo trazo que las puertas de LRM Corp)
 export function IconoNav({ tipo, size = 16 }) {
   const p = { width:size, height:size, viewBox:'0 0 24 24', fill:'none', stroke:'currentColor', strokeWidth:1.7, strokeLinecap:'round', strokeLinejoin:'round', style:{ flexShrink:0 } }
   switch (tipo) {
@@ -178,14 +178,14 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onIrC
   return (
     <div className="sidebar">
       <div className="sb-logo">
-        {!isInv && <div style={{ display:'flex', alignItems:'center', gap:8 }}><LogoLRM size={26} /><div className="sb-trade" style={{ margin:0 }}>LRM CORE</div></div>}
+        {!isInv && <div style={{ display:'flex', alignItems:'center', gap:8 }}><LogoLRM size={26} /><div className="sb-trade" style={{ margin:0 }}>LRM CORP</div></div>}
         {isInv
           ? <img src="/marca/logo-horizontal.png" alt="LRM Trade Consulting" style={{ width:'100%', maxWidth:210, display:'block' }} />
           : <div className="sb-name" style={{ color: isNeg ? colorNeg : 'var(--text)' }}>
               {isNeg ? tituloNeg : 'Business'}
             </div>}
         {onIrCore && (
-          <div onClick={onIrCore} style={{ marginTop:10, fontSize:11, color:'rgba(255,255,255,0.35)', cursor:'pointer' }}>← LRM Core</div>
+          <div onClick={onIrCore} style={{ marginTop:10, fontSize:11, color:'rgba(255,255,255,0.35)', cursor:'pointer' }}>← LRM Corp</div>
         )}
       </div>
       <nav style={{ flex:1, overflowY:'auto', paddingBottom:8, minHeight:0 }}>
@@ -268,7 +268,7 @@ export default function Sidebar({ vista, navActivo, onNavLRM, onVolverLRM, onIrC
               {usuario?.nombre||'Usuario'}
             </div>
             <div style={{ fontSize:10, color:'var(--gold)', textTransform:'capitalize' }}>
-              {usuario?.rol||'CEO'} · {isNeg ? tituloNeg : 'LRM Core'}
+              {usuario?.rol||'CEO'} · {isNeg ? tituloNeg : 'LRM Corp'}
             </div>
           </div>
         </div>

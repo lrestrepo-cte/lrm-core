@@ -225,7 +225,7 @@ function ModalTraslado({ cuentas, onCerrar, onListo }) {
   }
   return (
     <Modal titulo="Traslado entre cuentas" onCerrar={onCerrar}>
-      <div style={{ fontSize:12.5, color:'var(--text3)', marginBottom:12 }}>Ej: de LRM Core a tu cuenta cuando te pagas, o pagar la tarjeta desde ahorros. No cuenta como gasto.</div>
+      <div style={{ fontSize:12.5, color:'var(--text3)', marginBottom:12 }}>Ej: de LRM Corp a tu cuenta cuando te pagas, o pagar la tarjeta desde ahorros. No cuenta como gasto.</div>
       <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:12 }}>
         <div><Etq>Sale de</Etq><select id="tr-de" value={f.de} onChange={set('de')} style={iStyle}>{cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select></div>
         <div><Etq>Entra a</Etq><select id="tr-a" value={f.a} onChange={set('a')} style={iStyle}>{cuentas.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}</select></div>

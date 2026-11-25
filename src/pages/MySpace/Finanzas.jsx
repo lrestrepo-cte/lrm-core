@@ -12,7 +12,7 @@ export const CATS_GASTO = {
 }
 
 // ─── Cuentas ──────────────────────────────────────────────────────────────────
-export const DUENOS = { luis:{ l:'Luis', c:'#7B93FF' }, lrm:{ l:'LRM Core', c:'#C9A84C' }, zabu:{ l:'ZABÚ', c:'#E8A23A' }, rv:{ l:'RV Sports', c:'#378ADD' } }
+export const DUENOS = { luis:{ l:'Luis', c:'#7B93FF' }, lrm:{ l:'LRM Corp', c:'#C9A84C' }, zabu:{ l:'ZABÚ', c:'#E8A23A' }, rv:{ l:'RV Sports', c:'#378ADD' } }
 export const TIPOS_CUENTA = { ahorros:'Ahorros', corriente:'Corriente', credito:'Tarjeta de crédito', billetera:'Billetera digital', efectivo:'Efectivo' }
 export const esCredito = c => c?.tipo === 'credito'
 

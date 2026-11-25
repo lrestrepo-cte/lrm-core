@@ -153,7 +153,7 @@ export default function Login({ onLogin }) {
     if (negActual?.id === 'inversiones') return (
       <div className="neg-marca">
         <img src="/marca/logo-vertical.png" alt="LRM Trade Consulting" style={{ width:'100%', maxWidth:280, margin:'0 auto 8px', display:'block' }} />
-        {!(window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone) && <div className="neg-marca-parte">Business · LRM Core</div>}
+        {!(window.matchMedia?.('(display-mode: standalone)').matches || window.navigator.standalone) && <div className="neg-marca-parte">Business · LRM Corp</div>}
       </div>
     )
     if (negActual) return (
@@ -161,7 +161,7 @@ export default function Login({ onLogin }) {
         <div className="neg-marca-emoji" style={{ background:negActual.color + '1a', border:`1px solid ${negActual.color}40` }}><IconoNegocio id={negActual.id} size={30} color={negActual.color} /></div>
         <div className="neg-marca-nombre">{negActual.nombre}</div>
         <div className="neg-marca-desc">{negActual.desc}</div>
-        <div className="neg-marca-parte">Business · LRM Core</div>
+        <div className="neg-marca-parte">Business · LRM Corp</div>
       </div>
     )
     return (
@@ -187,7 +187,7 @@ export default function Login({ onLogin }) {
         {/* PASO 1 · Negocios de Business */}
         {paso === 'negocios' && (
           <div>
-            {back(irEntrada, '← LRM Core')}
+            {back(irEntrada, '← LRM Corp')}
             {cabecera()}
             <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
               {NEGOCIOS.map(n => (

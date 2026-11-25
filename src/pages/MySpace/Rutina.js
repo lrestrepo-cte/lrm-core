@@ -119,5 +119,5 @@ export function calendarioSemana(cfg, coach, fijos = []) {
       `RRULE:FREQ=MONTHLY;BYMONTHDAY=${Number(d)}`, `SUMMARY:${esc('💳 Pagar ' + x.nombre + ' $' + Math.round(x.monto).toLocaleString('es-CO'))}`,
       'BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${esc('Pagar ' + x.nombre)}`, 'TRIGGER:PT0M', 'END:VALARM', 'END:VEVENT'].join('\r\n'))
   })
-  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//LRM Core//MySpace//ES', 'CALSCALE:GREGORIAN', 'X-WR-CALNAME:MySpace', ...ev, 'END:VCALENDAR'].join('\r\n') + '\r\n'
+  return ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//LRM Corp//MySpace//ES', 'CALSCALE:GREGORIAN', 'X-WR-CALNAME:MySpace', ...ev, 'END:VCALENDAR'].join('\r\n') + '\r\n'
 }

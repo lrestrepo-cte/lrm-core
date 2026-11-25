@@ -23,7 +23,7 @@ export default function Topbar({ titulo, onMenuToggle, showMenu }) {
           </div>
         )}
         <div>
-          <div className="topbar-title">{titulo || 'LRM Core'}</div>
+          <div className="topbar-title">{titulo || 'LRM Corp'}</div>
           <div className="topbar-sub">Barranquilla · {fecha} · {hora}</div>
         </div>
       </div>

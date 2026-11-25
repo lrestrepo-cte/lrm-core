@@ -595,7 +595,7 @@ function TabSistema() {
       <div className="panel" style={{ marginBottom:20 }}>
         <div className="panel-title">Estado del sistema</div>
         {[
-          {label:'Versión LRM Core', val:'1.0.0'},
+          {label:'Versión LRM Corp', val:'1.0.0'},
           {label:'Stack',            val:'React + Vite + Supabase + Vercel'},
           {label:'Repositorio',      val:'github.com/lrestrepo-cte/lrm-core'},
           {label:'Deploy',           val:'lrm-core.vercel.app'},
@@ -709,7 +709,7 @@ export default function LRMConfiguracion() {
   return (
     <>
       <div style={{marginBottom:20}}>
-        <div style={{fontSize:22,fontWeight:800,color:'var(--text)'}}>Configuración LRM Core</div>
+        <div style={{fontSize:22,fontWeight:800,color:'var(--text)'}}>Configuración LRM Corp</div>
         <div style={{fontSize:12,color:'var(--text3)',marginTop:4}}>Panel de administración completo del grupo LRM Trade</div>
       </div>
       <div className="sub-nav" style={{marginBottom:24,flexWrap:'wrap'}}>

@@ -1,4 +1,4 @@
-// Estructura de LRM Core: tres espacios y los negocios que cuelgan de Business.
+// Estructura de LRM Corp: tres espacios y los negocios que cuelgan de Business.
 // Cada negocio tiene su "slug": el link directo es  https://<dominio>/#/<slug>
 // (ej. #/lrm-trade, #/rv-sports, #/zabu) y abre la entrada propia de ese negocio.
 

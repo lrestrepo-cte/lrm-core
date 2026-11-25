@@ -486,7 +486,7 @@ function PDFTemplate({ datos }) {
         <div style={{ textAlign:'center', padding:'20px', background:'#f8f4ec', borderRadius:8, border:'2px solid #C9A84C', marginTop:16 }}>
           <div style={{ fontSize:24, marginBottom:6 }}>🌭</div>
           <div style={{ fontSize:16, fontWeight:900, color:'#C9A84C' }}>ZABÚ — Street Food Premium</div>
-          <div style={{ fontSize:10, color:'#888', marginTop:6 }}>Documento confidencial · Sistema CTE — LRM Core</div>
+          <div style={{ fontSize:10, color:'#888', marginTop:6 }}>Documento confidencial · Sistema CTE — LRM Corp</div>
         </div>
       </Page>
     </div>
