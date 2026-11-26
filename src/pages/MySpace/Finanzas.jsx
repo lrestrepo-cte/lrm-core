@@ -6,7 +6,7 @@ export const P_COLOR  = { Luis:'var(--blue)', Lucía:'#9C27B0', 'Mis papás':'va
 export const P_EMOJI  = { Luis:'👤', Lucía:'👧', 'Mis papás':'🏡' }
 
 export const CATS_GASTO = {
-  Luis:        ['Arriendo / aporte casa','Servicios','Alimentación','Almuerzos','Café y snacks','Gasolina','Carro: SOAT','Carro: tecnomecánica','Carro: mantenimiento','Carro: cuota / prenda','Transporte','Celular','Salud','Gym','Cuidado personal','Ropa','Streaming','Suscripciones','Tecnología','Universidad','Salidas','Regalos','Transferencias','Cuota crédito','Otro'],
+  Luis:        ['Arriendo / aporte casa','Servicios','Alimentación','Almuerzos','Café y snacks','Gasolina','Carro: SOAT','Carro: tecnomecánica','Carro: mantenimiento','Carro: cuota / prenda','Transporte','Celular','Salud','Gym','Cuidado personal','Ropa','Streaming','Suscripciones','Tecnología','Universidad','Salidas','Regalos','Apuestas deportivas','Transferencias','Cuota crédito','Otro'],
   Lucía:       ['Colegio','Matrícula','Manutención','Salud','Alimentación','Transporte','Extracurriculares','Útiles','Ropa','Paseos','Antojos','Ahorro','Otro'],
   'Mis papás': ['Aporte casa','Salud','Almuerzos','Paseos','Regalos','Otro'],
 }
@@ -52,6 +52,7 @@ const REGLAS = [
   [/utiles|cuaderno/, 'Lucía', 'Útiles'],
   [/helado|dulce|juguete|chuche/, null, 'Antojos'],
   [/gasolina|tanqueo|terpel|primax|biomax|texaco|esso/, 'Luis', 'Gasolina'],
+  [/apuesta|wplay|betplay|rushbet|codere|bet365|betsson|yajuego|zamba/, 'Luis', 'Apuestas deportivas'],
   [/soat/, 'Luis', 'Carro: SOAT'],
   [/tecnomecanica|tecno mecanica/, 'Luis', 'Carro: tecnomecánica'],
   [/taller|aceite|llanta|mecanico|lavado carro|lavadero/, 'Luis', 'Carro: mantenimiento'],

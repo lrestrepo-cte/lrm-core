@@ -35,6 +35,7 @@ const FUENTES = [
   { id:'freelance', label:'💻 Freelance / Consultoría',tipo:'variable'},
   { id:'arriendo',  label:'🏠 Arriendo recibido',     tipo:'variable'},
   { id:'ocasional', label:'💵 Ingreso ocasional',     tipo:'variable'},
+  { id:'apuestas',  label:'⚽ Apuesta deportiva ganada', tipo:'variable'},
   { id:'otro',      label:'➕ Otro',                  tipo:'variable'},
 ]
 
