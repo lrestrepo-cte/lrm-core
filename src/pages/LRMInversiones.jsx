@@ -115,6 +115,37 @@ function generarTablaAmortizacion({ capital, tasaInteres, fechaDesembolso, fecha
   }
   return cuotas
 }
+// ─── Cuota administrativa y costo real del crédito ───────────────────────────
+// La cuota administrativa (papelería, gestión) se descuenta al entregar la plata: el cliente recibe
+// el neto, pero debe el capital completo. Ejemplo: 500.000 con 10% → recibe 450.000 y paga sobre 500.000.
+const COMISION_DEF = 10
+function desembolsoNeto(capital, comisionPct) {
+  const comision = Math.round((Number(capital) || 0) * (Number(comisionPct) || 0) / 100)
+  return { comision, neto: (Number(capital) || 0) - comision }
+}
+// Costo efectivo anual: la tasa a la que lo que el cliente recibe (neto) se vuelve lo que paga (cuotas),
+// contando la cuota administrativa como costo. Se calcula por bisección.
+function costoEfectivoAnual(neto, cuotas, fechaDesembolso) {
+  if (!neto || !cuotas?.length) return null
+  const t0 = new Date(fechaDesembolso)
+  const flujos = cuotas.map(c => ({ m: Number(c.cuota_total) || 0, a: Math.max(1, diasEntre(t0, new Date(c.fecha_vencimiento))) / 365 }))
+  const vp = r => flujos.reduce((s, f) => s + f.m / Math.pow(1 + r, f.a), 0) - neto
+  let lo = -0.99, hi = 1e6
+  if (vp(hi) > 0) return null
+  for (let i = 0; i < 200; i++) { const mid = (lo + hi) / 2; if (vp(mid) > 0) lo = mid; else hi = mid }
+  return (lo + hi) / 2 * 100
+}
+const pct1 = n => n == null ? '—' : n >= 1000 ? Math.round(n).toLocaleString('es-CO') + '%' : n.toLocaleString('es-CO', { maximumFractionDigits: 1 }) + '%'
+function CostoReal({ neto, comision, cuotas, fechaDesembolso }) {
+  const ea = costoEfectivoAnual(neto, cuotas, fechaDesembolso)
+  const mensual = ea == null ? null : (Math.pow(1 + ea / 100, 1 / 12) - 1) * 100
+  return (
+    <div style={{ padding:'10px 12px', borderRadius:10, marginBottom:14, fontSize:12, lineHeight:1.6, background:'rgba(255,255,255,0.03)', border:'1px solid var(--border)' }}>
+      <div style={{ color:'var(--text2)' }}>Se le entrega <b style={{ color:'var(--text)' }}>{cop(neto)}</b>{comision > 0 && <> · cuota administrativa <b style={{ color:'var(--gold)' }}>{cop(comision)}</b></>}</div>
+      <div style={{ color:'var(--text2)' }}>Costo real para el cliente: <b style={{ color:'var(--text)' }}>{pct1(ea)} efectivo anual</b>{mensual != null && <> (≈ {pct1(mensual)} mensual)</>}</div>
+    </div>
+  )
+}
 function resumenPrestamo(prestamo, cuotas) {
   const totalCuotas   = cuotas.reduce((s,c)=>s+c.cuota_total,0)
   const pagado        = cuotas.filter(c=>c.estado==='pagada').reduce((s,c)=>s+c.cuota_total,0)
@@ -159,12 +190,14 @@ async function subirICSysObtenerURL(cuotas, clienteNombre, prestamoId) {
   const { data } = supabase.storage.from('calendarios-pagos').getPublicUrl(nombreArchivo)
   return data?.publicUrl || null
 }
-function abrirWhatsApp(telefono, clienteNombre, capital, cuotas, plazoCuotas, frecuenciaDias, urlCalendario) {
+function abrirWhatsApp(telefono, clienteNombre, capital, cuotas, plazoCuotas, frecuenciaDias, urlCalendario, comision = 0) {
   const telLimpio = (telefono||'').replace(/\D/g,'')
   const frecTexto = frecuenciaDias===1?'diaria':frecuenciaDias===7?'semanal':frecuenciaDias===15?'quincenal':frecuenciaDias===30?'mensual':`cada ${frecuenciaDias} días`
   const tablaPagos = cuotas.map(c => `${c.numero}. ${c.fecha_vencimiento} — ${cop(c.cuota_total)}`).join('\n')
   let mensaje = `Hola ${clienteNombre}! 👋 Tu crédito por ${cop(capital)} fue aprobado.\n\n`
-  mensaje += `📋 *Resumen*\n• Cuota ${frecTexto}: ${cop(cuotas[0]?.cuota_total||0)}\n• Número de cuotas: ${plazoCuotas}\n\n`
+  mensaje += `📋 *Resumen*\n`
+  if (comision > 0) mensaje += `• Recibes: ${cop(capital - comision)} (cuota administrativa de ${cop(comision)})\n`
+  mensaje += `• Cuota ${frecTexto}: ${cop(cuotas[0]?.cuota_total||0)}\n• Número de cuotas: ${plazoCuotas}\n\n`
   mensaje += `📅 *Tus fechas de pago*\n${tablaPagos}\n\n`
   if (urlCalendario) {
     mensaje += `📲 Agrega todas estas fechas a tu calendario con un solo toque:\n${urlCalendario}\n\n`
@@ -185,15 +218,20 @@ function TabPrestamos() {
   const [filtroEstado, setFiltroEstado] = useState('todos')
   const [form, setForm] = useState({
     cliente_nombre:'', cliente_telefono:'', cliente_cedula:'', cliente_direccion:'',
-    capital:'', metodo:'gota_a_gota', tasa_interes:'20', frecuencia_dias:1,
+    capital:'', metodo:'gota_a_gota', tasa_interes:'20', frecuencia_dias:1, comision_pct: String(COMISION_DEF),
     fecha_desembolso: new Date().toISOString().split('T')[0],
     fecha_limite: '', notas:'',
   })
+  const [interesProyectado, setInteresProyectado] = useState(0)
   useEffect(() => { cargar() }, [])
   const cargar = async () => {
     setLoading(true)
-    const { data } = await supabase.from('inv_prestamos').select('*').order('created_at',{ascending:false})
+    const [{ data }, cu] = await Promise.all([
+      supabase.from('inv_prestamos').select('*').order('created_at',{ascending:false}),
+      supabase.from('inv_cuotas').select('interes'),
+    ])
     if (data) setPrestamos(data)
+    setInteresProyectado((cu.data || []).reduce((s, c) => s + (Number(c.interes) || 0), 0))
     setLoading(false)
   }
   const cargarCuotas = async (prestamoId) => {
@@ -211,7 +249,9 @@ function TabPrestamos() {
     const tasa = parseFloat(form.tasa_interes)
     const frecDias = parseInt(form.frecuencia_dias)
     const tabla = generarTablaAmortizacion({ capital, tasaInteres:tasa, fechaDesembolso:form.fecha_desembolso, fechaLimite:form.fecha_limite, frecuenciaDias:frecDias, metodo:form.metodo })
+    const { comision, neto } = desembolsoNeto(capital, form.comision_pct)
     const { data: prestamo, error } = await supabase.from('inv_prestamos').insert({
+      comision_pct: Number(form.comision_pct) || 0, comision, desembolso_neto: neto,
       cliente_nombre: form.cliente_nombre, cliente_telefono: form.cliente_telefono,
       cliente_cedula: form.cliente_cedula, cliente_direccion: form.cliente_direccion,
       capital, metodo: form.metodo, tasa_interes: tasa, plazo_cuotas: tabla.length,
@@ -221,7 +261,7 @@ function TabPrestamos() {
     if (error || !prestamo) { alert('Error: '+(error?.message||'desconocido')); return }
     const cuotasInsert = tabla.map(c => ({ ...c, prestamo_id: prestamo.id }))
     await supabase.from('inv_cuotas').insert(cuotasInsert)
-    setForm({ cliente_nombre:'', cliente_telefono:'', cliente_cedula:'', cliente_direccion:'', capital:'', metodo:'gota_a_gota', tasa_interes:'20', frecuencia_dias:1, fecha_desembolso:new Date().toISOString().split('T')[0], fecha_limite:'', notas:'' })
+    setForm({ cliente_nombre:'', cliente_telefono:'', cliente_cedula:'', cliente_direccion:'', capital:'', metodo:'gota_a_gota', tasa_interes:'20', frecuencia_dias:1, comision_pct:String(COMISION_DEF), fecha_desembolso:new Date().toISOString().split('T')[0], fecha_limite:'', notas:'' })
     setModal(false); cargar()
   }
   const registrarPago = async (prestamoId, cuota, montoParam) => {
@@ -249,7 +289,8 @@ function TabPrestamos() {
   const totalPrestado = prestamos.reduce((s,p)=>s+p.capital,0)
   const totalActivo   = prestamos.filter(p=>p.estado==='activo').reduce((s,p)=>s+p.saldo_capital,0)
   const totalMora     = prestamos.filter(p=>p.estado==='mora').length
-  const totalGanado   = prestamos.reduce((s,p)=>s+Math.round(p.capital*(p.tasa_interes/100)),0)
+  const totalGanado   = interesProyectado
+  const totalComision = prestamos.reduce((s,p)=>s+(Number(p.comision)||0),0)
   return (
     <div>
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:16 }}>
@@ -262,7 +303,7 @@ function TabPrestamos() {
       <div className="grid-4" style={{ marginBottom:20 }}>
         <div className="kpi-card"><div className="kpi-label">Capital total prestado</div><div className="kpi-val" style={{ color:'var(--gold)' }}>{cop(totalPrestado)}</div></div>
         <div className="kpi-card"><div className="kpi-label">Capital activo (pendiente)</div><div className="kpi-val" style={{ color:'var(--blue)' }}>{cop(totalActivo)}</div></div>
-        <div className="kpi-card"><div className="kpi-label">Interés total proyectado</div><div className="kpi-val" style={{ color:'var(--green)' }}>{cop(totalGanado)}</div></div>
+        <div className="kpi-card"><div className="kpi-label">Interés total proyectado</div><div className="kpi-val" style={{ color:'var(--green)' }}>{cop(totalGanado)}</div>{totalComision > 0 && <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>+ {cop(totalComision)} en cuotas administrativas</div>}</div>
         <div className="kpi-card" style={{ border: totalMora>0?'1px solid rgba(224,82,82,0.4)':undefined }}><div className="kpi-label">En mora</div><div className="kpi-val" style={{ color: totalMora>0?'var(--red)':'var(--text3)' }}>{totalMora}</div></div>
       </div>
       <div style={{ display:'flex', gap:8, marginBottom:16, flexWrap:'wrap' }}>
@@ -304,6 +345,7 @@ function TabPrestamos() {
                       <div style={{ fontSize:11, color:'var(--text3)' }}>📍 {p.cliente_direccion||'—'}</div>
                       <div style={{ fontSize:11, color:'var(--text3)' }}>📅 Desembolso: {p.fecha_desembolso}</div>
                     </div>
+                    {Number(p.comision) > 0 && <div style={{ fontSize:12, color:'var(--text2)', marginBottom:12 }}>💵 Se le entregó <b style={{ color:'var(--text)' }}>{cop(p.desembolso_neto ?? (p.capital - p.comision))}</b> · cuota administrativa {p.comision_pct}% = <b style={{ color:'var(--gold)' }}>{cop(p.comision)}</b> · debe {cop(p.capital)} + intereses</div>}
                     <div style={{ display:'flex', gap:10, marginBottom:14 }}>
                       <div className="kpi-card" style={{ flex:1, padding:'10px 12px' }}><div className="kpi-label" style={{ fontSize:9 }}>Total a pagar</div><div style={{ fontSize:15, fontWeight:800, color:'var(--text)' }}>{cop(totalCuotas)}</div></div>
                       <div className="kpi-card" style={{ flex:1, padding:'10px 12px' }}><div className="kpi-label" style={{ fontSize:9 }}>Pagado</div><div style={{ fontSize:15, fontWeight:800, color:'var(--green)' }}>{cop(pagado)}</div></div>
@@ -315,7 +357,7 @@ function TabPrestamos() {
                       )}
                       <div onClick={async ()=>{
                         const url = await subirICSysObtenerURL(cuotas, p.cliente_nombre, p.id)
-                        abrirWhatsApp(p.cliente_telefono, p.cliente_nombre, p.capital, cuotas, p.plazo_cuotas, p.frecuencia_dias, url)
+                        abrirWhatsApp(p.cliente_telefono, p.cliente_nombre, p.capital, cuotas, p.plazo_cuotas, p.frecuencia_dias, url, Number(p.comision) || 0)
                       }} style={{ display:'inline-block', padding:'5px 12px', borderRadius:8, cursor:'pointer', fontSize:11, background:'var(--green-dim)', border:'0.5px solid var(--green-border)', color:'var(--green)' }}>💬 Enviar calendario y tabla por WhatsApp</div>
                     </div>
                     <div style={{ fontSize:12, fontWeight:700, color:'var(--text)', marginBottom:8 }}>Tabla de cuotas</div>
@@ -393,7 +435,13 @@ function TabPrestamos() {
               <div><div style={{ fontSize:11, color:'var(--text3)' }}>Tasa de interés MENSUAL (%)</div><input type="number" value={form.tasa_interes} onChange={e=>setForm(p=>({...p,tasa_interes:e.target.value}))} style={iStyle} /></div>
               <div><div style={{ fontSize:11, color:'var(--text3)' }}>Fecha desembolso</div><input type="date" value={form.fecha_desembolso} onChange={e=>setForm(p=>({...p,fecha_desembolso:e.target.value}))} style={iStyle} /></div>
               <div><div style={{ fontSize:11, color:'var(--text3)' }}>Fecha límite de pago</div><input type="date" value={form.fecha_limite} onChange={e=>setForm(p=>({...p,fecha_limite:e.target.value}))} style={iStyle} /></div>
+              <div><div style={{ fontSize:11, color:'var(--text3)' }}>Cuota administrativa (%) — se descuenta al entregar</div><input id="inv-comision" type="number" value={form.comision_pct} onChange={e=>setForm(p=>({...p,comision_pct:e.target.value}))} style={iStyle} /></div>
             </div>
+            {Number(form.capital) > 0 && form.fecha_limite && (() => {
+              const capital = parseInt(form.capital), { comision, neto } = desembolsoNeto(capital, form.comision_pct)
+              const tabla = generarTablaAmortizacion({ capital, tasaInteres:parseFloat(form.tasa_interes)||0, fechaDesembolso:form.fecha_desembolso, fechaLimite:form.fecha_limite, frecuenciaDias:parseInt(form.frecuencia_dias)||1, metodo:form.metodo })
+              return <CostoReal neto={neto} comision={comision} cuotas={tabla} fechaDesembolso={form.fecha_desembolso} />
+            })()}
             <div style={{ marginBottom:12 }}>
               <div style={{ fontSize:11, color:'var(--text3)', marginBottom:6 }}>Frecuencia de cobro — cada cuántos días (libre)</div>
               <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:8 }}>
@@ -425,7 +473,7 @@ function TabPrestamos() {
 function TabSimulador() {
   const [form, setForm] = useState({
     cliente_nombre:'', cliente_telefono:'', capital:'', metodo:'gota_a_gota',
-    tasa_interes:'20', frecuencia_dias:1,
+    tasa_interes:'20', frecuencia_dias:1, comision_pct: String(COMISION_DEF),
     fecha_simulacion: new Date().toISOString().split('T')[0],
     fecha_limite: '',
   })
@@ -450,11 +498,12 @@ function TabSimulador() {
   }
   const totalCuotas = cuotas.reduce((s,c)=>s+c.cuota_total,0)
   const totalInteres = cuotas.reduce((s,c)=>s+c.interes,0)
+  const { comision, neto } = desembolsoNeto(parseInt(form.capital) || 0, form.comision_pct)
   const guardarSimulacion = async () => {
     const { data, error } = await supabase.from('inv_simulaciones').insert({
       cliente_nombre: form.cliente_nombre || 'Sin nombre', cliente_telefono: form.cliente_telefono,
       capital: parseInt(form.capital), metodo: form.metodo, tasa_interes: parseFloat(form.tasa_interes),
-      plazo_cuotas: cuotas.length, frecuencia_dias: parseInt(form.frecuencia_dias),
+      plazo_cuotas: cuotas.length, frecuencia_dias: parseInt(form.frecuencia_dias), comision_pct: Number(form.comision_pct) || 0,
       fecha_simulacion: form.fecha_simulacion, fecha_limite: form.fecha_limite, estado: 'simulada',
     }).select().single()
     if (!error && data) setSimulacionGuardadaId(data.id)
@@ -477,6 +526,7 @@ function TabSimulador() {
       tasa_interes: parseFloat(form.tasa_interes), plazo_cuotas: cuotas.length,
       frecuencia_dias: parseInt(form.frecuencia_dias), fecha_desembolso: form.fecha_simulacion,
       fecha_limite: form.fecha_limite, saldo_capital: parseInt(form.capital), estado:'activo',
+      comision_pct: Number(form.comision_pct) || 0, comision, desembolso_neto: neto,
     }).select().single()
     if (error || !prestamo) { setConvirtiendo(false); alert('Error: '+(error?.message||'desconocido')); return }
     const cuotasInsert = cuotas.map(c => ({ ...c, prestamo_id: prestamo.id }))
@@ -533,6 +583,10 @@ function TabSimulador() {
             <div style={{ fontSize:11, color:'var(--text3)' }}>Fecha límite de pago</div>
             <input type="date" value={form.fecha_limite} onChange={e=>setForm(p=>({...p,fecha_limite:e.target.value}))} style={iStyle} />
           </div>
+          <div>
+            <div style={{ fontSize:11, color:'var(--text3)' }}>Cuota administrativa (%) — se descuenta al entregar</div>
+            <input id="sim-comision" type="number" value={form.comision_pct} onChange={e=>setForm(p=>({...p,comision_pct:e.target.value}))} style={iStyle} />
+          </div>
         </div>
         <div style={{ marginBottom:16 }}>
           <div style={{ fontSize:11, color:'var(--text3)', marginBottom:6 }}>Frecuencia de cobro</div>
@@ -548,6 +602,7 @@ function TabSimulador() {
       </div>
       {simulado && (
         <div className="panel" style={{ border:'1px solid var(--gold-border)', marginBottom:16 }}>
+          <CostoReal neto={neto} comision={comision} cuotas={cuotas} fechaDesembolso={form.fecha_simulacion} />
           <div className="grid-3" style={{ gap:10, marginBottom:14 }}>
             <div className="kpi-card" style={{ padding:'10px 12px' }}><div className="kpi-label" style={{ fontSize:9 }}>Total a pagar</div><div style={{ fontSize:16, fontWeight:800, color:'var(--text)' }}>{cop(totalCuotas)}</div></div>
             <div className="kpi-card" style={{ padding:'10px 12px' }}><div className="kpi-label" style={{ fontSize:9 }}>Interés total</div><div style={{ fontSize:16, fontWeight:800, color:'var(--gold)' }}>{cop(totalInteres)}</div></div>
@@ -594,7 +649,7 @@ function TabSimulador() {
               <div style={{ padding:'12px 14px', background:'var(--green-dim)', borderRadius:10, fontSize:13, color:'var(--green)', fontWeight:600, marginBottom:12, textAlign:'center' }}>
                 ✅ Préstamo creado correctamente. Ahora puedes enviarle el calendario y la confirmación al cliente.
               </div>
-              <button onClick={()=>abrirWhatsApp(form.cliente_telefono, form.cliente_nombre, parseInt(form.capital), cuotas, cuotas.length, form.frecuencia_dias, urlCalendario)} className="btn-green" style={{ width:'100%' }}>
+              <button onClick={()=>abrirWhatsApp(form.cliente_telefono, form.cliente_nombre, parseInt(form.capital), cuotas, cuotas.length, form.frecuencia_dias, urlCalendario, comision)} className="btn-green" style={{ width:'100%' }}>
                 💬 Abrir WhatsApp con calendario y tabla de pagos
               </button>
               <div style={{ fontSize:10, color:'var(--text4)', marginTop:8, textAlign:'center' }}>
@@ -695,15 +750,16 @@ function TabLibranzas() {
   const [items, setItems] = useState([])
   const [loading, setLoading] = useState(true)
   const [modal, setModal] = useState(false)
-  const [form, setForm] = useState({ empleado_nombre:'', empleado_cedula:'', empresa:'', cargo:'', capital:'', tasa_interes:'2', plazo_cuotas:'12', fecha_desembolso:new Date().toISOString().split('T')[0], notas:'' })
+  const [form, setForm] = useState({ empleado_nombre:'', empleado_cedula:'', empresa:'', cargo:'', capital:'', tasa_interes:'2', plazo_cuotas:'12', comision_pct:String(COMISION_DEF), fecha_desembolso:new Date().toISOString().split('T')[0], notas:'' })
   useEffect(() => { cargar() }, [])
   const cargar = async () => { setLoading(true); const { data } = await supabase.from('inv_libranzas').select('*').order('created_at',{ascending:false}); if(data) setItems(data); setLoading(false) }
   const guardar = async () => {
     if (!form.empleado_nombre || !form.capital) return
     const capital = parseInt(form.capital), tasa = parseFloat(form.tasa_interes), plazo = parseInt(form.plazo_cuotas)
     const cuotaMensual = Math.round((capital*(1+tasa/100*plazo))/plazo)
-    await supabase.from('inv_libranzas').insert({ ...form, capital, tasa_interes:tasa, plazo_cuotas:plazo, cuota_mensual:cuotaMensual, saldo_capital:capital, estado:'activo' })
-    setForm({ empleado_nombre:'', empleado_cedula:'', empresa:'', cargo:'', capital:'', tasa_interes:'2', plazo_cuotas:'12', fecha_desembolso:new Date().toISOString().split('T')[0], notas:'' })
+    const { comision, neto } = desembolsoNeto(capital, form.comision_pct)
+    await supabase.from('inv_libranzas').insert({ ...form, comision_pct:Number(form.comision_pct)||0, comision, desembolso_neto:neto, capital, tasa_interes:tasa, plazo_cuotas:plazo, cuota_mensual:cuotaMensual, saldo_capital:capital, estado:'activo' })
+    setForm({ empleado_nombre:'', empleado_cedula:'', empresa:'', cargo:'', capital:'', tasa_interes:'2', plazo_cuotas:'12', comision_pct:String(COMISION_DEF), fecha_desembolso:new Date().toISOString().split('T')[0], notas:'' })
     setModal(false); cargar()
   }
   const eliminar = async (id) => { await supabase.from('inv_libranzas').delete().eq('id',id); setItems(prev=>prev.filter(i=>i.id!==id)) }
@@ -727,6 +783,7 @@ function TabLibranzas() {
                   <div style={{ fontSize:14, fontWeight:700, color:'var(--text)' }}>{it.empleado_nombre}</div>
                   <div style={{ fontSize:12, color:'var(--text3)', marginTop:2 }}>{it.cargo} · {it.empresa}</div>
                   <div style={{ fontSize:11, color:'var(--text4)', marginTop:2 }}>Tasa: {it.tasa_interes}% · {it.plazo_cuotas} cuotas · Cuota: {cop(it.cuota_mensual)}/mes</div>
+                  {Number(it.comision) > 0 && <div style={{ fontSize:11, color:'var(--text3)', marginTop:2 }}>Se le entregó {cop(it.desembolso_neto ?? (it.capital - it.comision))} · cuota administrativa {cop(it.comision)}</div>}
                 </div>
                 <div style={{ fontSize:18, fontWeight:900, color:'var(--gold)' }}>{cop(it.capital)}</div>
               </div>
@@ -747,7 +804,9 @@ function TabLibranzas() {
               <div><div style={{ fontSize:11, color:'var(--text3)' }}>Capital</div><input type="number" value={form.capital} onChange={e=>setForm(p=>({...p,capital:e.target.value}))} style={iStyle} /></div>
               <div><div style={{ fontSize:11, color:'var(--text3)' }}>Tasa mensual (%)</div><input type="number" value={form.tasa_interes} onChange={e=>setForm(p=>({...p,tasa_interes:e.target.value}))} style={iStyle} /></div>
               <div><div style={{ fontSize:11, color:'var(--text3)' }}>Plazo (cuotas)</div><input type="number" value={form.plazo_cuotas} onChange={e=>setForm(p=>({...p,plazo_cuotas:e.target.value}))} style={iStyle} /></div>
+              <div><div style={{ fontSize:11, color:'var(--text3)' }}>Cuota administrativa (%)</div><input type="number" value={form.comision_pct} onChange={e=>setForm(p=>({...p,comision_pct:e.target.value}))} style={iStyle} /></div>
             </div>
+            {Number(form.capital) > 0 && <div style={{ fontSize:12, color:'var(--text2)', marginBottom:12 }}>Se le entrega <b style={{ color:'var(--text)' }}>{cop(desembolsoNeto(parseInt(form.capital), form.comision_pct).neto)}</b> · cuota administrativa {cop(desembolsoNeto(parseInt(form.capital), form.comision_pct).comision)}</div>}
             <div style={{ display:'flex', gap:10 }}>
               <button onClick={guardar} disabled={!form.empleado_nombre||!form.capital} className="btn-green" style={{ flex:1 }}>Guardar</button>
               <button onClick={()=>setModal(false)} className="btn">Cancelar</button>
