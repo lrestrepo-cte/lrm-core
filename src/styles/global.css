@@ -219,3 +219,5 @@ body {
   .ms-subnav { flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .ms-subnav .sub-nav-item { flex-shrink: 0; }
 }
+/* LRM Inversiones · Sports: filas de tendencias en el celular */
+@media (max-width: 640px) { .sp-fila { grid-template-columns: minmax(0,1fr) minmax(0,1fr) !important; } }

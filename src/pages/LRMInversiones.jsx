@@ -13,6 +13,7 @@ import Reportes from './lrm/Reportes'
 import Marketing from './lrm/Marketing'
 import Cargas from './lrm/Cargas'
 import Ajustes from './lrm/Ajustes'
+import Sports from './inversiones/Sports'
 import RedComercial from './lrm/RedComercial'
 import Cotizador from './lrm/Cotizador'
 import { useDivisas } from '../lib/divisas'
@@ -1194,6 +1195,7 @@ function TabInversionesModulo() {
     { id:'empenos',    label:'💎 Empeños'      },
     { id:'libranzas',  label:'📋 Libranzas'    },
     { id:'portafolio', label:'📈 Portafolio'   },
+    { id:'sports',     label:'⚽ Sports'       },
   ]
   return (
     <div>
@@ -1207,6 +1209,7 @@ function TabInversionesModulo() {
       {tab==='empenos'    && <TabEmpenos />}
       {tab==='libranzas'  && <TabLibranzas />}
       {tab==='portafolio' && <TabPortafolio />}
+      {tab==='sports'     && <Sports />}
     </div>
   )
 }
